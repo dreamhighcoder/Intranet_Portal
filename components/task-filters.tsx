@@ -12,6 +12,7 @@ interface TaskFiltersProps {
   onPositionChange: (position: string) => void
   onCategoryChange: (category: string) => void
   onStatusChange: (status: string) => void
+  hidePositionFilter?: boolean // Added prop to hide position filter for regular users
 }
 
 export function TaskFilters({
@@ -21,6 +22,7 @@ export function TaskFilters({
   onPositionChange,
   onCategoryChange,
   onStatusChange,
+  hidePositionFilter = false, // Default to false for backward compatibility
 }: TaskFiltersProps) {
   const statusOptions = [
     { value: "all", label: "All Status" },
@@ -37,19 +39,21 @@ export function TaskFilters({
         <span className="text-sm font-medium text-[var(--color-text-secondary)]">Filters:</span>
       </div>
 
-      <Select value={selectedPosition} onValueChange={onPositionChange}>
-        <SelectTrigger className="w-[180px]">
-          <SelectValue placeholder="All Positions" />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectItem value="all">All Positions</SelectItem>
-          {mockPositions.map((position) => (
-            <SelectItem key={position.id} value={position.id}>
-              {position.name}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
+      {!hidePositionFilter && (
+        <Select value={selectedPosition} onValueChange={onPositionChange}>
+          <SelectTrigger className="w-[180px]">
+            <SelectValue placeholder="All Positions" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Positions</SelectItem>
+            {mockPositions.map((position) => (
+              <SelectItem key={position.id} value={position.id}>
+                {position.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      )}
 
       <Select value={selectedCategory} onValueChange={onCategoryChange}>
         <SelectTrigger className="w-[180px]">
@@ -78,7 +82,9 @@ export function TaskFilters({
         </SelectContent>
       </Select>
 
-      {(selectedPosition !== "all" || selectedCategory !== "all" || selectedStatus !== "all") && (
+      {((!hidePositionFilter && selectedPosition !== "all") ||
+        selectedCategory !== "all" ||
+        selectedStatus !== "all") && (
         <Badge variant="secondary" className="ml-2">
           Filters Active
         </Badge>

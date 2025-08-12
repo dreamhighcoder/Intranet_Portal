@@ -21,10 +21,15 @@ export default function HomePage() {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
+      <div className="min-h-screen flex items-center justify-center" style={{ backgroundColor: "var(--color-bg)" }}>
         <div className="text-center">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[var(--color-primary)] mx-auto"></div>
-          <p className="mt-2 text-[var(--color-text-secondary)]">Loading...</p>
+          <div
+            className="animate-spin rounded-full h-8 w-8 border-b-2 mx-auto"
+            style={{ borderColor: "var(--color-primary)" }}
+          ></div>
+          <p className="mt-2" style={{ color: "var(--color-text-muted)" }}>
+            Loading...
+          </p>
         </div>
       </div>
     )
@@ -40,55 +45,55 @@ export default function HomePage() {
       description: "Licensed pharmacist duties and clinical responsibilities",
       icon: Stethoscope,
       href: "/checklist?position=pharmacist-primary",
-      color: "bg-blue-500",
+      iconBg: "var(--color-primary)",
     },
     {
       title: "Checklist – Pharmacist (Supporting)",
       description: "Supporting pharmacist tasks and backup duties",
       icon: Stethoscope,
       href: "/checklist?position=pharmacist-supporting",
-      color: "bg-blue-400",
+      iconBg: "#1565c0", // Due today blue
     },
     {
       title: "Checklist – Pharmacy Assistants",
       description: "Dispensing assistance and customer service tasks",
       icon: Users,
       href: "/checklist?position=pharmacy-assistants",
-      color: "bg-green-500",
+      iconBg: "var(--accent-green)",
     },
     {
       title: "Checklist – Dispensary Technicians",
       description: "Technical dispensing and preparation tasks",
       icon: Package,
       href: "/checklist?position=dispensary-technicians",
-      color: "bg-purple-500",
+      iconBg: "#2e7d32", // Done green
     },
     {
       title: "Checklist – DAA Packers",
       description: "Dose administration aid packing and quality control",
       icon: Package,
       href: "/checklist?position=daa-packers",
-      color: "bg-orange-500",
+      iconBg: "#fb8c00", // Overdue orange
     },
     {
       title: "Checklist – Operational/Managerial",
       description: "Management oversight and operational tasks",
       icon: Building,
       href: "/checklist?position=operational-managerial",
-      color: "bg-teal-500",
+      iconBg: "#d12c2c", // Missed red
     },
   ]
 
   return (
-    <div className="min-h-screen bg-[var(--color-background)]">
+    <div className="min-h-screen" style={{ backgroundColor: "var(--color-bg)" }}>
       <Navigation />
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Welcome Banner */}
         <div className="mb-8">
-          <div className="pharmacy-gradient rounded-lg p-6 text-white">
+          <div className="pharmacy-gradient rounded-lg p-6" style={{ color: "var(--color-primary-on)" }}>
             <h1 className="text-3xl font-bold mb-2">Welcome back, {user.display_name}!</h1>
-            <p className="text-white/90">
+            <p className="opacity-90">
               {user.role === "admin" ? "Administrator" : user.display_name} • Ready to manage your tasks
             </p>
           </div>
@@ -96,7 +101,9 @@ export default function HomePage() {
 
         {/* Staff Checklists Section */}
         <div className="mb-8">
-          <h2 className="text-2xl font-bold text-[var(--color-text-primary)] mb-6">Staff Checklists</h2>
+          <h2 className="text-2xl font-bold mb-6" style={{ color: "var(--color-text)" }}>
+            Staff Checklists
+          </h2>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {staffChecklists.map((checklist) => {
               const IconComponent = checklist.icon
@@ -105,18 +112,24 @@ export default function HomePage() {
                   <CardHeader className="pb-3">
                     <div className="flex items-center space-x-3">
                       <div
-                        className={`p-2 rounded-lg ${checklist.color} text-white group-hover:scale-110 transition-transform`}
+                        className="p-2 rounded-lg text-white group-hover:scale-110 transition-transform"
+                        style={{ backgroundColor: checklist.iconBg }}
                       >
                         <IconComponent className="h-5 w-5" />
                       </div>
-                      <CardTitle className="text-lg leading-tight">{checklist.title}</CardTitle>
+                      <CardTitle className="text-lg leading-tight" style={{ color: "var(--color-text)" }}>
+                        {checklist.title}
+                      </CardTitle>
                     </div>
                   </CardHeader>
                   <CardContent className="pt-0">
-                    <p className="text-[var(--color-text-secondary)] mb-4 text-sm leading-relaxed">
+                    <p className="mb-4 text-sm leading-relaxed" style={{ color: "var(--color-text-muted)" }}>
                       {checklist.description}
                     </p>
-                    <Button asChild className="w-full bg-[var(--color-primary)] hover:bg-[var(--color-primary)]/90">
+                    <Button
+                      asChild
+                      className="w-full bg-[var(--color-primary)] hover:bg-[var(--color-primary)]/90 text-[var(--color-primary-on)] border-0"
+                    >
                       <Link href={checklist.href}>Open Checklist</Link>
                     </Button>
                   </CardContent>
@@ -129,20 +142,26 @@ export default function HomePage() {
         {/* Quick Admin Access */}
         {user.role === "admin" && (
           <div className="mb-8">
-            <h2 className="text-xl font-semibold text-[var(--color-text-primary)] mb-4">Administrative Tools</h2>
+            <h2 className="text-xl font-semibold mb-4" style={{ color: "var(--color-text)" }}>
+              Administrative Tools
+            </h2>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <Card className="card-surface hover:shadow-md transition-shadow">
                 <CardHeader>
-                  <CardTitle className="text-lg flex items-center">
-                    <Shield className="h-5 w-5 mr-2 text-[var(--color-primary)]" />
+                  <CardTitle className="text-lg flex items-center" style={{ color: "var(--color-text)" }}>
+                    <Shield className="h-5 w-5 mr-2" style={{ color: "var(--color-primary)" }} />
                     Admin Dashboard
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <p className="text-[var(--color-text-secondary)] mb-4">
+                  <p className="mb-4" style={{ color: "var(--color-text-muted)" }}>
                     View reports, manage tasks and system settings
                   </p>
-                  <Button asChild variant="outline" className="w-full bg-transparent">
+                  <Button
+                    asChild
+                    variant="outline"
+                    className="w-full bg-transparent border-[var(--color-border)] text-[var(--color-text)] hover:bg-[var(--color-secondary)]"
+                  >
                     <Link href="/admin">Admin Panel</Link>
                   </Button>
                 </CardContent>
@@ -150,14 +169,20 @@ export default function HomePage() {
 
               <Card className="card-surface hover:shadow-md transition-shadow">
                 <CardHeader>
-                  <CardTitle className="text-lg flex items-center">
-                    <Wrench className="h-5 w-5 mr-2 text-[var(--color-primary)]" />
+                  <CardTitle className="text-lg flex items-center" style={{ color: "var(--color-text)" }}>
+                    <Wrench className="h-5 w-5 mr-2" style={{ color: "var(--color-primary)" }} />
                     Master Tasks
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <p className="text-[var(--color-text-secondary)] mb-4">Create and manage master task templates</p>
-                  <Button asChild variant="outline" className="w-full bg-transparent">
+                  <p className="mb-4" style={{ color: "var(--color-text-muted)" }}>
+                    Create and manage master task templates
+                  </p>
+                  <Button
+                    asChild
+                    variant="outline"
+                    className="w-full bg-transparent border-[var(--color-border)] text-[var(--color-text)] hover:bg-[var(--color-secondary)]"
+                  >
                     <Link href="/admin/master-tasks">Manage Tasks</Link>
                   </Button>
                 </CardContent>
@@ -165,11 +190,19 @@ export default function HomePage() {
 
               <Card className="card-surface hover:shadow-md transition-shadow">
                 <CardHeader>
-                  <CardTitle className="text-lg">Calendar View</CardTitle>
+                  <CardTitle className="text-lg" style={{ color: "var(--color-text)" }}>
+                    Calendar View
+                  </CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <p className="text-[var(--color-text-secondary)] mb-4">Navigate tasks by date and plan ahead</p>
-                  <Button asChild variant="outline" className="w-full bg-transparent">
+                  <p className="mb-4" style={{ color: "var(--color-text-muted)" }}>
+                    Navigate tasks by date and plan ahead
+                  </p>
+                  <Button
+                    asChild
+                    variant="outline"
+                    className="w-full bg-transparent border-[var(--color-border)] text-[var(--color-text)] hover:bg-[var(--color-secondary)]"
+                  >
                     <Link href="/calendar">View Calendar</Link>
                   </Button>
                 </CardContent>

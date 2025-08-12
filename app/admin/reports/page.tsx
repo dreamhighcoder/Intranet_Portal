@@ -10,6 +10,7 @@ import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { mockTaskInstances, mockMasterTasks, mockPositions } from "@/lib/mock-data"
 import { useRouter } from "next/navigation"
+import { Button } from "@/components/ui/button"
 
 export default function ReportsPage() {
   const { user, isLoading } = useAuth()
@@ -119,6 +120,63 @@ export default function ReportsPage() {
         <div className="mb-8">
           <ReportFilters onFiltersChange={handleFiltersChange} onExport={handleExport} />
         </div>
+
+        {/* Outstanding Tasks View */}
+        <Card className="card-surface mb-8">
+          <CardHeader>
+            <CardTitle>Outstanding Tasks</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Task Title</TableHead>
+                    <TableHead>Position</TableHead>
+                    <TableHead>Due Date</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>Days Overdue</TableHead>
+                    <TableHead>Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {tasksWithDetails
+                    .filter((task) => task.status === "overdue" || task.status === "missed")
+                    .map((task) => (
+                      <TableRow key={task.id}>
+                        <TableCell>
+                          <div className="font-medium">{task.master_task.title}</div>
+                        </TableCell>
+                        <TableCell>{task.position.name}</TableCell>
+                        <TableCell>
+                          {task.due_date} at {task.due_time}
+                        </TableCell>
+                        <TableCell>
+                          <Badge className={getStatusColor(task.status)}>{task.status.replace("_", " ")}</Badge>
+                        </TableCell>
+                        <TableCell>
+                          {Math.ceil(
+                            (new Date().getTime() - new Date(task.due_date).getTime()) / (1000 * 60 * 60 * 24),
+                          )}{" "}
+                          days
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex space-x-2">
+                            <Button size="sm" variant="outline">
+                              Acknowledge
+                            </Button>
+                            <Button size="sm" variant="outline">
+                              Resolve
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                </TableBody>
+              </Table>
+            </div>
+          </CardContent>
+        </Card>
 
         {/* Charts */}
         <div className="mb-8">

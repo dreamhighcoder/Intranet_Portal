@@ -6,10 +6,9 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import type { TaskWithDetails } from "@/lib/types"
 import { calculateTaskStatus, toggleTaskCompletion } from "@/lib/task-utils"
-import { TASK_STATUS_COLORS, TASK_STATUS_LABELS } from "@/lib/constants"
 import { useToast } from "@/hooks/use-toast"
 import { LoadingSpinner } from "@/components/loading-spinner"
-import { CheckCircle, Clock, AlertCircle } from "lucide-react"
+import { CheckCircle, Clock, AlertCircle, AlertTriangle, Circle } from "lucide-react"
 
 interface TaskCardProps {
   task: TaskWithDetails
@@ -44,20 +43,43 @@ export function TaskCard({ task, onTaskUpdate }: TaskCardProps) {
     }
   }
 
-  const statusColors = TASK_STATUS_COLORS[status]
-  const statusLabel = TASK_STATUS_LABELS[status]
-
-  const getStatusIcon = () => {
+  const getStatusBadge = () => {
     switch (status) {
       case "done":
-        return <CheckCircle className="w-4 h-4 text-green-600" />
-      case "overdue":
+        return (
+          <Badge className="task-status-done flex items-center gap-1" aria-label="Task completed">
+            <CheckCircle className="w-3 h-3" />
+            Done
+          </Badge>
+        )
       case "missed":
-        return <AlertCircle className="w-4 h-4 text-red-600" />
+        return (
+          <Badge className="task-status-missed flex items-center gap-1" aria-label="Task missed">
+            <AlertTriangle className="w-3 h-3" />
+            Missed
+          </Badge>
+        )
+      case "overdue":
+        return (
+          <Badge className="task-status-overdue flex items-center gap-1" aria-label="Task overdue">
+            <AlertCircle className="w-3 h-3" />
+            Overdue
+          </Badge>
+        )
       case "due_today":
-        return <Clock className="w-4 h-4 text-blue-600" />
+        return (
+          <Badge className="task-status-due-today flex items-center gap-1" aria-label="Due today">
+            <Clock className="w-3 h-3" />
+            Due Today
+          </Badge>
+        )
       default:
-        return <Clock className="w-4 h-4 text-gray-400" />
+        return (
+          <Badge className="task-status-not-due flex items-center gap-1" aria-label="Not due yet">
+            <Circle className="w-3 h-3" />
+            To Do
+          </Badge>
+        )
     }
   }
 
@@ -66,15 +88,21 @@ export function TaskCard({ task, onTaskUpdate }: TaskCardProps) {
       <CardHeader className="pb-3">
         <div className="flex items-start justify-between">
           <div className="flex-1">
-            <h3 className="font-medium text-[var(--color-text-primary)] mb-2 line-clamp-2">{task.master_task.title}</h3>
+            <h3 className="font-medium mb-2 line-clamp-2" style={{ color: "var(--color-text)" }}>
+              {task.master_task.title}
+            </h3>
             <div className="flex items-center gap-2 mb-2">
-              <Badge variant="outline" className="text-xs">
+              <Badge
+                variant="outline"
+                className="text-xs"
+                style={{
+                  borderColor: "var(--color-border)",
+                  color: "var(--color-text-muted)",
+                }}
+              >
                 {task.master_task.category}
               </Badge>
-              <Badge className={`text-xs flex items-center gap-1 ${statusColors}`}>
-                {getStatusIcon()}
-                {statusLabel}
-              </Badge>
+              {getStatusBadge()}
             </div>
           </div>
         </div>
@@ -82,13 +110,13 @@ export function TaskCard({ task, onTaskUpdate }: TaskCardProps) {
 
       <CardContent className="pt-0">
         <div className="space-y-3">
-          <div className="text-sm text-[var(--color-text-secondary)]">
+          <div className="text-sm" style={{ color: "var(--color-text-muted)" }}>
             <p className="flex items-center gap-1">
               <Clock className="w-3 h-3" />
               Due: {task.due_time}
             </p>
             {task.completed_at && (
-              <p className="text-green-600 flex items-center gap-1 mt-1">
+              <p className="flex items-center gap-1 mt-1" style={{ color: "var(--accent-green)" }}>
                 <CheckCircle className="w-3 h-3" />
                 Completed:{" "}
                 {new Date(task.completed_at).toLocaleTimeString("en-AU", {
@@ -100,7 +128,9 @@ export function TaskCard({ task, onTaskUpdate }: TaskCardProps) {
           </div>
 
           {task.master_task.description && (
-            <p className="text-sm text-[var(--color-text-secondary)] line-clamp-2">{task.master_task.description}</p>
+            <p className="text-sm line-clamp-2" style={{ color: "var(--color-text-muted)" }}>
+              {task.master_task.description}
+            </p>
           )}
 
           <div className="flex items-center justify-between pt-2">
@@ -109,10 +139,15 @@ export function TaskCard({ task, onTaskUpdate }: TaskCardProps) {
               variant={status === "done" ? "outline" : "default"}
               onClick={handleToggleCompletion}
               disabled={isUpdating}
-              className={
+              className={status === "done" ? "border-green-200 hover:bg-green-50" : ""}
+              style={
                 status === "done"
-                  ? "border-green-200 text-green-700 hover:bg-green-50"
-                  : "bg-[var(--color-primary)] hover:bg-[var(--color-primary)]/90"
+                  ? { color: "var(--accent-green)" }
+                  : {
+                      backgroundColor: "var(--color-primary)",
+                      color: "var(--color-primary-on)",
+                      borderColor: "var(--color-primary)",
+                    }
               }
             >
               {isUpdating ? (
@@ -127,7 +162,7 @@ export function TaskCard({ task, onTaskUpdate }: TaskCardProps) {
               )}
             </Button>
 
-            <Button size="sm" variant="ghost" className="text-[var(--color-text-secondary)]">
+            <Button size="sm" variant="ghost" style={{ color: "var(--color-text-muted)" }}>
               History
             </Button>
           </div>

@@ -33,6 +33,8 @@ export function LoginForm() {
 
       if (!result.success) {
         setError(result.error || "Login failed")
+      } else {
+        window.location.href = "/"
       }
     } catch (error) {
       console.error("Login form error:", error)
@@ -41,11 +43,16 @@ export function LoginForm() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-[var(--color-background)] px-4">
-      <Card className="w-full max-w-md card-surface">
+    <div className="min-h-screen flex items-center justify-center bg-[var(--color-bg)] px-4">
+      <Card className="w-full max-w-md bg-[var(--color-surface)] border-[var(--color-border)]">
         <CardHeader className="text-center space-y-4">
           <div className="mx-auto w-16 h-16 bg-[var(--color-primary)] rounded-lg flex items-center justify-center">
-            <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg
+              className="w-8 h-8 text-[var(--color-primary-on)]"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
               <path
                 strokeLinecap="round"
                 strokeLinejoin="round"
@@ -54,10 +61,8 @@ export function LoginForm() {
               />
             </svg>
           </div>
-          <CardTitle className="text-2xl font-semibold text-[var(--color-text-primary)]">
-            Intranet Portal Login
-          </CardTitle>
-          <CardDescription className="text-[var(--color-text-secondary)]">
+          <CardTitle className="text-2xl font-semibold text-[var(--color-text)]">Intranet Portal Login</CardTitle>
+          <CardDescription className="text-[var(--color-text-muted)]">
             Sign in to access your pharmacy dashboard
           </CardDescription>
         </CardHeader>
@@ -70,7 +75,9 @@ export function LoginForm() {
             )}
 
             <div className="space-y-2">
-              <Label htmlFor="email">Email</Label>
+              <Label htmlFor="email" className="text-[var(--color-text)]">
+                Email
+              </Label>
               <Input
                 id="email"
                 type="email"
@@ -79,11 +86,14 @@ export function LoginForm() {
                 onChange={(e) => setEmail(e.target.value)}
                 required
                 disabled={isLoading}
+                className="bg-[var(--color-surface)] border-[var(--color-border)] text-[var(--color-text)]"
               />
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="password">Password</Label>
+              <Label htmlFor="password" className="text-[var(--color-text)]">
+                Password
+              </Label>
               <Input
                 id="password"
                 type="password"
@@ -92,31 +102,32 @@ export function LoginForm() {
                 onChange={(e) => setPassword(e.target.value)}
                 required
                 disabled={isLoading}
+                className="bg-[var(--color-surface)] border-[var(--color-border)] text-[var(--color-text)]"
               />
             </div>
 
             <Button
               type="submit"
-              className="w-full bg-[var(--color-primary)] hover:bg-[var(--color-primary)]/90"
+              className="w-full bg-[var(--color-primary)] hover:bg-[var(--color-primary)]/90 text-[var(--color-primary-on)] border-0"
               disabled={isLoading}
             >
               {isLoading ? "Signing in..." : "Sign In"}
             </Button>
 
             <div className="text-center">
-              <Button variant="link" className="text-[var(--color-secondary)]">
+              <Button variant="link" className="text-[var(--color-primary)] hover:text-[var(--color-primary)]/80">
                 Forgot Password?
               </Button>
             </div>
           </form>
 
-          <div className="mt-6 p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
-            <p className="text-sm text-gray-600 dark:text-gray-300 mb-2 font-medium">Demo Credentials:</p>
+          <div className="mt-6 p-4 bg-[var(--color-tertiary)] rounded-lg">
+            <p className="text-sm text-[var(--color-text)] mb-2 font-medium">Demo Credentials:</p>
             <div className="space-y-1">
-              <p className="text-xs text-gray-500 dark:text-gray-400">
+              <p className="text-xs text-[var(--color-text-muted)]">
                 <span className="font-medium">Admin:</span> admin@pharmacy.com / password
               </p>
-              <p className="text-xs text-gray-500 dark:text-gray-400">
+              <p className="text-xs text-[var(--color-text-muted)]">
                 <span className="font-medium">User:</span> pharmacist@pharmacy.com / password
               </p>
             </div>
@@ -129,7 +140,7 @@ export function LoginForm() {
                   setEmail("admin@pharmacy.com")
                   setPassword("password")
                 }}
-                className="text-xs"
+                className="text-xs bg-[var(--color-surface)] border-[var(--color-border)] text-[var(--color-text)] hover:bg-[var(--color-secondary)]"
               >
                 Fill Admin
               </Button>
@@ -141,7 +152,7 @@ export function LoginForm() {
                   setEmail("pharmacist@pharmacy.com")
                   setPassword("password")
                 }}
-                className="text-xs"
+                className="text-xs bg-[var(--color-surface)] border-[var(--color-border)] text-[var(--color-text)] hover:bg-[var(--color-secondary)]"
               >
                 Fill User
               </Button>
