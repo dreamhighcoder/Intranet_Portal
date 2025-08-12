@@ -26,14 +26,15 @@ export interface MasterTask {
     | "once_off"
     | "daily"
     | "weekly_monday"
-    | "weekly_tuesday"
-    | "weekly_wednesday"
-    | "weekly_thursday"
-    | "weekly_friday"
-    | "weekly_saturday"
-    | "weekly_sunday"
+    | "specific_weekdays"
     | "start_of_month"
+    | "start_of_certain_months"
+    | "once_every_month"
+    | "certain_months_only"
     | "end_of_month"
+    | "end_of_certain_months"
+  weekdays?: string[] // For specific_weekdays frequency
+  months?: number[] // For month-specific frequencies (1-12)
   timing: "morning" | "before_close" | "custom"
   default_due_time: string // HH:MM format
   category: string
@@ -55,6 +56,7 @@ export interface TaskInstance {
   status: "not_due" | "due_today" | "overdue" | "missed" | "done"
   completed_at?: string
   completed_by?: string
+  locked?: boolean // Added locking status for tasks
   created_at: string
 }
 
@@ -62,7 +64,7 @@ export interface TaskAuditLog {
   id: string
   task_instance_id: string
   actor: string
-  action: "created" | "completed" | "uncompleted" | "status_changed"
+  action: "created" | "completed" | "uncompleted" | "status_changed" | "locked" | "unlocked"
   notes?: string
   timestamp: string
 }
@@ -102,19 +104,34 @@ export interface DashboardStats {
   tasks_created_this_month: number
 }
 
+export type PositionType =
+  | "pharmacist-primary"
+  | "pharmacist-supporting"
+  | "pharmacy-assistants"
+  | "dispensary-technicians"
+  | "daa-packers"
+  | "operational-managerial"
+
 export type TaskStatus = "not_due" | "due_today" | "overdue" | "missed" | "done"
 export type UserRole = "admin" | "user"
+
 export type TaskFrequency =
   | "once_off"
   | "daily"
   | "weekly_monday"
-  | "weekly_tuesday"
-  | "weekly_wednesday"
-  | "weekly_thursday"
-  | "weekly_friday"
-  | "weekly_saturday"
-  | "weekly_sunday"
+  | "specific_weekdays"
   | "start_of_month"
+  | "start_of_certain_months"
+  | "once_every_month"
+  | "certain_months_only"
   | "end_of_month"
+  | "end_of_certain_months"
+
 export type TaskTiming = "morning" | "before_close" | "custom"
 export type PublishStatus = "active" | "draft" | "inactive"
+
+export interface OutstandingTask extends TaskWithDetails {
+  acknowledged?: boolean
+  resolved?: boolean
+  follow_up_notes?: string
+}
