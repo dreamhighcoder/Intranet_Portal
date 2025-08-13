@@ -16,7 +16,7 @@ export default function AdminDashboard() {
   const router = useRouter()
 
   useEffect(() => {
-    if (!isLoading && (!user || user.role !== "admin")) {
+    if (!isLoading && (!user || user.profile?.role !== "admin")) {
       router.push("/")
     }
   }, [user, isLoading, router])
@@ -32,7 +32,7 @@ export default function AdminDashboard() {
     )
   }
 
-  if (!user || user.role !== "admin") return null
+  if (!user || user.profile?.role !== "admin") return null
 
   const quickActions = [
     {
@@ -103,8 +103,8 @@ export default function AdminDashboard() {
             {quickActions.map((action) => {
               const Icon = action.icon
               return (
-                <Card key={action.title} className="card-surface hover:shadow-md transition-shadow">
-                  <CardHeader>
+                <Card key={action.title} className="card-surface hover:shadow-md transition-shadow h-[200px] flex flex-col">
+                  <CardHeader className="pb-3">
                     <div className="flex items-center space-x-3">
                       <div className={`p-2 rounded-lg ${action.bgColor}`}>
                         <Icon className={`w-5 h-5 ${action.color}`} />
@@ -112,9 +112,9 @@ export default function AdminDashboard() {
                       <CardTitle className="text-lg">{action.title}</CardTitle>
                     </div>
                   </CardHeader>
-                  <CardContent>
-                    <p className="text-[var(--color-text-secondary)] mb-4">{action.description}</p>
-                    <Button asChild variant="outline" className="w-full bg-transparent">
+                  <CardContent className="flex-grow flex flex-col justify-between pt-0">
+                    <p className="text-[var(--color-text-secondary)] text-sm leading-relaxed">{action.description}</p>
+                    <Button asChild variant="outline" className="w-full bg-transparent mt-4">
                       <Link href={action.href}>Manage</Link>
                     </Button>
                   </CardContent>

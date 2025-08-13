@@ -1,9 +1,14 @@
 import { NextResponse } from 'next/server'
-import { supabase } from '@/lib/supabase'
+import { createClient } from '@supabase/supabase-js'
+
+// Use service role key for positions API to bypass RLS (positions are reference data)
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
+const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
+const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey)
 
 export async function GET() {
   try {
-    const { data: positions, error } = await supabase
+    const { data: positions, error } = await supabaseAdmin
       .from('positions')
       .select('*')
       .order('name')
@@ -29,7 +34,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Name is required' }, { status: 400 })
     }
 
-    const { data: position, error } = await supabase
+    const { data: position, error } = await supabaseAdmin
       .from('positions')
       .insert([{ name, description }])
       .select()

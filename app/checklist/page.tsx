@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo } from "react"
 import { useSearchParams, useRouter } from "next/navigation"
 import { useAuth } from "@/lib/auth"
 import { Navigation } from "@/components/navigation"
@@ -24,6 +24,7 @@ export default function ChecklistPage() {
 
   const [selectedCategory, setSelectedCategory] = useState("all")
   const [selectedStatus, setSelectedStatus] = useState("all")
+  const [selectedPosition, setSelectedPosition] = useState("all")
   const [refreshKey, setRefreshKey] = useState(0)
   const [tasks, setTasks] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
@@ -35,27 +36,97 @@ export default function ChecklistPage() {
     missed: 0
   })
 
+  // Create stable references to prevent infinite re-renders
+  const userRole = useMemo(() => user?.profile?.role, [user?.profile?.role])
+  const userId = useMemo(() => user?.id, [user?.id])
+  const userPositionId = useMemo(() => user?.profile?.position_id, [user?.profile?.position_id])
+
+  // Apply filters to tasks with memoization to prevent unnecessary re-computations
+  // This must be before any conditional returns to follow Rules of Hooks
+  const filteredTasks = useMemo(() => {
+    return tasks.filter((task) => {
+      // Position filter (only for admin users)
+      if (userRole === 'admin' && selectedPosition !== "all" && task.master_task.position_id !== selectedPosition) {
+        return false
+      }
+
+      // Category filter
+      if (selectedCategory !== "all" && task.master_task.category !== selectedCategory) {
+        return false
+      }
+
+      // Status filter
+      if (selectedStatus !== "all") {
+        const taskStatus = calculateTaskStatus(task)
+        if (taskStatus !== selectedStatus) {
+          return false
+        }
+      }
+
+      return true
+    })
+  }, [tasks, selectedPosition, selectedCategory, selectedStatus, userRole])
+
+  // Handle auth redirect
   useEffect(() => {
     if (!isLoading && !user) {
       router.push("/login")
     }
   }, [user, isLoading, router])
 
-  // Load tasks when date or refresh key changes
+  // Load tasks when date, refresh key, or user changes
   useEffect(() => {
     const loadTasks = async () => {
-      if (!user?.profile?.position_id) return
+      // Only proceed if auth is complete and user is fully loaded
+      if (isLoading) {
+        return
+      }
+
+      // If no user, don't load tasks
+      if (!user) {
+        setLoading(false)
+        setTasks([])
+        return
+      }
+
+      // If user exists but profile is not loaded, don't load tasks yet
+      if (!user.profile) {
+        setLoading(false)
+        setTasks([])
+        return
+      }
+      
+      // For non-admin users, require position_id
+      if (userRole !== 'admin' && !userPositionId) {
+        setLoading(false)
+        setTasks([])
+        return
+      }
       
       setLoading(true)
       try {
-        const [tasksByPosition, counts] = await Promise.all([
-          getTasksByPosition(currentDate),
-          getTaskCounts(currentDate)
-        ])
-        
-        const userPositionTasks = tasksByPosition[user.profile.position_id] || []
-        setTasks(userPositionTasks)
-        setTaskCounts(counts)
+        if (userRole === 'admin') {
+          // Admin users can see all tasks
+          const [tasksByPosition, counts] = await Promise.all([
+            getTasksByPosition(currentDate),
+            getTaskCounts(currentDate)
+          ])
+          
+          // Show all tasks for admin
+          const allTasks = Object.values(tasksByPosition).flat()
+          setTasks(allTasks)
+          setTaskCounts(counts)
+        } else {
+          // Regular users see only their position's tasks
+          const [tasksByPosition, counts] = await Promise.all([
+            getTasksByPosition(currentDate),
+            getTaskCounts(currentDate)
+          ])
+          
+          const userPositionTasks = userPositionId ? tasksByPosition[userPositionId] || [] : []
+          setTasks(userPositionTasks)
+          setTaskCounts(counts)
+        }
       } catch (error) {
         console.error('Error loading tasks:', error)
         setTasks([])
@@ -65,7 +136,7 @@ export default function ChecklistPage() {
     }
 
     loadTasks()
-  }, [currentDate, refreshKey, user?.profile?.position_id])
+  }, [currentDate, refreshKey, isLoading, userId, userRole, userPositionId])
 
   useEffect(() => {
     const dateParam = searchParams.get("date")
@@ -83,7 +154,7 @@ export default function ChecklistPage() {
 
   const handleTaskComplete = async (taskId: string) => {
     try {
-      const success = await completeTask(taskId, user?.id)
+      const success = await completeTask(taskId, userId)
       if (success) {
         setRefreshKey((prev) => prev + 1)
       } else {
@@ -97,7 +168,7 @@ export default function ChecklistPage() {
 
   const handleTaskUndo = async (taskId: string) => {
     try {
-      const success = await undoTask(taskId, user?.id)
+      const success = await undoTask(taskId, userId)
       if (success) {
         setRefreshKey((prev) => prev + 1)
       } else {
@@ -114,36 +185,34 @@ export default function ChecklistPage() {
     router.push("/login")
   }
 
-  if (isLoading || loading) {
+  // Show loading if auth is still loading OR if we have a user but no profile yet OR local loading
+  const isAuthLoading = isLoading || (user && !user.profile)
+  const shouldShowLoading = isAuthLoading || loading
+  
+  if (shouldShowLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[var(--color-primary)] mx-auto"></div>
-          <p className="mt-2 text-[var(--color-text-secondary)]">Loading...</p>
+          <p className="mt-2 text-[var(--color-text-secondary)]">
+            {isAuthLoading ? 'Loading user profile...' : 'Loading checklist...'}
+          </p>
         </div>
       </div>
     )
   }
 
-  if (!user) return null
-
-  // Apply filters to user's position tasks
-  const filteredTasks = tasks.filter((task) => {
-    // Category filter
-    if (selectedCategory !== "all" && task.master_task.category !== selectedCategory) {
-      return false
-    }
-
-    // Status filter
-    if (selectedStatus !== "all") {
-      const taskStatus = calculateTaskStatus(task)
-      if (taskStatus !== selectedStatus) {
-        return false
-      }
-    }
-
-    return true
-  })
+  // Only show access denied after auth is complete and user has no profile  
+  if (!user || !user.profile) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <h1 className="text-2xl font-bold text-red-600 mb-2">Access Denied</h1>
+          <p className="text-gray-600">Unable to load your user profile. Please contact an administrator.</p>
+        </div>
+      </div>
+    )
+  }
 
   const getStatusBadge = (status: string) => {
     const statusConfig = {
@@ -194,7 +263,7 @@ export default function ChecklistPage() {
         {/* Header */}
         <div className="mb-6">
           <h1 className="text-3xl font-bold text-[var(--color-text-primary)] mb-2">
-            Checklist — {user.position_name || "Your Position"} —{" "}
+            Checklist — {userRole === 'admin' ? 'All Positions' : (user?.position?.name || "Your Position")} —{" "}
             {new Date(currentDate).toLocaleDateString("en-AU", {
               weekday: "long",
               year: "numeric",
@@ -205,9 +274,13 @@ export default function ChecklistPage() {
           <p className="text-[var(--color-text-secondary)]">
             {filteredTasks.length} tasks • {filteredTasks.filter((t) => t.status === "done").length} completed
           </p>
-          {user?.profile?.position_id && (
+          {userRole === 'admin' ? (
             <p className="text-xs text-[var(--color-text-secondary)]">
-              Position: {user.position?.name || 'Unknown Position'}
+              Viewing as Administrator - All positions shown
+            </p>
+          ) : userPositionId && (
+            <p className="text-xs text-[var(--color-text-secondary)]">
+              Position: {user?.position?.name || 'Unknown Position'}
             </p>
           )}
         </div>
@@ -220,13 +293,13 @@ export default function ChecklistPage() {
         {/* Filters */}
         <div className="mb-6">
           <TaskFilters
-            selectedPosition="user" // Hide position filter for regular users
+            selectedPosition={selectedPosition}
             selectedCategory={selectedCategory}
             selectedStatus={selectedStatus}
-            onPositionChange={() => {}} // No-op for regular users
+            onPositionChange={setSelectedPosition}
             onCategoryChange={setSelectedCategory}
             onStatusChange={setSelectedStatus}
-            hidePositionFilter={user.role !== "admin"}
+            hidePositionFilter={userRole !== "admin"}
           />
         </div>
 
@@ -243,6 +316,7 @@ export default function ChecklistPage() {
                   <TableRow>
                     <TableHead>Task Title</TableHead>
                     <TableHead>Category</TableHead>
+                    {userRole === 'admin' && <TableHead>Position</TableHead>}
                     <TableHead>Frequency</TableHead>
                     <TableHead>Due Date/Time</TableHead>
                     <TableHead>Status</TableHead>
@@ -260,6 +334,11 @@ export default function ChecklistPage() {
                         <TableCell>
                           <Badge variant="outline">{task.master_task.category}</Badge>
                         </TableCell>
+                        {userRole === 'admin' && (
+                          <TableCell>
+                            <Badge variant="secondary">{task.master_task.position?.name || 'No Position'}</Badge>
+                          </TableCell>
+                        )}
                         <TableCell className="text-sm text-[var(--color-text-secondary)]">
                           {task.master_task.frequency}
                         </TableCell>

@@ -15,6 +15,7 @@ interface AuthContextType {
   signIn: (email: string, password: string) => Promise<{ error: any }>
   signOut: () => Promise<void>
   refreshProfile: () => Promise<void>
+  logout: () => Promise<void> // Alias for compatibility
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
@@ -23,33 +24,33 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null)
   const [isLoading, setIsLoading] = useState(true)
 
-  const refreshProfile = async () => {
-    if (!user) return
-
+  const loadUserProfile = async (currentUser: AuthUser) => {
     try {
-      // Get user profile
+      // Get user profile with positions
       const { data: profile, error: profileError } = await supabase
         .from('user_profiles')
-        .select('*')
-        .eq('id', user.id)
+        .select(`
+          *,
+          positions (*)
+        `)
+        .eq('id', currentUser.id)
         .single()
 
       if (profileError) {
         // If profile doesn't exist, create a default one for development
         if (profileError.code === 'PGRST116' || profileError.message?.includes('No rows found')) {
-          console.log('Creating default profile for user:', user.email)
           
           try {
             // Determine role based on email for demo purposes
-            const isAdmin = user.email?.includes('admin') || false
+            const isAdmin = currentUser.email?.includes('admin') || false
             const defaultRole = isAdmin ? 'admin' : 'viewer'
             
             // Create default profile
             const { data: newProfile, error: createError } = await supabase
               .from('user_profiles')
               .insert({
-                id: user.id,
-                display_name: user.email?.split('@')[0] || 'User',
+                id: currentUser.id,
+                display_name: currentUser.email?.split('@')[0] || 'User',
                 role: defaultRole,
                 position_id: '550e8400-e29b-41d4-a716-446655440001' // Default to Pharmacist Primary
               })
@@ -58,12 +59,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
             if (createError) {
               console.error('Error creating user profile:', createError)
-              // Continue without profile for now - user can still access basic features
-              setUser(prevUser => ({
-                ...prevUser!,
+              // Set user with null profile atomically to prevent flickering
+              setUser({
+                ...currentUser,
                 profile: null,
                 position: null
-              }))
+              })
+              setIsLoading(false)
               return
             }
 
@@ -81,115 +83,102 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
               if (positionError) {
                 console.error('Error fetching position for new profile:', positionError)
-                // Try to fetch all positions as fallback
                 const { data: allPositions, error: allPositionsError } = await supabase
                   .from('positions')
                   .select('*')
                 
                 if (!allPositionsError && allPositions) {
-                  position = allPositions.find(p => p.id === profile.position_id) || null
-                  if (position) {
-                    console.log('Position found via fallback for new profile:', position.name)
-                  } else {
-                    console.warn('Position not found for new profile. Position ID:', profile.position_id)
-                    // Use the first available position as fallback
-                    position = allPositions.length > 0 ? allPositions[0] : null
-                    if (position) {
-                      console.log('Using first available position as fallback:', position.name)
-                    }
-                  }
-                } else {
-                  console.error('Failed to fetch positions for new profile:', allPositionsError)
-                  position = null
+                  position = allPositions.find(p => p.id === profile.position_id) || allPositions[0] || null
                 }
               } else {
                 position = positionData
               }
             }
 
-            setUser(prevUser => ({
-              ...prevUser!,
+            // Set user with complete profile data atomically
+            setUser({
+              ...currentUser,
               profile,
               position
-            }))
+            })
+            setIsLoading(false)
             return
           } catch (createProfileError) {
             console.error('Failed to create profile:', createProfileError)
-            // Set user without profile
-            setUser(prevUser => ({
-              ...prevUser!,
+            // Set user with null profile atomically
+            setUser({
+              ...currentUser,
               profile: null,
               position: null
-            }))
+            })
+            setIsLoading(false)
             return
           }
         }
         
         console.error('Error fetching user profile:', profileError)
-        // Set user without profile for database issues
-        setUser(prevUser => ({
-          ...prevUser!,
+        // Set user with null profile atomically
+        setUser({
+          ...currentUser,
           profile: null,
           position: null
-        }))
+        })
+        setIsLoading(false)
         return
       }
 
-      // Get position if user has one
-      let position = null
-      if (profile.position_id) {
+      // Position should already be included from the joined query
+      const position = profile.positions || null
+
+      // If no position in join but position_id exists, try to fetch it separately (fallback)
+      let finalPosition = position
+      if (!position && profile.position_id) {
         const { data: positionData, error: positionError } = await supabase
           .from('positions')
           .select('*')
           .eq('id', profile.position_id)
           .single()
 
-        if (positionError) {
-          console.error('Error fetching position:', positionError)
-          // If position fetch fails due to RLS or other issues, try alternative approaches
-          
-          // First, try to fetch all positions and find the one we need
-          const { data: allPositions, error: allPositionsError } = await supabase
-            .from('positions')
-            .select('*')
-          
-          if (!allPositionsError && allPositions) {
-            position = allPositions.find(p => p.id === profile.position_id) || null
-            if (position) {
-              console.log('Position found via fallback approach:', position.name)
-            } else {
-              console.warn('Position not found in positions list. Position ID:', profile.position_id)
-              console.log('Available positions:', allPositions.map(p => ({ id: p.id, name: p.name })))
-            }
-          } else {
-            console.error('Failed to fetch positions as fallback:', allPositionsError)
-            
-            // Last resort: set position to null and continue
-            console.warn('Unable to fetch position data. User will continue without position info.')
-            position = null
-          }
-        } else {
-          position = positionData
+        if (!positionError && positionData) {
+          finalPosition = positionData
         }
       }
 
-      setUser(prevUser => ({
-        ...prevUser!,
+      // Set complete user data atomically to prevent flickering
+      setUser({
+        ...currentUser,
         profile,
-        position
-      }))
+        position: finalPosition
+      })
     } catch (error) {
-      console.error('Error refreshing profile:', error)
+      console.error('Error loading user profile:', error)
+      // Set user with null profile atomically
+      setUser({
+        ...currentUser,
+        profile: null,
+        position: null
+      })
+    }
+    setIsLoading(false)
+  }
+
+  const refreshProfile = async () => {
+    const { data: { session } } = await supabase.auth.getSession()
+    if (session?.user) {
+      await loadUserProfile(session.user as AuthUser)
     }
   }
 
   useEffect(() => {
     // Get initial session
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
       if (session?.user) {
         setUser(session.user as AuthUser)
+        // Load profile immediately to prevent flickering
+        await loadUserProfile(session.user as AuthUser)
+      } else {
+        setIsLoading(false)
       }
-      setIsLoading(false)
     })
 
     // Listen for auth changes
@@ -198,21 +187,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (session?.user) {
         setUser(session.user as AuthUser)
+        // Load profile immediately to prevent flickering
+        await loadUserProfile(session.user as AuthUser)
       } else {
         setUser(null)
+        setIsLoading(false)
       }
-      setIsLoading(false)
     })
 
     return () => subscription.unsubscribe()
   }, [])
-
-  // Fetch profile when user changes
-  useEffect(() => {
-    if (user && !user.profile) {
-      refreshProfile()
-    }
-  }, [user])
 
   const signIn = async (email: string, password: string) => {
     const { error } = await supabase.auth.signInWithPassword({
@@ -231,7 +215,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     isLoading,
     signIn,
     signOut,
-    refreshProfile
+    refreshProfile,
+    logout: signOut // Add alias for compatibility
   }
 
   return (

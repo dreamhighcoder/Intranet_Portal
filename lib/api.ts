@@ -1,4 +1,5 @@
 import { MasterTask, TaskInstance, Position, PublicHoliday } from './types'
+import { supabase } from './supabase'
 
 const API_BASE_URL = '/api'
 
@@ -10,14 +11,8 @@ class ApiError extends Error {
 }
 
 async function getAuthHeaders(): Promise<Record<string, string>> {
-  // Get the session from Supabase
+  // Get the session from the existing Supabase client
   if (typeof window !== 'undefined') {
-    const { createClient } = await import('@supabase/supabase-js')
-    const supabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-    )
-    
     const { data: { session } } = await supabase.auth.getSession()
     
     if (session?.access_token) {

@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { TrendingUp, Clock, AlertTriangle, Calendar } from "lucide-react"
+import { supabase } from "@/lib/supabase"
 
 interface DashboardStats {
   onTimeCompletionRate: number
@@ -18,20 +19,45 @@ export function KPIWidgets() {
   useEffect(() => {
     async function fetchDashboardStats() {
       try {
-        const response = await fetch('/api/dashboard')
+        // Get the current session to include auth token
+        const { data: { session } } = await supabase.auth.getSession()
+        
+        const headers: HeadersInit = {
+          'Content-Type': 'application/json',
+        }
+        
+        if (session?.access_token) {
+          headers.Authorization = `Bearer ${session.access_token}`
+        }
+
+        const response = await fetch('/api/dashboard', { headers })
         if (response.ok) {
           const data = await response.json()
           setStats({
-            onTimeCompletionRate: data.summary.onTimeCompletionRate || 0,
-            avgTimeToCompleteHours: data.summary.avgTimeToCompleteHours || 0,
-            missedLast7Days: data.summary.missedLast7Days || 0,
-            totalTasks: data.summary.totalTasks || 0,
+            onTimeCompletionRate: data.summary?.onTimeCompletionRate || 0,
+            avgTimeToCompleteHours: data.summary?.avgTimeToCompleteHours || 0,
+            missedLast7Days: data.summary?.missedLast7Days || 0,
+            totalTasks: data.summary?.totalTasks || 0,
           })
         } else {
-          console.error('Failed to fetch dashboard stats')
+          console.error('Failed to fetch dashboard stats:', response.status, response.statusText)
+          // Set fallback stats if API fails
+          setStats({
+            onTimeCompletionRate: 0,
+            avgTimeToCompleteHours: 0,
+            missedLast7Days: 0,
+            totalTasks: 0,
+          })
         }
       } catch (error) {
         console.error('Error fetching dashboard stats:', error)
+        // Set fallback stats if request fails completely
+        setStats({
+          onTimeCompletionRate: 0,
+          avgTimeToCompleteHours: 0,
+          missedLast7Days: 0,
+          totalTasks: 0,
+        })
       } finally {
         setIsLoading(false)
       }

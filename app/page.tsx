@@ -92,9 +92,9 @@ export default function HomePage() {
         {/* Welcome Banner */}
         <div className="mb-8">
           <div className="pharmacy-gradient rounded-lg p-6" style={{ color: "var(--color-primary-on)" }}>
-            <h1 className="text-3xl font-bold mb-2">Welcome back, {user.display_name}!</h1>
+            <h1 className="text-3xl font-bold mb-2">Welcome back, {user.profile?.display_name || user.email?.split('@')[0] || 'User'}!</h1>
             <p className="opacity-90">
-              {user.role === "admin" ? "Administrator" : user.display_name} • Ready to manage your tasks
+              {user.profile?.role === "admin" ? "Administrator" : user.profile?.display_name || "User"} • Ready to manage your tasks
             </p>
           </div>
         </div>
@@ -108,7 +108,7 @@ export default function HomePage() {
             {staffChecklists.map((checklist) => {
               const IconComponent = checklist.icon
               return (
-                <Card key={checklist.title} className="card-surface hover:shadow-lg transition-all duration-200 group">
+                <Card key={checklist.title} className="card-surface hover:shadow-lg transition-all duration-200 group flex flex-col h-full">
                   <CardHeader className="pb-3">
                     <div className="flex items-center space-x-3">
                       <div
@@ -122,13 +122,13 @@ export default function HomePage() {
                       </CardTitle>
                     </div>
                   </CardHeader>
-                  <CardContent className="pt-0">
-                    <p className="mb-4 text-sm leading-relaxed" style={{ color: "var(--color-text-muted)" }}>
+                  <CardContent className="pt-0 flex-1 flex flex-col">
+                    <p className="mb-4 text-sm leading-relaxed flex-1" style={{ color: "var(--color-text-muted)" }}>
                       {checklist.description}
                     </p>
                     <Button
                       asChild
-                      className="w-full bg-[var(--color-primary)] hover:bg-[var(--color-primary)]/90 text-[var(--color-primary-on)] border-0"
+                      className="w-full bg-[var(--color-primary)] hover:bg-[var(--color-primary)]/90 text-[var(--color-primary-on)] border-0 mt-auto"
                     >
                       <Link href={checklist.href}>Open Checklist</Link>
                     </Button>
@@ -140,7 +140,7 @@ export default function HomePage() {
         </div>
 
         {/* Quick Admin Access */}
-        {user.role === "admin" && (
+        {user.profile?.role === "admin" && (
           <div className="mb-8">
             <h2 className="text-xl font-semibold mb-4" style={{ color: "var(--color-text)" }}>
               Administrative Tools

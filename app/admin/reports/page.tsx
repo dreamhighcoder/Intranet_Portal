@@ -42,7 +42,7 @@ interface Position {
 }
 
 export default function AdminReportsPage() {
-  const { user } = useAuth()
+  const { user, isLoading } = useAuth()
   const [reportData, setReportData] = useState<ReportData | null>(null)
   const [positions, setPositions] = useState<Position[]>([])
   const [loading, setLoading] = useState(true)
@@ -54,8 +54,22 @@ export default function AdminReportsPage() {
   const [selectedCategory, setSelectedCategory] = useState("all")
 
   useEffect(() => {
-    loadData()
-  }, [dateRange, selectedPosition, selectedCategory])
+    // Only load data if user is authenticated and is admin
+    if (!isLoading && user && user.profile) {
+      if (user.profile.role === 'admin') {
+        loadData()
+      } else {
+        // Stop loading for non-admin users
+        setLoading(false)
+      }
+    } else if (!isLoading && user && !user.profile) {
+      // User exists but no profile - stop loading
+      setLoading(false)
+    } else if (!isLoading && !user) {
+      // No user - stop loading
+      setLoading(false)
+    }
+  }, [dateRange, selectedPosition, selectedCategory, user, isLoading])
 
   const loadData = async () => {
     setLoading(true)
@@ -177,6 +191,19 @@ export default function AdminReportsPage() {
     window.URL.revokeObjectURL(url)
   }
 
+  // Show loading until auth is resolved AND profile is loaded
+  if (isLoading || (user && !user.profile) || loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[var(--color-primary)] mx-auto"></div>
+          <p className="mt-2 text-[var(--color-text-secondary)]">Loading...</p>
+        </div>
+      </div>
+    )
+  }
+
+  // Show access denied only after auth and profile are fully resolved
   if (!user || user.profile?.role !== 'admin') {
     return (
       <div className="min-h-screen flex items-center justify-center">
