@@ -10,7 +10,7 @@ import { Label } from "@/components/ui/label"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { publicHolidaysApi } from "@/lib/api"
+import { publicHolidaysApi } from "@/lib/api-client"
 import { Plus, Trash2, Download, Upload, Calendar, RefreshCw } from "lucide-react"
 
 interface PublicHoliday {
@@ -22,7 +22,7 @@ interface PublicHoliday {
 }
 
 export default function AdminPublicHolidaysPage() {
-  const { user } = useAuth()
+  const { user, isLoading: authLoading } = useAuth()
   const [holidays, setHolidays] = useState<PublicHoliday[]>([])
   const [loading, setLoading] = useState(true)
   const [isDialogOpen, setIsDialogOpen] = useState(false)
@@ -36,8 +36,11 @@ export default function AdminPublicHolidaysPage() {
   })
 
   useEffect(() => {
-    loadHolidays()
-  }, [])
+    // Wait for authentication to complete before loading data
+    if (!authLoading && user) {
+      loadHolidays()
+    }
+  }, [authLoading, user])
 
   const loadHolidays = async () => {
     setLoading(true)
@@ -157,6 +160,18 @@ export default function AdminPublicHolidaysPage() {
     acc[year].push(holiday)
     return acc
   }, {} as Record<number, PublicHoliday[]>)
+
+  // Show loading spinner while authentication is still loading
+  if (authLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mb-4"></div>
+          <p className="text-gray-600">Loading...</p>
+        </div>
+      </div>
+    )
+  }
 
   if (!user || user.profile?.role !== 'admin') {
     return (

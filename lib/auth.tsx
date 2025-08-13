@@ -4,6 +4,7 @@ import React, { createContext, useContext, useEffect, useState } from 'react'
 import { User } from '@supabase/supabase-js'
 import { supabase, type UserProfile, type Position } from './supabase'
 
+
 interface AuthUser extends User {
   profile?: UserProfile
   position?: Position
@@ -44,6 +45,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             // Determine role based on email for demo purposes
             const isAdmin = currentUser.email?.includes('admin') || false
             const defaultRole = isAdmin ? 'admin' : 'viewer'
+            console.log('Creating user profile for:', currentUser.email, 'with role:', defaultRole)
             
             // Create default profile
             const { data: newProfile, error: createError } = await supabase
@@ -170,13 +172,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }
 
   useEffect(() => {
+    console.log('Auth context - Initializing auth state')
     // Get initial session
-    supabase.auth.getSession().then(async ({ data: { session } }) => {
+    supabase.auth.getSession().then(async ({ data: { session }, error }) => {
+      console.log('Auth context - Initial session check:', {
+        sessionExists: !!session,
+        userExists: !!session?.user,
+        userEmail: session?.user?.email,
+        error: error?.message
+      })
+      
+
+      
       if (session?.user) {
+        console.log('Auth context - Setting initial user from session')
         setUser(session.user as AuthUser)
         // Load profile immediately to prevent flickering
         await loadUserProfile(session.user as AuthUser)
       } else {
+        console.log('Auth context - No session found, setting loading to false')
         setIsLoading(false)
       }
     })
@@ -185,6 +199,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange(async (event, session) => {
+      console.log('Auth context - Auth state changed:', {
+        event,
+        sessionExists: !!session,
+        userExists: !!session?.user,
+        userEmail: session?.user?.email
+      })
+      
+
+      
       if (session?.user) {
         setUser(session.user as AuthUser)
         // Load profile immediately to prevent flickering
@@ -199,14 +222,26 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [])
 
   const signIn = async (email: string, password: string) => {
-    const { error } = await supabase.auth.signInWithPassword({
+    console.log('Auth context - Attempting sign in for:', email)
+    const { data, error } = await supabase.auth.signInWithPassword({
       email,
       password,
     })
+    
+    console.log('Auth context - Sign in result:', {
+      success: !error,
+      error: error?.message,
+      userExists: !!data?.user,
+      sessionExists: !!data?.session
+    })
+    
+
+    
     return { error }
   }
 
   const signOut = async () => {
+    console.log('Auth context - Signing out')
     await supabase.auth.signOut()
   }
 

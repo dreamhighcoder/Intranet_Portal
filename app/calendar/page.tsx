@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { taskInstancesApi, positionsApi } from "@/lib/api"
+import { taskInstancesApi, positionsApi } from "@/lib/api-client"
 import { ChevronLeft, ChevronRight, Calendar as CalendarIcon, Users } from "lucide-react"
 
 const daysOfWeek = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]

@@ -101,21 +101,41 @@ const categoryOptions = [
 ]
 
 export function MasterTaskForm({ task, positions, onSave, onCancel, loading = false }: MasterTaskFormProps) {
-  const [formData, setFormData] = useState<MasterTask>({
-    title: '',
-    description: '',
-    position_id: '',
-    frequency: 'every_day',
-    weekdays: [],
-    months: [],
-    timing: 'morning',
-    default_due_time: '17:00',
-    category: '',
-    publish_status: 'draft',
-    publish_delay_date: '',
-    sticky_once_off: false,
-    allow_edit_when_locked: false,
-    ...task
+  const [formData, setFormData] = useState<MasterTask>(() => {
+    const defaultData = {
+      title: '',
+      description: '',
+      position_id: '',
+      frequency: 'every_day',
+      weekdays: [],
+      months: [],
+      timing: 'morning',
+      default_due_time: '17:00',
+      category: '',
+      publish_status: 'draft',
+      publish_delay_date: '',
+      sticky_once_off: false,
+      allow_edit_when_locked: false
+    }
+    
+    if (task) {
+      // Ensure null values are converted to empty strings for controlled inputs
+      return {
+        ...defaultData,
+        ...task,
+        title: task.title || '',
+        description: task.description || '',
+        position_id: task.position_id || '',
+        timing: task.timing || 'morning',
+        default_due_time: task.default_due_time || '17:00',
+        category: task.category || '',
+        publish_delay_date: task.publish_delay_date || '',
+        weekdays: task.weekdays || [],
+        months: task.months || []
+      }
+    }
+    
+    return defaultData
   })
 
   const [errors, setErrors] = useState<Record<string, string>>({})
@@ -124,7 +144,20 @@ export function MasterTaskForm({ task, positions, onSave, onCancel, loading = fa
 
   useEffect(() => {
     if (task) {
-      setFormData({ ...task })
+      // Ensure null values are converted to empty strings for controlled inputs
+      const sanitizedTask = {
+        ...task,
+        title: task.title || '',
+        description: task.description || '',
+        position_id: task.position_id || '',
+        timing: task.timing || 'morning',
+        default_due_time: task.default_due_time || '17:00',
+        category: task.category || '',
+        publish_delay_date: task.publish_delay_date || '',
+        weekdays: task.weekdays || [],
+        months: task.months || []
+      }
+      setFormData(sanitizedTask)
       // Check if category is custom (not in predefined list)
       if (task.category && !categoryOptions.includes(task.category)) {
         setCustomCategory(task.category)
@@ -207,7 +240,9 @@ export function MasterTaskForm({ task, positions, onSave, onCancel, loading = fa
   const needsMonths = ['start_certain_months', 'certain_months', 'end_certain_months'].includes(formData.frequency)
 
   return (
-    <form onSubmit={handleSubmit} className="master-task-form space-y-6 max-h-[80vh] overflow-y-auto">
+    <div className="flex flex-col h-full">
+      <form onSubmit={handleSubmit} className="master-task-form flex-1 overflow-y-auto px-1">
+        <div className="space-y-4 pb-4">
       {/* Basic Information */}
       <Card>
         <CardHeader>
@@ -217,8 +252,9 @@ export function MasterTaskForm({ task, positions, onSave, onCancel, loading = fa
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="md:col-span-2">
+          <div className="space-y-4">
+            {/* Title - Full width */}
+            <div>
               <Label htmlFor="title">Task Title *</Label>
               <Input
                 id="title"
@@ -232,7 +268,8 @@ export function MasterTaskForm({ task, positions, onSave, onCancel, loading = fa
               )}
             </div>
 
-            <div className="md:col-span-2">
+            {/* Description - Full width */}
+            <div>
               <Label htmlFor="description">Description</Label>
               <Textarea
                 id="description"
@@ -244,64 +281,70 @@ export function MasterTaskForm({ task, positions, onSave, onCancel, loading = fa
               />
             </div>
 
-            <div>
-              <Label htmlFor="position">Position *</Label>
-              <Select
-                value={formData.position_id}
-                onValueChange={(value) => setFormData({ ...formData, position_id: value })}
-              >
-                <SelectTrigger className={errors.position_id ? 'border-red-500' : ''}>
-                  <SelectValue placeholder="Select position" />
-                </SelectTrigger>
-                <SelectContent>
-                  {positions.map(position => (
-                    <SelectItem key={position.id} value={position.id}>
-                      {position.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              {errors.position_id && (
-                <p className="text-sm text-red-600 mt-1">{errors.position_id}</p>
-              )}
-            </div>
-
-            <div>
-              <Label htmlFor="category">Category</Label>
-              <div className="space-y-2">
+            {/* Position and Category - Side by side on larger screens */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="position">Position *</Label>
                 <Select
-                  value={showCustomCategory ? 'custom' : formData.category}
-                  onValueChange={(value) => {
-                    if (value === 'custom') {
-                      setShowCustomCategory(true)
-                      setFormData({ ...formData, category: '' })
-                    } else {
-                      setShowCustomCategory(false)
-                      setFormData({ ...formData, category: value })
-                    }
-                  }}
+                  value={formData.position_id}
+                  onValueChange={(value) => setFormData({ ...formData, position_id: value })}
                 >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select category" />
+                  <SelectTrigger className={errors.position_id ? 'border-red-500' : ''}>
+                    <SelectValue placeholder="Select position" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">No Category</SelectItem>
-                    {categoryOptions.map(category => (
-                      <SelectItem key={category} value={category}>
-                        {category}
+                    {positions.map(position => (
+                      <SelectItem key={position.id} value={position.id}>
+                        {position.name}
                       </SelectItem>
                     ))}
-                    <SelectItem value="custom">Custom Category...</SelectItem>
                   </SelectContent>
                 </Select>
-                
-                {showCustomCategory && (
-                  <Input
-                    value={customCategory}
-                    onChange={(e) => setCustomCategory(e.target.value)}
-                    placeholder="Enter custom category"
-                  />
+                {errors.position_id && (
+                  <p className="text-sm text-red-600 mt-1">{errors.position_id}</p>
                 )}
+              </div>
+
+              <div>
+                <Label htmlFor="category">Category</Label>
+                <div className="space-y-2">
+                  <Select
+                    value={showCustomCategory ? 'custom' : (formData.category || 'none')}
+                    onValueChange={(value) => {
+                      if (value === 'custom') {
+                        setShowCustomCategory(true)
+                        setFormData({ ...formData, category: '' })
+                      } else if (value === 'none') {
+                        setShowCustomCategory(false)
+                        setFormData({ ...formData, category: '' })
+                      } else {
+                        setShowCustomCategory(false)
+                        setFormData({ ...formData, category: value })
+                      }
+                    }}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select category" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">No Category</SelectItem>
+                      {categoryOptions.map(category => (
+                        <SelectItem key={category} value={category}>
+                          {category}
+                        </SelectItem>
+                      ))}
+                      <SelectItem value="custom">Custom Category...</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  
+                  {showCustomCategory && (
+                    <Input
+                      value={customCategory}
+                      onChange={(e) => setCustomCategory(e.target.value)}
+                      placeholder="Enter custom category"
+                    />
+                  )}
+                </div>
               </div>
             </div>
           </div>
@@ -416,7 +459,7 @@ export function MasterTaskForm({ task, positions, onSave, onCancel, loading = fa
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             <div>
               <Label htmlFor="timing">Timing</Label>
               <Select
@@ -459,7 +502,7 @@ export function MasterTaskForm({ task, positions, onSave, onCancel, loading = fa
           <CardTitle className="text-lg">Publishing & Options</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             <div>
               <Label htmlFor="status">Publish Status</Label>
               <Select
@@ -496,61 +539,84 @@ export function MasterTaskForm({ task, positions, onSave, onCancel, loading = fa
 
           <Separator />
 
-          <div className="space-y-3">
-            <div className="flex items-center space-x-2">
-              <Checkbox
-                id="sticky_once_off"
-                checked={formData.sticky_once_off}
-                onCheckedChange={(checked) => 
-                  setFormData({ ...formData, sticky_once_off: checked as boolean })
-                }
-              />
-              <Label htmlFor="sticky_once_off" className="cursor-pointer">
-                Sticky Once-off
-              </Label>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <div className="flex items-start space-x-3">
+                <Checkbox
+                  id="sticky_once_off"
+                  checked={formData.sticky_once_off}
+                  onCheckedChange={(checked) => 
+                    setFormData({ ...formData, sticky_once_off: checked as boolean })
+                  }
+                  className="mt-0.5"
+                />
+                <div className="space-y-1">
+                  <Label htmlFor="sticky_once_off" className="cursor-pointer font-medium">
+                    Sticky Once-off
+                  </Label>
+                  <p className="text-sm text-gray-600">
+                    Task persists until completed, never auto-locks
+                  </p>
+                </div>
+              </div>
             </div>
-            <p className="text-sm text-gray-600 ml-6">
-              Task persists until completed, never auto-locks
-            </p>
 
-            <div className="flex items-center space-x-2">
-              <Checkbox
-                id="allow_edit_when_locked"
-                checked={formData.allow_edit_when_locked}
-                onCheckedChange={(checked) => 
-                  setFormData({ ...formData, allow_edit_when_locked: checked as boolean })
-                }
-              />
-              <Label htmlFor="allow_edit_when_locked" className="cursor-pointer">
-                Allow Edit When Locked
-              </Label>
+            <div className="space-y-2">
+              <div className="flex items-start space-x-3">
+                <Checkbox
+                  id="allow_edit_when_locked"
+                  checked={formData.allow_edit_when_locked}
+                  onCheckedChange={(checked) => 
+                    setFormData({ ...formData, allow_edit_when_locked: checked as boolean })
+                  }
+                  className="mt-0.5"
+                />
+                <div className="space-y-1">
+                  <Label htmlFor="allow_edit_when_locked" className="cursor-pointer font-medium">
+                    Allow Edit When Locked
+                  </Label>
+                  <p className="text-sm text-gray-600">
+                    Task can be edited even after being locked due to missed status
+                  </p>
+                </div>
+              </div>
             </div>
-            <p className="text-sm text-gray-600 ml-6">
-              Task can be edited even after being locked due to missed status
-            </p>
           </div>
         </CardContent>
       </Card>
 
-      {/* Form Actions */}
-      <div className="flex flex-col sm:flex-row justify-end space-y-2 sm:space-y-0 sm:space-x-2 pt-4 border-t">
-        <Button
-          type="button"
-          variant="outline"
-          onClick={onCancel}
-          disabled={loading}
-          className="w-full sm:w-auto"
-        >
-          Cancel
-        </Button>
-        <Button
-          type="submit"
-          disabled={loading}
-          className="w-full sm:w-auto"
-        >
-          {loading ? 'Saving...' : (task ? 'Update Task' : 'Create Task')}
-        </Button>
+        </div>
+      </form>
+      
+      {/* Form Actions - Fixed at bottom */}
+      <div className="flex-shrink-0 border-t bg-white/95 backdrop-blur-sm p-4 mt-4 sticky bottom-0">
+        <div className="flex flex-col sm:flex-row justify-end space-y-3 sm:space-y-0 sm:space-x-3">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={onCancel}
+            disabled={loading}
+            className="w-full sm:w-auto min-w-[100px] h-10"
+          >
+            Cancel
+          </Button>
+          <Button
+            type="submit"
+            disabled={loading}
+            className="w-full sm:w-auto min-w-[120px] h-10 bg-[var(--color-primary)] hover:bg-[var(--color-primary)]/90 text-white"
+            onClick={handleSubmit}
+          >
+            {loading ? (
+              <div className="flex items-center space-x-2">
+                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                <span>Saving...</span>
+              </div>
+            ) : (
+              task ? 'Update Task' : 'Create Task'
+            )}
+          </Button>
+        </div>
       </div>
-    </form>
+    </div>
   )
 }

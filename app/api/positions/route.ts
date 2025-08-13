@@ -1,4 +1,5 @@
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
+import { requireAuth } from '@/lib/auth-server'
 import { createClient } from '@supabase/supabase-js'
 
 // Use service role key for positions API to bypass RLS (positions are reference data)
@@ -6,12 +7,26 @@ const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
 const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey)
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
+    // Require authentication but allow all authenticated users to read positions
+    const user = await requireAuth(request)
+    console.log('Positions GET - Authentication successful for:', user.email)
+
     const { data: positions, error } = await supabaseAdmin
       .from('positions')
       .select('*')
       .order('name')
+
+    console.log('Positions GET - Query result:', {
+      success: !error,
+      error: error?.message,
+      count: positions?.length || 0,
+      samplePosition: positions?.[0] ? {
+        id: positions[0].id,
+        name: positions[0].name
+      } : null
+    })
 
     if (error) {
       console.error('Error fetching positions:', error)
@@ -21,12 +36,21 @@ export async function GET() {
     return NextResponse.json(positions)
   } catch (error) {
     console.error('Unexpected error:', error)
+    if (error instanceof Error && error.message.includes('Authentication')) {
+      return NextResponse.json({ error: error.message }, { status: 401 })
+    }
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }
 
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
   try {
+    // Require admin authentication for creating positions
+    const user = await requireAuth(request)
+    if (user.role !== 'admin') {
+      return NextResponse.json({ error: 'Admin access required' }, { status: 403 })
+    }
+    
     const body = await request.json()
     const { name, description } = body
 
@@ -48,6 +72,9 @@ export async function POST(request: Request) {
     return NextResponse.json(position, { status: 201 })
   } catch (error) {
     console.error('Unexpected error:', error)
+    if (error instanceof Error && error.message.includes('Authentication')) {
+      return NextResponse.json({ error: error.message }, { status: 401 })
+    }
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }

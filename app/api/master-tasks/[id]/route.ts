@@ -1,13 +1,30 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabase } from '@/lib/supabase'
+import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { requireAuth } from '@/lib/auth-middleware'
 
 export async function GET(
   request: NextRequest,
   { params }: { params: { id: string } }
 ) {
+  console.log('Master task [id] GET - Starting for ID:', params.id)
   try {
     const user = await requireAuth(request)
+    console.log('Master task [id] GET - Authentication successful for:', user.email)
+    
+    // Get the authorization header to create authenticated supabase client
+    const authHeader = request.headers.get('authorization')
+    const token = authHeader?.substring(7) // Remove 'Bearer ' prefix
+    
+    const supabase = createServerSupabaseClient()
+    
+    // Set the session for this request
+    if (token) {
+      await supabase.auth.setSession({
+        access_token: token,
+        refresh_token: ''
+      })
+    }
+    
     const { data: masterTask, error } = await supabase
       .from('master_tasks')
       .select(`
@@ -38,12 +55,29 @@ export async function PUT(
   request: NextRequest,
   { params }: { params: { id: string } }
 ) {
+  console.log('Master task [id] PUT - Starting for ID:', params.id)
   try {
     const user = await requireAuth(request)
+    console.log('Master task [id] PUT - Authentication successful for:', user.email)
     
     if (user.role !== 'admin') {
       return NextResponse.json({ error: 'Admin access required' }, { status: 403 })
     }
+    
+    // Get the authorization header to create authenticated supabase client
+    const authHeader = request.headers.get('authorization')
+    const token = authHeader?.substring(7) // Remove 'Bearer ' prefix
+    
+    const supabase = createServerSupabaseClient()
+    
+    // Set the session for this request
+    if (token) {
+      await supabase.auth.setSession({
+        access_token: token,
+        refresh_token: ''
+      })
+    }
+    
     const body = await request.json()
     const {
       title,
@@ -111,12 +145,29 @@ export async function DELETE(
   request: NextRequest,
   { params }: { params: { id: string } }
 ) {
+  console.log('Master task [id] DELETE - Starting for ID:', params.id)
   try {
     const user = await requireAuth(request)
+    console.log('Master task [id] DELETE - Authentication successful for:', user.email)
     
     if (user.role !== 'admin') {
       return NextResponse.json({ error: 'Admin access required' }, { status: 403 })
     }
+    
+    // Get the authorization header to create authenticated supabase client
+    const authHeader = request.headers.get('authorization')
+    const token = authHeader?.substring(7) // Remove 'Bearer ' prefix
+    
+    const supabase = createServerSupabaseClient()
+    
+    // Set the session for this request
+    if (token) {
+      await supabase.auth.setSession({
+        access_token: token,
+        refresh_token: ''
+      })
+    }
+    
     const { error } = await supabase
       .from('master_tasks')
       .delete()

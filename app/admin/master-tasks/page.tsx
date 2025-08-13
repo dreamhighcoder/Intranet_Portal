@@ -12,7 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { masterTasksApi, positionsApi } from "@/lib/api"
+import { masterTasksApi, positionsApi } from "@/lib/api-client"
 import { 
   Plus, 
   Edit, 
@@ -36,7 +36,11 @@ interface MasterTask {
   timing?: string
   publish_status: 'draft' | 'active' | 'inactive'
   default_due_time?: string
-  position: {
+  position?: {
+    id: string
+    name: string
+  }
+  positions?: {
     id: string
     name: string
   }
@@ -66,7 +70,7 @@ const frequencyLabels = {
 }
 
 export default function AdminMasterTasksPage() {
-  const { user } = useAuth()
+  const { user, isLoading: authLoading } = useAuth()
   const [tasks, setTasks] = useState<MasterTask[]>([])
   const [positions, setPositions] = useState<Position[]>([])
   const [loading, setLoading] = useState(true)
@@ -82,8 +86,16 @@ export default function AdminMasterTasksPage() {
   const [deletingTaskId, setDeletingTaskId] = useState<string | null>(null)
 
   useEffect(() => {
-    loadData()
-  }, [])
+    // Wait for authentication to complete before loading data
+    if (!authLoading && user && user.profile?.role === 'admin') {
+      console.log('Authentication complete, loading data for admin user:', user.email)
+      loadData()
+    } else if (!authLoading && !user) {
+      console.log('Authentication complete but no user found')
+    } else if (!authLoading && user && user.profile?.role !== 'admin') {
+      console.log('Authentication complete but user is not admin:', user.profile?.role)
+    }
+  }, [authLoading, user])
 
   const loadData = async () => {
     setLoading(true)
@@ -200,13 +212,15 @@ export default function AdminMasterTasksPage() {
     }
   }
 
+
+
   // Filter tasks based on search and filters
   const filteredTasks = tasks.filter(task => {
     const matchesSearch = !searchTerm || 
       task.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
       task.description?.toLowerCase().includes(searchTerm.toLowerCase())
     
-    const matchesPosition = filterPosition === 'all' || task.position.id === filterPosition
+    const matchesPosition = filterPosition === 'all' || (task.positions?.id || task.position?.id) === filterPosition
     const matchesStatus = filterStatus === 'all' || task.publish_status === filterStatus
     const matchesCategory = filterCategory === 'all' || task.category === filterCategory
 
@@ -216,6 +230,19 @@ export default function AdminMasterTasksPage() {
   // Get unique categories for filter
   const categories = Array.from(new Set(tasks.map(task => task.category).filter(Boolean)))
 
+  // Show loading spinner while authentication is still loading
+  if (authLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mb-4"></div>
+          <p className="text-gray-600">Loading...</p>
+        </div>
+      </div>
+    )
+  }
+
+  // Show access denied if user is not authenticated or not an admin
   if (!user || user.profile?.role !== 'admin') {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -273,6 +300,23 @@ export default function AdminMasterTasksPage() {
           </Alert>
         )}
 
+        {/* Debug Info - Remove this after testing */}
+        <Card className="mb-6 bg-blue-50 border-blue-200">
+          <CardContent className="pt-4">
+            <h4 className="font-semibold text-blue-800 mb-2">Authentication Status</h4>
+            <div className="text-sm text-blue-700 space-y-1">
+              <div>Auth Loading: {authLoading ? 'Yes' : 'No'}</div>
+              <div>User: {user ? user.email : 'None'}</div>
+              <div>Role: {user?.profile?.role || 'None'}</div>
+              <div>Position: {user?.profile?.position_id || 'None'}</div>
+              <div>Tasks Loaded: {tasks.length}</div>
+              <div>Positions Loaded: {positions.length}</div>
+            </div>
+          </CardContent>
+        </Card>
+
+
+
         {/* Filters */}
         <Card className="card-surface mb-6">
           <CardContent className="pt-4 lg:pt-6">
@@ -306,14 +350,14 @@ export default function AdminMasterTasksPage() {
 
             {/* Filters - Hidden on mobile unless toggled */}
             <div className={`${showMobileFilters ? 'block' : 'hidden'} lg:block`}>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-3 lg:gap-4">
                 <Select value={filterPosition} onValueChange={setFilterPosition}>
                   <SelectTrigger>
                     <SelectValue placeholder="All Positions" />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">All Positions</SelectItem>
-                    {positions.map(position => (
+                    {positions?.map(position => (
                       <SelectItem key={position.id} value={position.id}>
                         {position.name}
                       </SelectItem>
@@ -339,7 +383,7 @@ export default function AdminMasterTasksPage() {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">All Categories</SelectItem>
-                    {categories.map(category => (
+                    {categories?.map(category => (
                       <SelectItem key={category} value={category}>
                         {category}
                       </SelectItem>
@@ -409,7 +453,7 @@ export default function AdminMasterTasksPage() {
                             </div>
                           </TableCell>
                           <TableCell>
-                            <span className="text-sm">{task.position.name}</span>
+                            <span className="text-sm">{task.positions?.name || task.position?.name || 'Unknown Position'}</span>
                           </TableCell>
                           <TableCell>
                             <div className="text-sm">
@@ -510,7 +554,7 @@ export default function AdminMasterTasksPage() {
                           <div className="grid grid-cols-2 gap-3 text-sm">
                             <div>
                               <span className="text-gray-500">Position:</span>
-                              <div className="font-medium">{task.position.name}</div>
+                              <div className="font-medium">{task.positions?.name || task.position?.name || 'Unknown Position'}</div>
                             </div>
                             <div>
                               <span className="text-gray-500">Frequency:</span>
@@ -540,58 +584,60 @@ export default function AdminMasterTasksPage() {
                           </div>
 
                           {/* Status and Actions */}
-                          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between space-y-3 sm:space-y-0 pt-2 border-t">
-                            <div className="flex items-center space-x-2">
-                              <span className="text-sm text-gray-500">Status:</span>
-                              <Select
-                                value={task.publish_status}
-                                onValueChange={(value: 'draft' | 'active' | 'inactive') => 
-                                  handleStatusChange(task.id, value)
-                                }
-                              >
-                                <SelectTrigger className="w-24 h-8">
-                                  <SelectValue />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  <SelectItem value="draft">Draft</SelectItem>
-                                  <SelectItem value="active">Active</SelectItem>
-                                  <SelectItem value="inactive">Inactive</SelectItem>
-                                </SelectContent>
-                              </Select>
-                            </div>
+                          <div className="flex flex-col space-y-3 pt-3 border-t">
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center space-x-2">
+                                <span className="text-sm text-gray-500">Status:</span>
+                                <Select
+                                  value={task.publish_status}
+                                  onValueChange={(value: 'draft' | 'active' | 'inactive') => 
+                                    handleStatusChange(task.id, value)
+                                  }
+                                >
+                                  <SelectTrigger className="w-24 h-8">
+                                    <SelectValue />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="draft">Draft</SelectItem>
+                                    <SelectItem value="active">Active</SelectItem>
+                                    <SelectItem value="inactive">Inactive</SelectItem>
+                                  </SelectContent>
+                                </Select>
+                              </div>
 
-                            <div className="flex space-x-2">
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() => handleGenerateInstances(task.id)}
-                                title="Generate instances"
-                              >
-                                <Calendar className="w-3 h-3" />
-                              </Button>
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() => {
-                                  setEditingTask(task)
-                                  setIsTaskDialogOpen(true)
-                                }}
-                              >
-                                <Edit className="w-3 h-3" />
-                              </Button>
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() => handleDeleteTask(task.id)}
-                                disabled={deletingTaskId === task.id}
-                                className="text-red-600 hover:text-red-700"
-                              >
-                                {deletingTaskId === task.id ? (
-                                  <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-red-600"></div>
-                                ) : (
-                                  <Trash2 className="w-3 h-3" />
-                                )}
-                              </Button>
+                              <div className="flex space-x-1">
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => handleGenerateInstances(task.id)}
+                                  title="Generate instances"
+                                >
+                                  <Calendar className="w-3 h-3" />
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => {
+                                    setEditingTask(task)
+                                    setIsTaskDialogOpen(true)
+                                  }}
+                                >
+                                  <Edit className="w-3 h-3" />
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => handleDeleteTask(task.id)}
+                                  disabled={deletingTaskId === task.id}
+                                  className="text-red-600 hover:text-red-700"
+                                >
+                                  {deletingTaskId === task.id ? (
+                                    <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-red-600"></div>
+                                  ) : (
+                                    <Trash2 className="w-3 h-3" />
+                                  )}
+                                </Button>
+                              </div>
                             </div>
                           </div>
                         </div>
@@ -612,13 +658,13 @@ export default function AdminMasterTasksPage() {
 
         {/* Task Creation/Edit Dialog */}
         <Dialog open={isTaskDialogOpen} onOpenChange={setIsTaskDialogOpen}>
-          <DialogContent className="dialog-content max-w-4xl max-h-[90vh] overflow-hidden">
-            <DialogHeader>
-              <DialogTitle className="text-xl">
+          <DialogContent className="dialog-content max-w-6xl w-[95vw] sm:w-[90vw] max-h-[95vh] h-[95vh] overflow-hidden flex flex-col">
+            <DialogHeader className="flex-shrink-0 pb-4 border-b">
+              <DialogTitle className="text-xl font-semibold">
                 {editingTask ? 'Edit Master Task' : 'Create New Master Task'}
               </DialogTitle>
             </DialogHeader>
-            <div className="mt-4">
+            <div className="flex-1 overflow-hidden">
               <MasterTaskForm
                 task={editingTask}
                 positions={positions}

@@ -246,7 +246,7 @@
 
   /* Master task form responsive improvements */
   .master-task-form {
-    @apply px-2;
+    @apply px-2 space-y-3;
   }
 
   .master-task-form .grid {
@@ -256,10 +256,14 @@
   .master-task-form .md\:col-span-2 {
     @apply col-span-1;
   }
+  
+  .master-task-form .space-y-4 {
+    @apply space-y-3;
+  }
 
   /* Dialog responsive improvements */
   .dialog-content {
-    @apply mx-4 max-w-[calc(100vw-2rem)];
+    @apply mx-2 max-w-[calc(100vw-1rem)] max-h-[calc(100vh-1rem)];
   }
 
   /* Table responsive improvements */
@@ -276,6 +280,30 @@
   }
 }
 
+/* Extra small screens */
+@media (max-width: 480px) {
+  .dialog-content {
+    @apply mx-1 max-w-[calc(100vw-0.5rem)] max-h-[calc(100vh-0.5rem)];
+  }
+  
+  .master-task-form {
+    @apply px-1;
+  }
+  
+  .master-task-form .card-surface {
+    @apply mx-0;
+  }
+  
+  /* Better form button spacing on very small screens */
+  .master-task-form .sticky .flex {
+    @apply flex-col space-y-2 space-x-0;
+  }
+  
+  .master-task-form .sticky .flex > * {
+    @apply w-full;
+  }
+}
+
 /* Tablet responsive improvements */
 @media (min-width: 768px) and (max-width: 1024px) {
   .master-task-form .grid {
@@ -283,8 +311,98 @@
   }
 
   .dialog-content {
-    @apply max-w-3xl;
+    @apply max-w-4xl max-h-[90vh];
   }
+  
+  .master-task-form {
+    @apply space-y-4;
+  }
+}
+
+/* Desktop improvements */
+@media (min-width: 1024px) {
+  .dialog-content {
+    @apply max-w-6xl max-h-[95vh];
+  }
+  
+  .master-task-form {
+    @apply space-y-5;
+  }
+}
+
+/* Additional modal improvements */
+.dialog-content {
+  @apply flex flex-col;
+}
+
+.dialog-content > div:first-child {
+  @apply flex-shrink-0;
+}
+
+.dialog-content > div:last-child {
+  @apply flex-1 min-h-0;
+}
+
+/* Form card improvements */
+.master-task-form .card-surface {
+  @apply shadow-sm;
+}
+
+/* Better spacing for form elements */
+.master-task-form .space-y-4 > * + * {
+  @apply mt-4;
+}
+
+.master-task-form .space-y-3 > * + * {
+  @apply mt-3;
+}
+
+/* Improved checkbox layouts */
+.master-task-form .grid .flex.items-center {
+  @apply min-h-[2.5rem];
+}
+
+/* Better button spacing */
+.master-task-form .flex.space-x-3 > * + * {
+  @apply ml-3;
+}
+
+.master-task-form .flex.space-x-2 > * + * {
+  @apply ml-2;
+}
+
+/* Ensure proper modal scrolling */
+.dialog-content .master-task-form {
+  @apply overflow-y-auto;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(156, 163, 175, 0.5) transparent;
+}
+
+.dialog-content .master-task-form::-webkit-scrollbar {
+  width: 6px;
+}
+
+.dialog-content .master-task-form::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.dialog-content .master-task-form::-webkit-scrollbar-thumb {
+  background-color: rgba(156, 163, 175, 0.5);
+  border-radius: 3px;
+}
+
+.dialog-content .master-task-form::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(156, 163, 175, 0.7);
+}
+
+/* Sticky button improvements */
+.master-task-form .sticky {
+  z-index: 10;
+}
+
+/* Better card spacing in form */
+.master-task-form .card-surface + .card-surface {
+  @apply mt-4;
 }
 
 /* Print styles for reports */
