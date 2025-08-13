@@ -62,13 +62,23 @@ export async function POST(request: NextRequest) {
 // GET endpoint for manual triggers from admin panel
 export async function GET(request: NextRequest) {
   try {
-    // This endpoint can be called manually by admins
-    // You could add user authentication here to verify admin role
+    // Import auth function for user authentication
+    const { requireAuth } = await import('@/lib/auth-server')
+    
+    // Authenticate user and verify admin role
+    const user = await requireAuth(request)
+    if (user.role !== 'admin') {
+      return NextResponse.json({ error: 'Admin access required' }, { status: 403 })
+    }
+    
+    console.log('Generate instances GET - Admin user authenticated:', user.email)
     
     const { searchParams } = new URL(request.url)
-    const mode = searchParams.get('mode') || 'daily'
+    const mode = searchParams.get('mode') || 'custom'
     const masterTaskId = searchParams.get('masterTaskId') || undefined
     const forceRegenerate = searchParams.get('forceRegenerate') === 'true'
+
+    console.log('Generate instances GET - Parameters:', { mode, masterTaskId, forceRegenerate })
 
     let result
     
@@ -80,6 +90,8 @@ export async function GET(request: NextRequest) {
         forceRegenerate
       })
     }
+
+    console.log('Generate instances GET - Result:', result)
 
     return NextResponse.json({
       success: result.success,
@@ -94,6 +106,11 @@ export async function GET(request: NextRequest) {
 
   } catch (error) {
     console.error('Error in manual generate-instances trigger:', error)
+    
+    if (error instanceof Error && error.message.includes('Authentication')) {
+      return NextResponse.json({ error: 'Authentication required' }, { status: 401 })
+    }
+    
     return NextResponse.json(
       { 
         error: 'Instance generation failed', 

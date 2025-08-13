@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createServerSupabaseClient } from '@/lib/supabase-server'
-import { requireAuth } from '@/lib/auth-middleware'
+import { requireAuth } from '@/lib/auth-server'
+import { createClient } from '@supabase/supabase-js'
+
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
+const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
 
 export async function GET(
   request: NextRequest,
@@ -11,19 +14,8 @@ export async function GET(
     const user = await requireAuth(request)
     console.log('Master task [id] GET - Authentication successful for:', user.email)
     
-    // Get the authorization header to create authenticated supabase client
-    const authHeader = request.headers.get('authorization')
-    const token = authHeader?.substring(7) // Remove 'Bearer ' prefix
-    
-    const supabase = createServerSupabaseClient()
-    
-    // Set the session for this request
-    if (token) {
-      await supabase.auth.setSession({
-        access_token: token,
-        refresh_token: ''
-      })
-    }
+    // Create admin Supabase client for database operations
+    const supabase = createClient(supabaseUrl, supabaseServiceKey)
     
     const { data: masterTask, error } = await supabase
       .from('master_tasks')
@@ -38,6 +30,7 @@ export async function GET(
       .single()
 
     if (error || !masterTask) {
+      console.error('Master task not found:', error)
       return NextResponse.json({ error: 'Master task not found' }, { status: 404 })
     }
 
@@ -64,19 +57,8 @@ export async function PUT(
       return NextResponse.json({ error: 'Admin access required' }, { status: 403 })
     }
     
-    // Get the authorization header to create authenticated supabase client
-    const authHeader = request.headers.get('authorization')
-    const token = authHeader?.substring(7) // Remove 'Bearer ' prefix
-    
-    const supabase = createServerSupabaseClient()
-    
-    // Set the session for this request
-    if (token) {
-      await supabase.auth.setSession({
-        access_token: token,
-        refresh_token: ''
-      })
-    }
+    // Create admin Supabase client for database operations
+    const supabase = createClient(supabaseUrl, supabaseServiceKey)
     
     const body = await request.json()
     const {
@@ -94,6 +76,8 @@ export async function PUT(
       sticky_once_off,
       allow_edit_when_locked
     } = body
+
+    console.log('Master task [id] PUT - Updating with data:', { title, position_id, frequency })
 
     const { data: masterTask, error } = await supabase
       .from('master_tasks')
@@ -128,9 +112,7 @@ export async function PUT(
       return NextResponse.json({ error: 'Failed to update master task' }, { status: 500 })
     }
 
-    // TODO: Trigger regeneration of future task instances
-    // This would be handled by a background job or immediate processing
-
+    console.log('Master task [id] PUT - Successfully updated task')
     return NextResponse.json(masterTask)
   } catch (error) {
     if (error instanceof Error && error.message.includes('Authentication')) {
@@ -154,20 +136,23 @@ export async function DELETE(
       return NextResponse.json({ error: 'Admin access required' }, { status: 403 })
     }
     
-    // Get the authorization header to create authenticated supabase client
-    const authHeader = request.headers.get('authorization')
-    const token = authHeader?.substring(7) // Remove 'Bearer ' prefix
+    // Create admin Supabase client for database operations
+    const supabase = createClient(supabaseUrl, supabaseServiceKey)
     
-    const supabase = createServerSupabaseClient()
-    
-    // Set the session for this request
-    if (token) {
-      await supabase.auth.setSession({
-        access_token: token,
-        refresh_token: ''
-      })
+    // First, delete all associated task instances
+    console.log('Master task [id] DELETE - Deleting associated task instances')
+    const { error: instancesError } = await supabase
+      .from('task_instances')
+      .delete()
+      .eq('master_task_id', params.id)
+
+    if (instancesError) {
+      console.error('Error deleting task instances:', instancesError)
+      return NextResponse.json({ error: 'Failed to delete associated task instances' }, { status: 500 })
     }
-    
+
+    // Then delete the master task
+    console.log('Master task [id] DELETE - Deleting master task')
     const { error } = await supabase
       .from('master_tasks')
       .delete()
@@ -178,6 +163,7 @@ export async function DELETE(
       return NextResponse.json({ error: 'Failed to delete master task' }, { status: 500 })
     }
 
+    console.log('Master task [id] DELETE - Successfully deleted task and instances')
     return NextResponse.json({ message: 'Master task deleted successfully' })
   } catch (error) {
     if (error instanceof Error && error.message.includes('Authentication')) {

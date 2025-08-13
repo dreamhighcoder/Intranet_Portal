@@ -19,8 +19,8 @@ interface MasterTask {
   description?: string
   position_id?: string
   frequency: string
-  weekdays: number[]
-  months: number[]
+  weekdays?: number[]
+  months?: number[]
   timing?: string
   default_due_time?: string
   category?: string
@@ -102,7 +102,7 @@ const categoryOptions = [
 
 export function MasterTaskForm({ task, positions, onSave, onCancel, loading = false }: MasterTaskFormProps) {
   const [formData, setFormData] = useState<MasterTask>(() => {
-    const defaultData = {
+    const defaultData: MasterTask = {
       title: '',
       description: '',
       position_id: '',
@@ -112,7 +112,7 @@ export function MasterTaskForm({ task, positions, onSave, onCancel, loading = fa
       timing: 'morning',
       default_due_time: '17:00',
       category: '',
-      publish_status: 'draft',
+      publish_status: 'draft' as const,
       publish_delay_date: '',
       sticky_once_off: false,
       allow_edit_when_locked: false
@@ -131,7 +131,8 @@ export function MasterTaskForm({ task, positions, onSave, onCancel, loading = fa
         category: task.category || '',
         publish_delay_date: task.publish_delay_date || '',
         weekdays: task.weekdays || [],
-        months: task.months || []
+        months: task.months || [],
+        publish_status: (task.publish_status as 'draft' | 'active' | 'inactive') || 'draft'
       }
     }
     
@@ -177,11 +178,11 @@ export function MasterTaskForm({ task, positions, onSave, onCancel, loading = fa
       newErrors.position_id = 'Position is required'
     }
 
-    if (formData.frequency === 'specific_weekdays' && formData.weekdays.length === 0) {
+    if (formData.frequency === 'specific_weekdays' && (!formData.weekdays || formData.weekdays.length === 0)) {
       newErrors.weekdays = 'At least one weekday must be selected'
     }
 
-    if (['start_certain_months', 'certain_months', 'end_certain_months'].includes(formData.frequency) && formData.months.length === 0) {
+    if (['start_certain_months', 'certain_months', 'end_certain_months'].includes(formData.frequency) && (!formData.months || formData.months.length === 0)) {
       newErrors.months = 'At least one month must be selected'
     }
 
@@ -220,17 +221,19 @@ export function MasterTaskForm({ task, positions, onSave, onCancel, loading = fa
   }
 
   const handleWeekdayToggle = (weekday: number) => {
-    const newWeekdays = formData.weekdays.includes(weekday)
-      ? formData.weekdays.filter(w => w !== weekday)
-      : [...formData.weekdays, weekday].sort()
+    const currentWeekdays = formData.weekdays || []
+    const newWeekdays = currentWeekdays.includes(weekday)
+      ? currentWeekdays.filter(w => w !== weekday)
+      : [...currentWeekdays, weekday].sort()
     
     setFormData({ ...formData, weekdays: newWeekdays })
   }
 
   const handleMonthToggle = (month: number) => {
-    const newMonths = formData.months.includes(month)
-      ? formData.months.filter(m => m !== month)
-      : [...formData.months, month].sort()
+    const currentMonths = formData.months || []
+    const newMonths = currentMonths.includes(month)
+      ? currentMonths.filter(m => m !== month)
+      : [...currentMonths, month].sort()
     
     setFormData({ ...formData, months: newMonths })
   }
@@ -404,7 +407,7 @@ export function MasterTaskForm({ task, positions, onSave, onCancel, loading = fa
                   <div key={weekday.value} className="flex items-center space-x-2">
                     <Checkbox
                       id={`weekday-${weekday.value}`}
-                      checked={formData.weekdays.includes(weekday.value)}
+                      checked={formData.weekdays?.includes(weekday.value) || false}
                       onCheckedChange={() => handleWeekdayToggle(weekday.value)}
                     />
                     <Label 
@@ -430,7 +433,7 @@ export function MasterTaskForm({ task, positions, onSave, onCancel, loading = fa
                   <div key={month.value} className="flex items-center space-x-2">
                     <Checkbox
                       id={`month-${month.value}`}
-                      checked={formData.months.includes(month.value)}
+                      checked={formData.months?.includes(month.value) || false}
                       onCheckedChange={() => handleMonthToggle(month.value)}
                     />
                     <Label 

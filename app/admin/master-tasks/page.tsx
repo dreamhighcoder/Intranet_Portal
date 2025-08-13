@@ -13,6 +13,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { masterTasksApi, positionsApi } from "@/lib/api-client"
+import { supabase } from "@/lib/supabase"
 import { 
   Plus, 
   Edit, 
@@ -84,6 +85,9 @@ export default function AdminMasterTasksPage() {
   const [formLoading, setFormLoading] = useState(false)
   const [showMobileFilters, setShowMobileFilters] = useState(false)
   const [deletingTaskId, setDeletingTaskId] = useState<string | null>(null)
+  const [generatingInstancesId, setGeneratingInstancesId] = useState<string | null>(null)
+  const [deleteConfirmModal, setDeleteConfirmModal] = useState<{ isOpen: boolean; task: any | null }>({ isOpen: false, task: null })
+  const [generateConfirmModal, setGenerateConfirmModal] = useState<{ isOpen: boolean; task: any | null }>({ isOpen: false, task: null })
 
   useEffect(() => {
     // Wait for authentication to complete before loading data
@@ -125,29 +129,55 @@ export default function AdminMasterTasksPage() {
 
   const handleStatusChange = async (taskId: string, newStatus: 'draft' | 'active' | 'inactive') => {
     try {
-      await masterTasksApi.update(taskId, { publish_status: newStatus })
+      console.log('Updating task status:', { taskId, newStatus })
+      
+      // Optimistically update the UI first
       setTasks(tasks.map(task => 
         task.id === taskId ? { ...task, publish_status: newStatus } : task
       ))
-      showAlert('success', `Task ${newStatus} successfully`)
+      
+      // Then update the database
+      const updatedTask = await masterTasksApi.update(taskId, { publish_status: newStatus })
+      console.log('Task status updated:', updatedTask)
+      
+      // Update with the full response from server (in case there are other changes)
+      setTasks(tasks.map(task => 
+        task.id === taskId ? updatedTask : task
+      ))
+      
+      showAlert('success', `Task status changed to ${newStatus}`)
     } catch (error) {
       console.error('Error updating task status:', error)
-      showAlert('error', 'Failed to update task status')
+      
+      // Revert the optimistic update on error
+      await loadData()
+      
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+      showAlert('error', `Failed to update task status: ${errorMessage}`)
     }
   }
 
-  const handleDeleteTask = async (taskId: string) => {
-    if (!confirm('Are you sure you want to delete this task? This will also delete all associated task instances.')) {
-      return
-    }
+  const handleDeleteTask = (taskId: string) => {
+    const task = tasks.find(t => t.id === taskId)
+    setDeleteConfirmModal({ isOpen: true, task })
+  }
 
-    setDeletingTaskId(taskId)
+  const confirmDeleteTask = async () => {
+    const task = deleteConfirmModal.task
+    if (!task) return
+
+    setDeleteConfirmModal({ isOpen: false, task: null })
+    setDeletingTaskId(task.id)
+    
     try {
-      console.log('Deleting task:', taskId)
-      await masterTasksApi.delete(taskId)
+      console.log('Deleting task:', task.id)
+      await masterTasksApi.delete(task.id)
       console.log('Task deleted successfully')
-      setTasks(tasks.filter(task => task.id !== taskId))
-      showAlert('success', 'Task deleted successfully')
+      
+      // Immediately remove from UI
+      setTasks(tasks.filter(t => t.id !== task.id))
+      
+      showAlert('success', `Task "${task.title}" deleted successfully`)
     } catch (error) {
       console.error('Error deleting task:', error)
       const errorMessage = error instanceof Error ? error.message : 'Unknown error'
@@ -167,21 +197,32 @@ export default function AdminMasterTasksPage() {
         console.log('Updating task:', editingTask.id)
         const updatedTask = await masterTasksApi.update(editingTask.id, taskData)
         console.log('Task updated:', updatedTask)
+        
+        // Immediately update the UI with the new data
         setTasks(tasks.map(task => 
           task.id === editingTask.id ? updatedTask : task
         ))
+        
         showAlert('success', 'Task updated successfully')
       } else {
         // Create new task
         console.log('Creating new task')
         const newTask = await masterTasksApi.create(taskData)
         console.log('Task created:', newTask)
-        setTasks([...tasks, newTask])
+        
+        // Immediately add the new task to the UI
+        setTasks([newTask, ...tasks])
+        
         showAlert('success', 'Task created successfully')
       }
       
+      // Close dialog and reset state
       setIsTaskDialogOpen(false)
       setEditingTask(null)
+      
+      // Optionally reload data to ensure consistency
+      // await loadData()
+      
     } catch (error) {
       console.error('Error saving task:', error)
       const errorMessage = error instanceof Error ? error.message : 'Unknown error'
@@ -192,23 +233,76 @@ export default function AdminMasterTasksPage() {
   }
 
   const handleCancelEdit = () => {
+    // Reset form loading state
+    setFormLoading(false)
+    
+    // Close dialog and reset editing state
     setIsTaskDialogOpen(false)
     setEditingTask(null)
+    
+    console.log('Edit dialog cancelled')
   }
 
-  const handleGenerateInstances = async (taskId?: string) => {
+  const handleGenerateInstances = (taskId?: string) => {
+    const task = taskId ? tasks.find(t => t.id === taskId) : null
+    setGenerateConfirmModal({ isOpen: true, task })
+  }
+
+  const confirmGenerateInstances = async () => {
+    const task = generateConfirmModal.task
+    const taskId = task?.id
+    
+    setGenerateConfirmModal({ isOpen: false, task: null })
+    
+    if (taskId) {
+      setGeneratingInstancesId(taskId)
+    }
+    
     try {
-      const response = await fetch(`/api/jobs/generate-instances?mode=custom${taskId ? `&masterTaskId=${taskId}` : ''}`)
+      console.log('Generating instances for task:', taskId || 'all tasks')
+      
+      // Get current session for authentication
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session?.access_token) {
+        throw new Error('Authentication required')
+      }
+
+      const response = await fetch(`/api/jobs/generate-instances?mode=custom${taskId ? `&masterTaskId=${taskId}` : ''}`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`,
+          'Content-Type': 'application/json'
+        }
+      })
+      
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.error || 'Failed to generate instances')
+      }
+      
       const result = await response.json()
       
       if (result.success) {
-        showAlert('success', `Generated ${result.stats.generated} task instances`)
+        const message = taskId 
+          ? `✅ Generated ${result.stats.generated} instances for "${task?.title}"`
+          : `✅ Generated ${result.stats.generated} task instances`
+        
+        const details = result.stats.skipped > 0 
+          ? ` (${result.stats.skipped} skipped as they already exist)`
+          : ''
+        
+        showAlert('success', message + details)
       } else {
-        showAlert('error', result.message)
+        showAlert('error', result.message || 'Failed to generate instances')
       }
     } catch (error) {
       console.error('Error generating instances:', error)
-      showAlert('error', 'Failed to generate instances')
+      const errorMessage = error instanceof Error ? error.message : 'Failed to generate instances'
+      showAlert('error', `❌ ${errorMessage}`)
+    } finally {
+      if (taskId) {
+        setGeneratingInstancesId(null)
+      }
     }
   }
 
@@ -268,24 +362,37 @@ export default function AdminMasterTasksPage() {
                 <p className="text-white/90 text-sm lg:text-base">Manage the central checklist that generates all task instances</p>
               </div>
               <div className="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-3">
-                <Button
-                  onClick={() => {
-                    setEditingTask(null)
-                    setIsTaskDialogOpen(true)
-                  }}
-                  className="bg-white text-blue-600 hover:bg-gray-100 w-full sm:w-auto"
-                >
-                  <Plus className="w-4 h-4 mr-2" />
-                  New Task
-                </Button>
-                <Button
-                  onClick={() => handleGenerateInstances()}
-                  variant="outline"
-                  className="bg-white/10 border-white/20 text-white hover:bg-white/20 w-full sm:w-auto"
-                >
-                  <Calendar className="w-4 h-4 mr-2" />
-                  Generate All
-                </Button>
+                <div className="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-2">
+                  <Button 
+                    onClick={() => handleGenerateInstances()} 
+                    variant="outline"
+                    disabled={generatingInstancesId !== null}
+                    className="text-green-600 border-green-600 hover:bg-green-50 w-full sm:w-auto"
+                  >
+                    {generatingInstancesId === null ? (
+                      <>
+                        <Calendar className="w-4 h-4 mr-2" />
+                        Generate All Instances
+                      </>
+                    ) : (
+                      <>
+                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-green-600 mr-2"></div>
+                        Generating...
+                      </>
+                    )}
+                  </Button>
+                  <Button
+                    onClick={() => {
+                      setEditingTask(null)
+                      setIsTaskDialogOpen(true)
+                    }}
+                    className="bg-white text-blue-600 hover:bg-gray-100 w-full sm:w-auto"
+                  >
+                    <Plus className="w-4 h-4 mr-2" />
+                    New Task
+                  </Button>
+                </div>
+
               </div>
             </div>
           </div>
@@ -383,7 +490,7 @@ export default function AdminMasterTasksPage() {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">All Categories</SelectItem>
-                    {categories?.map(category => (
+                    {categories?.map(category => category && (
                       <SelectItem key={category} value={category}>
                         {category}
                       </SelectItem>
@@ -501,9 +608,14 @@ export default function AdminMasterTasksPage() {
                                 size="sm"
                                 variant="outline"
                                 onClick={() => handleGenerateInstances(task.id)}
+                                disabled={generatingInstancesId === task.id}
                                 title="Generate instances for this task"
                               >
-                                <Calendar className="w-3 h-3" />
+                                {generatingInstancesId === task.id ? (
+                                  <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-blue-600"></div>
+                                ) : (
+                                  <Calendar className="w-3 h-3" />
+                                )}
                               </Button>
                               <Button
                                 size="sm"
@@ -610,9 +722,14 @@ export default function AdminMasterTasksPage() {
                                   size="sm"
                                   variant="outline"
                                   onClick={() => handleGenerateInstances(task.id)}
+                                  disabled={generatingInstancesId === task.id}
                                   title="Generate instances"
                                 >
-                                  <Calendar className="w-3 h-3" />
+                                  {generatingInstancesId === task.id ? (
+                                    <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-blue-600"></div>
+                                  ) : (
+                                    <Calendar className="w-3 h-3" />
+                                  )}
                                 </Button>
                                 <Button
                                   size="sm"
@@ -672,6 +789,94 @@ export default function AdminMasterTasksPage() {
                 onCancel={handleCancelEdit}
                 loading={formLoading}
               />
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* Delete Confirmation Modal */}
+        <Dialog open={deleteConfirmModal.isOpen} onOpenChange={(open) => !open && setDeleteConfirmModal({ isOpen: false, task: null })}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle className="text-red-600 flex items-center">
+                <Trash2 className="w-5 h-5 mr-2" />
+                Delete Master Task
+              </DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4">
+              <p className="text-gray-700">
+                Are you sure you want to delete <strong>"{deleteConfirmModal.task?.title}"</strong>?
+              </p>
+              <div className="bg-red-50 border border-red-200 rounded-lg p-3">
+                <p className="text-red-800 text-sm font-medium mb-2">This will permanently delete:</p>
+                <ul className="text-red-700 text-sm space-y-1">
+                  <li>• The master task</li>
+                  <li>• All associated task instances</li>
+                  <li>• All completion history</li>
+                </ul>
+                <p className="text-red-800 text-sm font-medium mt-2">This action cannot be undone.</p>
+              </div>
+              <div className="flex justify-end space-x-2">
+                <Button
+                  variant="outline"
+                  onClick={() => setDeleteConfirmModal({ isOpen: false, task: null })}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  variant="destructive"
+                  onClick={confirmDeleteTask}
+                  className="bg-red-600 hover:bg-red-700"
+                >
+                  <Trash2 className="w-4 h-4 mr-2" />
+                  Delete Task
+                </Button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* Generate Instances Confirmation Modal */}
+        <Dialog open={generateConfirmModal.isOpen} onOpenChange={(open) => !open && setGenerateConfirmModal({ isOpen: false, task: null })}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle className="text-green-600 flex items-center">
+                <Calendar className="w-5 h-5 mr-2" />
+                Generate Task Instances
+              </DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4">
+              {generateConfirmModal.task ? (
+                <p className="text-gray-700">
+                  Generate task instances for <strong>"{generateConfirmModal.task.title}"</strong>?
+                </p>
+              ) : (
+                <p className="text-gray-700">
+                  Generate task instances for <strong>all active tasks</strong>?
+                </p>
+              )}
+              <div className="bg-green-50 border border-green-200 rounded-lg p-3">
+                <p className="text-green-800 text-sm font-medium mb-2">This will:</p>
+                <ul className="text-green-700 text-sm space-y-1">
+                  <li>• Create new task instances based on frequency settings</li>
+                  <li>• Generate instances for the next 365 days</li>
+                  <li>• Skip instances that already exist</li>
+                </ul>
+              </div>
+              <div className="flex justify-end space-x-2">
+                <Button
+                  variant="outline"
+                  onClick={() => setGenerateConfirmModal({ isOpen: false, task: null })}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  onClick={confirmGenerateInstances}
+                  className="bg-green-600 hover:bg-green-700"
+                >
+                  <Calendar className="w-4 h-4 mr-2" />
+                  Generate Instances
+                </Button>
+              </div>
             </div>
           </DialogContent>
         </Dialog>
