@@ -243,6 +243,48 @@
   .pharmacy-gradient {
     @apply mx-4 rounded-lg;
   }
+
+  /* Master task form responsive improvements */
+  .master-task-form {
+    @apply px-2;
+  }
+
+  .master-task-form .grid {
+    @apply grid-cols-1;
+  }
+
+  .master-task-form .md\:col-span-2 {
+    @apply col-span-1;
+  }
+
+  /* Dialog responsive improvements */
+  .dialog-content {
+    @apply mx-4 max-w-[calc(100vw-2rem)];
+  }
+
+  /* Table responsive improvements */
+  .table-container {
+    @apply overflow-x-auto;
+  }
+
+  .mobile-card {
+    @apply p-3;
+  }
+
+  .mobile-card .grid {
+    @apply grid-cols-1 gap-2;
+  }
+}
+
+/* Tablet responsive improvements */
+@media (min-width: 768px) and (max-width: 1024px) {
+  .master-task-form .grid {
+    @apply grid-cols-2;
+  }
+
+  .dialog-content {
+    @apply max-w-3xl;
+  }
 }
 
 /* Print styles for reports */

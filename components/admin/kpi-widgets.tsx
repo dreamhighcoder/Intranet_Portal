@@ -1,16 +1,49 @@
 "use client"
 
+import { useState, useEffect } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { mockDashboardStats } from "@/lib/mock-data"
 import { TrendingUp, Clock, AlertTriangle, Calendar } from "lucide-react"
 
+interface DashboardStats {
+  onTimeCompletionRate: number
+  avgTimeToCompleteHours: number
+  missedLast7Days: number
+  totalTasks: number
+}
+
 export function KPIWidgets() {
-  const stats = mockDashboardStats
+  const [stats, setStats] = useState<DashboardStats | null>(null)
+  const [isLoading, setIsLoading] = useState(true)
+
+  useEffect(() => {
+    async function fetchDashboardStats() {
+      try {
+        const response = await fetch('/api/dashboard')
+        if (response.ok) {
+          const data = await response.json()
+          setStats({
+            onTimeCompletionRate: data.summary.onTimeCompletionRate || 0,
+            avgTimeToCompleteHours: data.summary.avgTimeToCompleteHours || 0,
+            missedLast7Days: data.summary.missedLast7Days || 0,
+            totalTasks: data.summary.totalTasks || 0,
+          })
+        } else {
+          console.error('Failed to fetch dashboard stats')
+        }
+      } catch (error) {
+        console.error('Error fetching dashboard stats:', error)
+      } finally {
+        setIsLoading(false)
+      }
+    }
+
+    fetchDashboardStats()
+  }, [])
 
   const widgets = [
     {
       title: "On-Time Completion Rate",
-      value: `${stats.on_time_completion_rate}%`,
+      value: isLoading ? "..." : `${stats?.onTimeCompletionRate || 0}%`,
       description: "Tasks completed on time",
       icon: TrendingUp,
       color: "text-green-600",
@@ -18,7 +51,7 @@ export function KPIWidgets() {
     },
     {
       title: "Average Time to Complete",
-      value: stats.avg_time_to_complete,
+      value: isLoading ? "..." : `${stats?.avgTimeToCompleteHours || 0}h`,
       description: "Average completion time",
       icon: Clock,
       color: "text-blue-600",
@@ -26,16 +59,16 @@ export function KPIWidgets() {
     },
     {
       title: "Missed Tasks (7 days)",
-      value: stats.missed_last_7_days,
+      value: isLoading ? "..." : stats?.missedLast7Days || 0,
       description: "Tasks missed in last 7 days",
       icon: AlertTriangle,
       color: "text-red-600",
       bgColor: "bg-red-100",
     },
     {
-      title: "Tasks Created This Month",
-      value: stats.tasks_created_this_month,
-      description: "New tasks this month",
+      title: "Total Tasks",
+      value: isLoading ? "..." : stats?.totalTasks || 0,
+      description: "Total tasks in period",
       icon: Calendar,
       color: "text-purple-600",
       bgColor: "bg-purple-100",

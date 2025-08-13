@@ -13,9 +13,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Switch } from "@/components/ui/switch"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { TASK_CATEGORIES, TASK_FREQUENCIES, TASK_TIMINGS } from "@/lib/constants"
-import { mockPositions, mockMasterTasks } from "@/lib/mock-data"
 import { useRouter, useParams } from "next/navigation"
-import type { MasterTask } from "@/lib/types"
+import type { MasterTask, Position } from "@/lib/types"
 
 export default function TaskEditorPage() {
   const { user, isLoading } = useAuth()
@@ -24,11 +23,13 @@ export default function TaskEditorPage() {
   const taskId = params.params?.[0]
   const isEditing = !!taskId
 
+  const [positions, setPositions] = useState<Position[]>([])
+  const [isLoadingData, setIsLoadingData] = useState(true)
   const [formData, setFormData] = useState<Partial<MasterTask>>({
     title: "",
     description: "",
     position_id: "",
-    frequency: "daily",
+    frequency: "every_day",
     timing: "morning",
     default_due_time: "09:00",
     category: "Compliance",
@@ -46,31 +47,76 @@ export default function TaskEditorPage() {
   }, [user, isLoading, router])
 
   useEffect(() => {
-    if (isEditing && taskId) {
-      const existingTask = mockMasterTasks.find((t) => t.id === taskId)
-      if (existingTask) {
-        setFormData(existingTask)
+    async function fetchData() {
+      if (user?.role !== 'admin') return
+      
+      try {
+        // Fetch positions
+        const positionsResponse = await fetch('/api/positions')
+        if (positionsResponse.ok) {
+          const positionsData = await positionsResponse.json()
+          setPositions(positionsData)
+        }
+
+        // Fetch existing task if editing
+        if (isEditing && taskId) {
+          const taskResponse = await fetch(`/api/master-tasks/${taskId}`)
+          if (taskResponse.ok) {
+            const taskData = await taskResponse.json()
+            setFormData(taskData)
+          } else {
+            console.error('Task not found')
+            router.push('/admin/master-tasks')
+          }
+        }
+      } catch (error) {
+        console.error('Error fetching data:', error)
+      } finally {
+        setIsLoadingData(false)
       }
     }
-  }, [isEditing, taskId])
+
+    fetchData()
+  }, [user, isEditing, taskId, router])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setIsSaving(true)
 
-    // Mock save operation
-    await new Promise((resolve) => setTimeout(resolve, 1000))
+    try {
+      const url = isEditing 
+        ? `/api/master-tasks/${taskId}`
+        : '/api/master-tasks'
+      
+      const method = isEditing ? 'PUT' : 'POST'
+      
+      const response = await fetch(url, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(formData),
+      })
 
-    console.log("Saving task:", formData)
-    setIsSaving(false)
-    router.push("/admin/master-tasks")
+      if (response.ok) {
+        const result = await response.json()
+        console.log('Task saved:', result)
+        router.push("/admin/master-tasks")
+      } else {
+        const error = await response.json()
+        throw new Error(error.error || 'Failed to save task')
+      }
+    } catch (error) {
+      console.error('Error saving task:', error)
+      alert(`Failed to save task: ${error instanceof Error ? error.message : 'Unknown error'}`)
+    } finally {
+      setIsSaving(false)
+    }
   }
 
   const handleInputChange = (field: keyof MasterTask, value: any) => {
     setFormData((prev) => ({ ...prev, [field]: value }))
   }
 
-  if (isLoading) {
+  if (isLoading || isLoadingData) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
@@ -161,7 +207,7 @@ export default function TaskEditorPage() {
                         <SelectValue placeholder="Select position" />
                       </SelectTrigger>
                       <SelectContent>
-                        {mockPositions.map((position) => (
+                        {positions.map((position) => (
                           <SelectItem key={position.id} value={position.id}>
                             {position.name}
                           </SelectItem>

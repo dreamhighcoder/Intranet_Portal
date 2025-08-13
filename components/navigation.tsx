@@ -9,14 +9,14 @@ import { Menu, X, LogOut, User } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 
 export function Navigation() {
-  const { user, logout } = useAuth()
+  const { user, signOut } = useAuth()
   const pathname = usePathname()
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
   const { toast } = useToast()
 
   if (!user) return null
 
-  const isAdmin = user.role === "admin"
+  const isAdmin = user.profile?.role === "admin"
 
   const navItems = [
     { href: "/", label: "Home" },
@@ -30,8 +30,8 @@ export function Navigation() {
       : []),
   ]
 
-  const handleLogout = () => {
-    logout()
+  const handleLogout = async () => {
+    await signOut()
     toast({
       title: "Logged out",
       description: "You have been successfully logged out.",
@@ -91,7 +91,7 @@ export function Navigation() {
           <div className="hidden md:flex items-center space-x-4">
             <div className="flex items-center space-x-2 text-sm" style={{ color: "rgba(255, 255, 255, 0.8)" }}>
               <User className="w-4 h-4" />
-              <span>Welcome, {user.display_name}</span>
+              <span>Welcome, {user.profile?.display_name || user.email}</span>
             </div>
             <Button
               variant="outline"
@@ -150,7 +150,7 @@ export function Navigation() {
               ))}
               <div className="border-t border-white/20 pt-2 mt-2">
                 <div className="px-3 py-2 text-sm" style={{ color: "rgba(255, 255, 255, 0.8)" }}>
-                  Welcome, {user.display_name}
+                  Welcome, {user.profile?.display_name || user.email}
                 </div>
                 <Button
                   variant="ghost"

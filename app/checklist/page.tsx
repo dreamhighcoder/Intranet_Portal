@@ -10,7 +10,7 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { getTasksByPosition, getTaskCounts, calculateTaskStatus } from "@/lib/task-utils"
+import { getTasksByPosition, getTaskCounts, calculateTaskStatus, completeTask, undoTask } from "@/lib/task-utils"
 import { Check, X, Eye, LogOut } from "lucide-react"
 
 export default function ChecklistPage() {
@@ -25,12 +25,47 @@ export default function ChecklistPage() {
   const [selectedCategory, setSelectedCategory] = useState("all")
   const [selectedStatus, setSelectedStatus] = useState("all")
   const [refreshKey, setRefreshKey] = useState(0)
+  const [tasks, setTasks] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
+  const [taskCounts, setTaskCounts] = useState({
+    total: 0,
+    done: 0,
+    due_today: 0,
+    overdue: 0,
+    missed: 0
+  })
 
   useEffect(() => {
     if (!isLoading && !user) {
       router.push("/login")
     }
   }, [user, isLoading, router])
+
+  // Load tasks when date or refresh key changes
+  useEffect(() => {
+    const loadTasks = async () => {
+      if (!user?.profile?.position_id) return
+      
+      setLoading(true)
+      try {
+        const [tasksByPosition, counts] = await Promise.all([
+          getTasksByPosition(currentDate),
+          getTaskCounts(currentDate)
+        ])
+        
+        const userPositionTasks = tasksByPosition[user.profile.position_id] || []
+        setTasks(userPositionTasks)
+        setTaskCounts(counts)
+      } catch (error) {
+        console.error('Error loading tasks:', error)
+        setTasks([])
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    loadTasks()
+  }, [currentDate, refreshKey, user?.profile?.position_id])
 
   useEffect(() => {
     const dateParam = searchParams.get("date")
@@ -46,8 +81,32 @@ export default function ChecklistPage() {
     router.push(`/checklist?${params.toString()}`)
   }
 
-  const handleTaskUpdate = () => {
-    setRefreshKey((prev) => prev + 1)
+  const handleTaskComplete = async (taskId: string) => {
+    try {
+      const success = await completeTask(taskId, user?.id)
+      if (success) {
+        setRefreshKey((prev) => prev + 1)
+      } else {
+        alert('Failed to complete task. Please try again.')
+      }
+    } catch (error) {
+      console.error('Error completing task:', error)
+      alert('Failed to complete task. Please try again.')
+    }
+  }
+
+  const handleTaskUndo = async (taskId: string) => {
+    try {
+      const success = await undoTask(taskId, user?.id)
+      if (success) {
+        setRefreshKey((prev) => prev + 1)
+      } else {
+        alert('Failed to undo task. Please try again.')
+      }
+    } catch (error) {
+      console.error('Error undoing task:', error)
+      alert('Failed to undo task. Please try again.')
+    }
   }
 
   const handleFinish = () => {
@@ -55,7 +114,7 @@ export default function ChecklistPage() {
     router.push("/login")
   }
 
-  if (isLoading) {
+  if (isLoading || loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
@@ -68,13 +127,8 @@ export default function ChecklistPage() {
 
   if (!user) return null
 
-  const tasksByPosition = getTasksByPosition(currentDate)
-  const taskCounts = getTaskCounts(currentDate)
-
-  const userPositionTasks = user.position_id ? tasksByPosition[user.position_id] || [] : []
-
-  // Apply filters to user's position tasks only
-  const filteredTasks = userPositionTasks.filter((task) => {
+  // Apply filters to user's position tasks
+  const filteredTasks = tasks.filter((task) => {
     // Category filter
     if (selectedCategory !== "all" && task.master_task.category !== selectedCategory) {
       return false
@@ -151,6 +205,11 @@ export default function ChecklistPage() {
           <p className="text-[var(--color-text-secondary)]">
             {filteredTasks.length} tasks • {filteredTasks.filter((t) => t.status === "done").length} completed
           </p>
+          {user?.profile?.position_id && (
+            <p className="text-xs text-[var(--color-text-secondary)]">
+              Position: {user.position?.name || 'Unknown Position'}
+            </p>
+          )}
         </div>
 
         {/* Date Navigator */}
@@ -217,11 +276,8 @@ export default function ChecklistPage() {
                               <Button
                                 size="sm"
                                 variant="outline"
-                                onClick={() => {
-                                  // Mock undo functionality
-                                  console.log("Undo task:", task.id)
-                                  handleTaskUpdate()
-                                }}
+                                onClick={() => handleTaskUndo(task.id)}
+                                disabled={task.locked && !task.master_task?.allow_edit_when_locked}
                               >
                                 <X className="w-4 h-4 mr-1" />
                                 Undo
@@ -229,11 +285,8 @@ export default function ChecklistPage() {
                             ) : (
                               <Button
                                 size="sm"
-                                onClick={() => {
-                                  // Mock mark done functionality
-                                  console.log("Mark done:", task.id)
-                                  handleTaskUpdate()
-                                }}
+                                onClick={() => handleTaskComplete(task.id)}
+                                disabled={task.locked && !task.master_task?.allow_edit_when_locked}
                                 className="bg-[var(--color-primary)] text-[var(--color-primary-on)]"
                               >
                                 <Check className="w-4 h-4 mr-1" />

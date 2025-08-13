@@ -8,14 +8,20 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { mockSystemSettings } from "@/lib/mock-data"
 import { useRouter } from "next/navigation"
-import type { SystemSettings } from "@/lib/types"
+
+interface Settings {
+  timezone: string
+  new_since_hour: string
+  missed_cutoff_time: string
+  updated_at?: string
+}
 
 export default function SettingsPage() {
   const { user, isLoading } = useAuth()
   const router = useRouter()
-  const [settings, setSettings] = useState<SystemSettings>(mockSystemSettings)
+  const [settings, setSettings] = useState<Settings | null>(null)
+  const [isLoadingSettings, setIsLoadingSettings] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
 
   useEffect(() => {
@@ -24,28 +30,75 @@ export default function SettingsPage() {
     }
   }, [user, isLoading, router])
 
+  useEffect(() => {
+    async function fetchSettings() {
+      try {
+        const response = await fetch('/api/settings')
+        if (response.ok) {
+          const data = await response.json()
+          setSettings({
+            timezone: data.timezone || 'Australia/Sydney',
+            new_since_hour: data.new_since_hour || '09:00',
+            missed_cutoff_time: data.missed_cutoff_time || '23:59',
+            updated_at: new Date().toISOString()
+          })
+        } else {
+          console.error('Failed to fetch settings')
+        }
+      } catch (error) {
+        console.error('Error fetching settings:', error)
+      } finally {
+        setIsLoadingSettings(false)
+      }
+    }
+
+    if (user?.role === 'admin') {
+      fetchSettings()
+    }
+  }, [user])
+
   const handleSave = async () => {
+    if (!settings) return
+    
     setIsSaving(true)
 
-    // Mock save operation
-    await new Promise((resolve) => setTimeout(resolve, 1000))
+    try {
+      // Convert settings to API format (array of key-value pairs)
+      const settingsArray = [
+        { key: 'timezone', value: settings.timezone, description: 'System timezone' },
+        { key: 'new_since_hour', value: settings.new_since_hour, description: 'New Since hour' },
+        { key: 'missed_cutoff_time', value: settings.missed_cutoff_time, description: 'Missed cutoff time' },
+      ]
 
-    console.log("Saving settings:", settings)
-    setIsSaving(false)
+      const response = await fetch('/api/settings', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(settingsArray),
+      })
 
-    // Show success message (in real app, use toast)
-    alert("Settings saved successfully!")
+      if (response.ok) {
+        setSettings(prev => prev ? { ...prev, updated_at: new Date().toISOString() } : null)
+        alert("Settings saved successfully!")
+      } else {
+        throw new Error('Failed to save settings')
+      }
+    } catch (error) {
+      console.error('Error saving settings:', error)
+      alert("Failed to save settings. Please try again.")
+    } finally {
+      setIsSaving(false)
+    }
   }
 
-  const handleSettingChange = (field: keyof SystemSettings, value: string) => {
-    setSettings((prev) => ({
+  const handleSettingChange = (field: keyof Settings, value: string) => {
+    setSettings((prev) => prev ? ({
       ...prev,
       [field]: value,
       updated_at: new Date().toISOString(),
-    }))
+    }) : null)
   }
 
-  if (isLoading) {
+  if (isLoading || isLoadingSettings) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
@@ -56,7 +109,7 @@ export default function SettingsPage() {
     )
   }
 
-  if (!user || user.role !== "admin") return null
+  if (!user || user.role !== "admin" || !settings) return null
 
   const timezones = [
     { value: "Australia/Sydney", label: "Sydney (AEDT/AEST)" },
@@ -174,7 +227,7 @@ export default function SettingsPage() {
                   <ul className="text-[var(--color-text-secondary)] space-y-1">
                     <li>Portal Version: 1.0.0</li>
                     <li>Database Version: PostgreSQL 15</li>
-                    <li>Last Updated: {new Date(settings.updated_at).toLocaleDateString("en-AU")}</li>
+                    <li>Last Updated: {settings.updated_at ? new Date(settings.updated_at).toLocaleDateString("en-AU") : 'N/A'}</li>
                   </ul>
                 </div>
 

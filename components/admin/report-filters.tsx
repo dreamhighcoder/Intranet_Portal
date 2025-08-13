@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
@@ -9,7 +9,7 @@ import { Calendar } from "@/components/ui/calendar"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { CalendarIcon, Download } from "lucide-react"
 import { TASK_CATEGORIES } from "@/lib/constants"
-import { mockPositions } from "@/lib/mock-data"
+import { Position } from "@/lib/types"
 
 interface ReportFiltersProps {
   onFiltersChange: (filters: any) => void
@@ -17,6 +17,8 @@ interface ReportFiltersProps {
 }
 
 export function ReportFilters({ onFiltersChange, onExport }: ReportFiltersProps) {
+  const [positions, setPositions] = useState<Position[]>([])
+  const [isLoadingPositions, setIsLoadingPositions] = useState(true)
   const [dateRange, setDateRange] = useState({
     from: new Date(new Date().setDate(new Date().getDate() - 30)),
     to: new Date(),
@@ -24,6 +26,26 @@ export function ReportFilters({ onFiltersChange, onExport }: ReportFiltersProps)
   const [selectedPositions, setSelectedPositions] = useState<string[]>([])
   const [selectedCategories, setSelectedCategories] = useState<string[]>([])
   const [selectedStatus, setSelectedStatus] = useState("all")
+
+  useEffect(() => {
+    async function fetchPositions() {
+      try {
+        const response = await fetch('/api/positions')
+        if (response.ok) {
+          const data = await response.json()
+          setPositions(data)
+        } else {
+          console.error('Failed to fetch positions')
+        }
+      } catch (error) {
+        console.error('Error fetching positions:', error)
+      } finally {
+        setIsLoadingPositions(false)
+      }
+    }
+
+    fetchPositions()
+  }, [])
 
   const handleApplyFilters = () => {
     onFiltersChange({
@@ -108,11 +130,11 @@ export function ReportFilters({ onFiltersChange, onExport }: ReportFiltersProps)
               onValueChange={(value) => setSelectedPositions(value === "all" ? [] : [value])}
             >
               <SelectTrigger>
-                <SelectValue placeholder="All Positions" />
+                <SelectValue placeholder={isLoadingPositions ? "Loading..." : "All Positions"} />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Positions</SelectItem>
-                {mockPositions.map((position) => (
+                {positions.map((position) => (
                   <SelectItem key={position.id} value={position.id}>
                     {position.name}
                   </SelectItem>

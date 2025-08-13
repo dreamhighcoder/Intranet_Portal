@@ -1,0 +1,298 @@
+import { NextRequest, NextResponse } from 'next/server'
+import { supabase } from '@/lib/supabase'
+
+export async function GET(request: NextRequest) {
+  try {
+    const searchParams = request.nextUrl.searchParams
+    const reportType = searchParams.get('type')
+    const startDate = searchParams.get('start_date')
+    const endDate = searchParams.get('end_date')
+    const positionId = searchParams.get('position_id')
+    const category = searchParams.get('category')
+
+    switch (reportType) {
+      case 'completion-rate':
+        return await getCompletionRateReport(startDate, endDate, positionId, category)
+      
+      case 'average-completion-time':
+        return await getAverageCompletionTimeReport(startDate, endDate, positionId, category)
+      
+      case 'missed-tasks':
+        return await getMissedTasksReport(startDate, endDate, positionId, category)
+      
+      case 'missed-by-position':
+        return await getMissedTasksByPositionReport(startDate, endDate, category)
+      
+      case 'outstanding-tasks':
+        return await getOutstandingTasksReport(positionId, category)
+      
+      case 'task-summary':
+        return await getTaskSummaryReport(startDate, endDate, positionId, category)
+      
+      default:
+        return NextResponse.json({ error: 'Invalid report type' }, { status: 400 })
+    }
+  } catch (error) {
+    console.error('Unexpected error:', error)
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+  }
+}
+
+async function getCompletionRateReport(startDate?: string | null, endDate?: string | null, positionId?: string | null, category?: string | null) {
+  let query = supabase
+    .from('task_instances')
+    .select(`
+      id,
+      status,
+      completed_at,
+      due_date,
+      master_tasks (
+        category,
+        positions (
+          id,
+          name
+        )
+      )
+    `)
+
+  if (startDate) query = query.gte('due_date', startDate)
+  if (endDate) query = query.lte('due_date', endDate)
+  if (positionId) query = query.eq('master_tasks.position_id', positionId)
+  if (category) query = query.eq('master_tasks.category', category)
+
+  const { data: tasks, error } = await query
+
+  if (error) {
+    console.error('Error fetching completion rate data:', error)
+    return NextResponse.json({ error: 'Failed to fetch completion rate data' }, { status: 500 })
+  }
+
+  const totalTasks = tasks?.length || 0
+  const completedTasks = tasks?.filter(task => task.status === 'completed').length || 0
+  const onTimeCompletions = tasks?.filter(task => 
+    task.status === 'completed' && 
+    task.completed_at && 
+    new Date(task.completed_at) <= new Date(task.due_date)
+  ).length || 0
+
+  const completionRate = totalTasks > 0 ? (completedTasks / totalTasks) * 100 : 0
+  const onTimeRate = totalTasks > 0 ? (onTimeCompletions / totalTasks) * 100 : 0
+
+  return NextResponse.json({
+    totalTasks,
+    completedTasks,
+    onTimeCompletions,
+    completionRate: Math.round(completionRate * 100) / 100,
+    onTimeRate: Math.round(onTimeRate * 100) / 100
+  })
+}
+
+async function getAverageCompletionTimeReport(startDate?: string | null, endDate?: string | null, positionId?: string | null, category?: string | null) {
+  let query = supabase
+    .from('task_instances')
+    .select(`
+      id,
+      status,
+      completed_at,
+      due_date,
+      created_at,
+      master_tasks (
+        category,
+        positions (
+          id,
+          name
+        )
+      )
+    `)
+    .eq('status', 'completed')
+    .not('completed_at', 'is', null)
+
+  if (startDate) query = query.gte('due_date', startDate)
+  if (endDate) query = query.lte('due_date', endDate)
+  if (positionId) query = query.eq('master_tasks.position_id', positionId)
+  if (category) query = query.eq('master_tasks.category', category)
+
+  const { data: tasks, error } = await query
+
+  if (error) {
+    console.error('Error fetching completion time data:', error)
+    return NextResponse.json({ error: 'Failed to fetch completion time data' }, { status: 500 })
+  }
+
+  if (!tasks || tasks.length === 0) {
+    return NextResponse.json({
+      averageCompletionTimeHours: 0,
+      totalCompletedTasks: 0
+    })
+  }
+
+  const completionTimes = tasks.map(task => {
+    const createdAt = new Date(task.created_at)
+    const completedAt = new Date(task.completed_at!)
+    return (completedAt.getTime() - createdAt.getTime()) / (1000 * 60 * 60) // hours
+  })
+
+  const averageHours = completionTimes.reduce((sum, time) => sum + time, 0) / completionTimes.length
+
+  return NextResponse.json({
+    averageCompletionTimeHours: Math.round(averageHours * 100) / 100,
+    totalCompletedTasks: tasks.length
+  })
+}
+
+async function getMissedTasksReport(startDate?: string | null, endDate?: string | null, positionId?: string | null, category?: string | null) {
+  let query = supabase
+    .from('task_instances')
+    .select(`
+      id,
+      status,
+      due_date,
+      master_tasks (
+        title,
+        category,
+        positions (
+          id,
+          name
+        )
+      )
+    `)
+    .eq('status', 'missed')
+
+  if (startDate) query = query.gte('due_date', startDate)
+  if (endDate) query = query.lte('due_date', endDate)
+  if (positionId) query = query.eq('master_tasks.position_id', positionId)
+  if (category) query = query.eq('master_tasks.category', category)
+
+  const { data: missedTasks, error } = await query
+
+  if (error) {
+    console.error('Error fetching missed tasks data:', error)
+    return NextResponse.json({ error: 'Failed to fetch missed tasks data' }, { status: 500 })
+  }
+
+  return NextResponse.json({
+    totalMissedTasks: missedTasks?.length || 0,
+    missedTasks: missedTasks || []
+  })
+}
+
+async function getMissedTasksByPositionReport(startDate?: string | null, endDate?: string | null, category?: string | null) {
+  let query = supabase
+    .from('task_instances')
+    .select(`
+      id,
+      status,
+      due_date,
+      master_tasks (
+        title,
+        category,
+        positions (
+          id,
+          name
+        )
+      )
+    `)
+    .eq('status', 'missed')
+
+  if (startDate) query = query.gte('due_date', startDate)
+  if (endDate) query = query.lte('due_date', endDate)
+  if (category) query = query.eq('master_tasks.category', category)
+
+  const { data: missedTasks, error } = await query
+
+  if (error) {
+    console.error('Error fetching missed tasks by position data:', error)
+    return NextResponse.json({ error: 'Failed to fetch missed tasks by position data' }, { status: 500 })
+  }
+
+  const positionStats = (missedTasks || []).reduce((acc: any, task: any) => {
+    const positionName = task.master_tasks?.positions?.name || 'Unknown'
+    if (!acc[positionName]) {
+      acc[positionName] = 0
+    }
+    acc[positionName]++
+    return acc
+  }, {})
+
+  return NextResponse.json({
+    totalMissedTasks: missedTasks?.length || 0,
+    positionStats
+  })
+}
+
+async function getOutstandingTasksReport(positionId?: string | null, category?: string | null) {
+  let query = supabase
+    .from('task_instances')
+    .select(`
+      id,
+      status,
+      due_date,
+      master_tasks (
+        title,
+        category,
+        positions (
+          id,
+          name
+        )
+      )
+    `)
+    .in('status', ['overdue', 'missed'])
+    .order('due_date', { ascending: true })
+
+  if (positionId) query = query.eq('master_tasks.position_id', positionId)
+  if (category) query = query.eq('master_tasks.category', category)
+
+  const { data: outstandingTasks, error } = await query
+
+  if (error) {
+    console.error('Error fetching outstanding tasks data:', error)
+    return NextResponse.json({ error: 'Failed to fetch outstanding tasks data' }, { status: 500 })
+  }
+
+  return NextResponse.json({
+    totalOutstandingTasks: outstandingTasks?.length || 0,
+    outstandingTasks: outstandingTasks || []
+  })
+}
+
+async function getTaskSummaryReport(startDate?: string | null, endDate?: string | null, positionId?: string | null, category?: string | null) {
+  let query = supabase
+    .from('task_instances')
+    .select(`
+      id,
+      status,
+      due_date,
+      completed_at,
+      master_tasks (
+        title,
+        category,
+        positions (
+          id,
+          name
+        )
+      )
+    `)
+
+  if (startDate) query = query.gte('due_date', startDate)
+  if (endDate) query = query.lte('due_date', endDate)
+  if (positionId) query = query.eq('master_tasks.position_id', positionId)
+  if (category) query = query.eq('master_tasks.category', category)
+
+  const { data: tasks, error } = await query
+
+  if (error) {
+    console.error('Error fetching task summary data:', error)
+    return NextResponse.json({ error: 'Failed to fetch task summary data' }, { status: 500 })
+  }
+
+  const statusCounts = (tasks || []).reduce((acc: any, task: any) => {
+    acc[task.status] = (acc[task.status] || 0) + 1
+    return acc
+  }, {})
+
+  return NextResponse.json({
+    totalTasks: tasks?.length || 0,
+    statusCounts,
+    tasks: tasks || []
+  })
+}

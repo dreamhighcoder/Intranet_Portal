@@ -14,31 +14,43 @@ export function LoginForm() {
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [error, setError] = useState("")
-  const { login, isLoading } = useAuth()
+  const { signIn, isLoading } = useAuth()
+  const [isSubmitting, setIsSubmitting] = useState(false)
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError("")
-
-    console.log("Form submitted with:", { email, password })
+    setIsSubmitting(true)
 
     if (!email || !password) {
       setError("Please enter both email and password")
+      setIsSubmitting(false)
       return
     }
 
     try {
-      const result = await login(email.trim(), password)
-      console.log("Login result:", result)
+      const { error: signInError } = await signIn(email.trim(), password)
 
-      if (!result.success) {
-        setError(result.error || "Login failed")
+      if (signInError) {
+        // Provide more helpful error messages
+        let errorMessage = signInError.message || "Login failed"
+        
+        if (signInError.message?.includes("Invalid login credentials")) {
+          errorMessage = "Invalid email or password. Make sure you've created this user in Supabase Dashboard → Authentication → Users."
+        } else if (signInError.message?.includes("Email not confirmed")) {
+          errorMessage = "Please confirm your email address before logging in."
+        } else if (signInError.message?.includes("Too many requests")) {
+          errorMessage = "Too many login attempts. Please wait a moment and try again."
+        }
+        
+        setError(errorMessage)
       } else {
         window.location.href = "/"
       }
     } catch (error) {
-      console.error("Login form error:", error)
-      setError("An unexpected error occurred")
+      setError("Connection error. Please check your internet connection and try again.")
+    } finally {
+      setIsSubmitting(false)
     }
   }
 
@@ -85,7 +97,7 @@ export function LoginForm() {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
-                disabled={isLoading}
+                disabled={isLoading || isSubmitting}
                 className="bg-[var(--color-surface)] border-[var(--color-border)] text-[var(--color-text)]"
               />
             </div>
@@ -101,7 +113,7 @@ export function LoginForm() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
-                disabled={isLoading}
+                disabled={isLoading || isSubmitting}
                 className="bg-[var(--color-surface)] border-[var(--color-border)] text-[var(--color-text)]"
               />
             </div>
@@ -109,9 +121,9 @@ export function LoginForm() {
             <Button
               type="submit"
               className="w-full bg-[var(--color-primary)] hover:bg-[var(--color-primary)]/90 text-[var(--color-primary-on)] border-0"
-              disabled={isLoading}
+              disabled={isLoading || isSubmitting}
             >
-              {isLoading ? "Signing in..." : "Sign In"}
+              {isLoading || isSubmitting ? "Signing in..." : "Sign In"}
             </Button>
 
             <div className="text-center">
@@ -122,15 +134,8 @@ export function LoginForm() {
           </form>
 
           <div className="mt-6 p-4 bg-[var(--color-tertiary)] rounded-lg">
-            <p className="text-sm text-[var(--color-text)] mb-2 font-medium">Demo Credentials:</p>
-            <div className="space-y-1">
-              <p className="text-xs text-[var(--color-text-muted)]">
-                <span className="font-medium">Admin:</span> admin@pharmacy.com / password
-              </p>
-              <p className="text-xs text-[var(--color-text-muted)]">
-                <span className="font-medium">User:</span> pharmacist@pharmacy.com / password
-              </p>
-            </div>
+            <p className="text-sm text-[var(--color-text)] mb-2 font-medium">Demo Setup Required:</p>
+            
             <div className="mt-3 flex gap-2">
               <Button
                 type="button"
@@ -138,7 +143,7 @@ export function LoginForm() {
                 size="sm"
                 onClick={() => {
                   setEmail("admin@pharmacy.com")
-                  setPassword("password")
+                  setPassword("password123")
                 }}
                 className="text-xs bg-[var(--color-surface)] border-[var(--color-border)] text-[var(--color-text)] hover:bg-[var(--color-secondary)]"
               >
@@ -150,7 +155,7 @@ export function LoginForm() {
                 size="sm"
                 onClick={() => {
                   setEmail("pharmacist@pharmacy.com")
-                  setPassword("password")
+                  setPassword("password123")
                 }}
                 className="text-xs bg-[var(--color-surface)] border-[var(--color-border)] text-[var(--color-text)] hover:bg-[var(--color-secondary)]"
               >

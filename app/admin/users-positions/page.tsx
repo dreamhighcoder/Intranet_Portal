@@ -7,14 +7,17 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { mockUsers, mockPositions } from "@/lib/mock-data"
 import { Edit, Trash2, Plus, Users, Briefcase } from "lucide-react"
 import { useRouter } from "next/navigation"
+import { Position, UserProfile } from "@/lib/types"
 
 export default function UsersPositionsPage() {
   const { user, isLoading } = useAuth()
   const router = useRouter()
   const [activeTab, setActiveTab] = useState<"positions" | "users">("positions")
+  const [positions, setPositions] = useState<Position[]>([])
+  const [users, setUsers] = useState<UserProfile[]>([])
+  const [isLoadingData, setIsLoadingData] = useState(true)
 
   useEffect(() => {
     if (!isLoading && (!user || user.role !== "admin")) {
@@ -22,11 +25,40 @@ export default function UsersPositionsPage() {
     }
   }, [user, isLoading, router])
 
-  const getPositionName = (positionId: string) => {
-    return mockPositions.find((p) => p.id === positionId)?.name || "Unknown"
+  useEffect(() => {
+    async function fetchData() {
+      if (user?.role !== 'admin') return
+      
+      try {
+        const [positionsResponse, usersResponse] = await Promise.all([
+          fetch('/api/positions'),
+          fetch('/api/user-profiles')
+        ])
+
+        if (positionsResponse.ok) {
+          const positionsData = await positionsResponse.json()
+          setPositions(positionsData)
+        }
+
+        if (usersResponse.ok) {
+          const usersData = await usersResponse.json()
+          setUsers(usersData)
+        }
+      } catch (error) {
+        console.error('Error fetching data:', error)
+      } finally {
+        setIsLoadingData(false)
+      }
+    }
+
+    fetchData()
+  }, [user])
+
+  const getPositionName = (positionId: string | undefined) => {
+    return positions.find((p) => p.id === positionId)?.name || "Unknown"
   }
 
-  if (isLoading) {
+  if (isLoading || isLoadingData) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
@@ -100,7 +132,7 @@ export default function UsersPositionsPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {mockPositions.map((position) => (
+                  {positions.map((position) => (
                     <TableRow key={position.id}>
                       <TableCell>
                         <div className="font-medium">{position.name}</div>
@@ -156,26 +188,26 @@ export default function UsersPositionsPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {mockUsers.map((user) => (
-                    <TableRow key={user.id}>
+                  {users.map((userProfile) => (
+                    <TableRow key={userProfile.id}>
                       <TableCell>
-                        <div className="font-medium">{user.display_name}</div>
+                        <div className="font-medium">{userProfile.display_name || 'N/A'}</div>
                       </TableCell>
-                      <TableCell>{user.email}</TableCell>
-                      <TableCell>{getPositionName(user.position_id)}</TableCell>
+                      <TableCell>{userProfile.id}</TableCell>
+                      <TableCell>{getPositionName(userProfile.position_id)}</TableCell>
                       <TableCell>
                         <Badge
                           className={
-                            user.role === "admin"
+                            userProfile.role === "admin"
                               ? "bg-purple-100 text-purple-800 border-purple-200"
                               : "bg-blue-100 text-blue-800 border-blue-200"
                           }
                         >
-                          {user.role}
+                          {userProfile.role}
                         </Badge>
                       </TableCell>
                       <TableCell>
-                        {user.last_login ? new Date(user.last_login).toLocaleDateString("en-AU") : "Never"}
+                        {userProfile.updated_at ? new Date(userProfile.updated_at).toLocaleDateString("en-AU") : "Never"}
                       </TableCell>
                       <TableCell>
                         <div className="flex items-center space-x-2">

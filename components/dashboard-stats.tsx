@@ -1,34 +1,67 @@
 "use client"
 
+import { useState, useEffect } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { mockDashboardStats } from "@/lib/mock-data"
+
+interface DashboardStats {
+  newSince9am: number
+  dueToday: number
+  overdue: number
+  missed: number
+}
 
 export function DashboardStats() {
-  const stats = mockDashboardStats
+  const [stats, setStats] = useState<DashboardStats | null>(null)
+  const [isLoading, setIsLoading] = useState(true)
+
+  useEffect(() => {
+    async function fetchDashboardStats() {
+      try {
+        const response = await fetch('/api/dashboard')
+        if (response.ok) {
+          const data = await response.json()
+          setStats({
+            newSince9am: data.summary.newSince9am || 0,
+            dueToday: data.today.total || 0,
+            overdue: data.summary.overdueTasks || 0,
+            missed: data.summary.missedLast7Days || 0,
+          })
+        } else {
+          console.error('Failed to fetch dashboard stats')
+        }
+      } catch (error) {
+        console.error('Error fetching dashboard stats:', error)
+      } finally {
+        setIsLoading(false)
+      }
+    }
+
+    fetchDashboardStats()
+  }, [])
 
   const statCards = [
     {
       title: "New Since 9:00 AM",
-      value: stats.new_since_9am,
+      value: isLoading ? "..." : stats?.newSince9am || 0,
       description: "Tasks created today after 9:00 AM",
       color: "text-blue-600",
     },
     {
       title: "Due Today",
-      value: stats.due_today,
+      value: isLoading ? "..." : stats?.dueToday || 0,
       description: "Tasks due today",
       color: "text-orange-600",
     },
     {
       title: "Overdue",
-      value: stats.overdue,
+      value: isLoading ? "..." : stats?.overdue || 0,
       description: "Tasks currently overdue",
       color: "text-red-600",
     },
     {
       title: "Missed",
-      value: stats.missed,
-      description: "Tasks missed today",
+      value: isLoading ? "..." : stats?.missed || 0,
+      description: "Tasks missed in last 7 days",
       color: "text-red-800",
     },
   ]

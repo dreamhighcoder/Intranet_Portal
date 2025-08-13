@@ -1,9 +1,10 @@
 "use client"
 
+import { useState, useEffect } from "react"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Badge } from "@/components/ui/badge"
 import { TASK_CATEGORIES } from "@/lib/constants"
-import { mockPositions } from "@/lib/mock-data"
+import { Position } from "@/lib/types"
 
 interface TaskFiltersProps {
   selectedPosition: string
@@ -24,6 +25,34 @@ export function TaskFilters({
   onStatusChange,
   hidePositionFilter = false, // Default to false for backward compatibility
 }: TaskFiltersProps) {
+  const [positions, setPositions] = useState<Position[]>([])
+  const [isLoadingPositions, setIsLoadingPositions] = useState(true)
+
+  useEffect(() => {
+    async function fetchPositions() {
+      if (hidePositionFilter) {
+        setIsLoadingPositions(false)
+        return
+      }
+      
+      try {
+        const response = await fetch('/api/positions')
+        if (response.ok) {
+          const data = await response.json()
+          setPositions(data)
+        } else {
+          console.error('Failed to fetch positions')
+        }
+      } catch (error) {
+        console.error('Error fetching positions:', error)
+      } finally {
+        setIsLoadingPositions(false)
+      }
+    }
+
+    fetchPositions()
+  }, [hidePositionFilter])
+
   const statusOptions = [
     { value: "all", label: "All Status" },
     { value: "not_due", label: "Not Due" },
@@ -42,11 +71,11 @@ export function TaskFilters({
       {!hidePositionFilter && (
         <Select value={selectedPosition} onValueChange={onPositionChange}>
           <SelectTrigger className="w-[180px]">
-            <SelectValue placeholder="All Positions" />
+            <SelectValue placeholder={isLoadingPositions ? "Loading..." : "All Positions"} />
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All Positions</SelectItem>
-            {mockPositions.map((position) => (
+            {positions.map((position) => (
               <SelectItem key={position.id} value={position.id}>
                 {position.name}
               </SelectItem>
