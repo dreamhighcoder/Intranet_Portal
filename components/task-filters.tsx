@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge"
 import { TASK_CATEGORIES } from "@/lib/constants"
 import { Position } from "@/lib/types"
 import { positionsApi } from "@/lib/api-client"
+import { toastError } from "@/hooks/use-toast"
 import { useAuth } from "@/lib/auth"
 
 interface TaskFiltersProps {
@@ -45,6 +46,7 @@ export function TaskFilters({
         }
       } catch (error) {
         console.error('Error fetching positions:', error)
+        toastError("Error", "Failed to load positions for filtering")
       } finally {
         setIsLoadingPositions(false)
       }

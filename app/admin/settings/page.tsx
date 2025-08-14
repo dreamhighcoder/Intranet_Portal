@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { useRouter } from "next/navigation"
+import { toastError, toastSuccess } from "@/hooks/use-toast"
 
 interface Settings {
   timezone: string
@@ -78,13 +79,13 @@ export default function SettingsPage() {
 
       if (response.ok) {
         setSettings(prev => prev ? { ...prev, updated_at: new Date().toISOString() } : null)
-        alert("Settings saved successfully!")
+        toastSuccess("Settings Saved", "Settings have been saved successfully!")
       } else {
         throw new Error('Failed to save settings')
       }
     } catch (error) {
       console.error('Error saving settings:', error)
-      alert("Failed to save settings. Please try again.")
+      toastError("Save Failed", "Failed to save settings. Please try again.")
     } finally {
       setIsSaving(false)
     }

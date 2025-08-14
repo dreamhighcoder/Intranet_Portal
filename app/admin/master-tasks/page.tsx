@@ -15,7 +15,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { masterTasksApi, positionsApi, authenticatedGet } from "@/lib/api-client"
 import { supabase } from "@/lib/supabase"
 import * as XLSX from 'xlsx'
-import { useToast } from "@/hooks/use-toast"
+import { toastSuccess, toastError } from "@/hooks/use-toast"
 import { 
   Plus, 
   Edit, 
@@ -74,7 +74,7 @@ const frequencyLabels = {
 
 export default function AdminMasterTasksPage() {
   const { user, isLoading: authLoading } = useAuth()
-  const { toast } = useToast()
+
   const [tasks, setTasks] = useState<MasterTask[]>([])
   const [positions, setPositions] = useState<Position[]>([])
   const [loading, setLoading] = useState(true)
@@ -128,11 +128,11 @@ export default function AdminMasterTasksPage() {
   }
 
   const showToast = (type: 'success' | 'error', title: string, description?: string) => {
-    toast({
-      title,
-      description,
-      variant: type === 'error' ? 'destructive' : 'default',
-    })
+    if (type === 'success') {
+      toastSuccess(title, description)
+    } else {
+      toastError(title, description)
+    }
   }
 
   const handleStatusChange = async (taskId: string, newStatus: 'draft' | 'active' | 'inactive') => {

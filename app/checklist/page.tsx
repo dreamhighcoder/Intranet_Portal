@@ -15,6 +15,7 @@ import { getTasksByPosition, getTaskCounts, calculateTaskStatus, completeTask, u
 import { positionsApi } from "@/lib/api-client"
 import { Check, X, Eye, LogOut, Settings } from "lucide-react"
 import Link from "next/link"
+import { toastError, toastSuccess } from "@/hooks/use-toast"
 
 export default function ChecklistPage() {
   const { user: oldUser, isLoading: oldIsLoading, logout } = useAuth()
@@ -214,12 +215,13 @@ export default function ChecklistPage() {
       const success = await completeTask(taskId, userId)
       if (success) {
         setRefreshKey((prev) => prev + 1)
+        toastSuccess("Task Completed", "Task has been marked as complete.")
       } else {
-        alert('Failed to complete task. Please try again.')
+        toastError("Error", "Failed to complete task. Please try again.")
       }
     } catch (error) {
       console.error('Error completing task:', error)
-      alert('Failed to complete task. Please try again.')
+      toastError("Error", "Failed to complete task. Please try again.")
     }
   }
 
@@ -228,12 +230,13 @@ export default function ChecklistPage() {
       const success = await undoTask(taskId, userId)
       if (success) {
         setRefreshKey((prev) => prev + 1)
+        toastSuccess("Task Reopened", "Task has been reopened.")
       } else {
-        alert('Failed to undo task. Please try again.')
+        toastError("Error", "Failed to undo task. Please try again.")
       }
     } catch (error) {
       console.error('Error undoing task:', error)
-      alert('Failed to undo task. Please try again.')
+      toastError("Error", "Failed to undo task. Please try again.")
     }
   }
 

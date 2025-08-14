@@ -63,7 +63,7 @@ export async function POST(request: NextRequest) {
 export async function GET(request: NextRequest) {
   try {
     // Import auth function for user authentication
-    const { requireAuth } = await import('@/lib/auth-server')
+    const { requireAuth } = await import('@/lib/auth-middleware')
     
     // Authenticate user and verify admin role
     const user = await requireAuth(request)

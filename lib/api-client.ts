@@ -3,18 +3,23 @@ import { supabase } from './supabase'
 /**
  * Utility function to make authenticated API calls
  * Automatically includes the Bearer token from the current session
+ * Works with both Supabase auth and position-based auth
  */
 export async function authenticatedFetch(url: string, options: RequestInit = {}): Promise<Response> {
-  // Get the current session to include auth token
-  const { data: { session } } = await supabase.auth.getSession()
-  
   const headers: HeadersInit = {
     'Content-Type': 'application/json',
     ...options.headers,
   }
   
+  // Try to get Supabase session first
+  const { data: { session } } = await supabase.auth.getSession()
+  
   if (session?.access_token) {
     headers.Authorization = `Bearer ${session.access_token}`
+  } else {
+    // For position-based auth, we'll add a special header to indicate the request
+    // The API will handle position-based requests differently
+    headers['X-Position-Auth'] = 'true'
   }
 
   return fetch(url, {

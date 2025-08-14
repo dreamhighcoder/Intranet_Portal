@@ -7,23 +7,24 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Alert, AlertDescription } from "@/components/ui/alert"
+
 import { useAuth } from "@/lib/auth"
+import { toastError, toastSuccess } from "@/hooks/use-toast"
 
 export function LoginForm() {
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
-  const [error, setError] = useState("")
+
   const { signIn, isLoading } = useAuth()
   const [isSubmitting, setIsSubmitting] = useState(false)
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    setError("")
+
     setIsSubmitting(true)
 
     if (!email || !password) {
-      setError("Please enter both email and password")
+      toastError("Validation Error", "Please enter both email and password")
       setIsSubmitting(false)
       return
     }
@@ -43,12 +44,12 @@ export function LoginForm() {
           errorMessage = "Too many login attempts. Please wait a moment and try again."
         }
         
-        setError(errorMessage)
+        toastError("Login Failed", errorMessage)
       } else {
         window.location.href = "/"
       }
     } catch (error) {
-      setError("Connection error. Please check your internet connection and try again.")
+      toastError("Connection Error", "Please check your internet connection and try again.")
     } finally {
       setIsSubmitting(false)
     }
@@ -80,11 +81,7 @@ export function LoginForm() {
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">
-            {error && (
-              <Alert variant="destructive">
-                <AlertDescription>{error}</AlertDescription>
-              </Alert>
-            )}
+
 
             <div className="space-y-2">
               <Label htmlFor="email" className="text-[var(--color-text)]">

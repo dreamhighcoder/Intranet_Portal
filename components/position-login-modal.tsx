@@ -9,7 +9,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { usePositionAuth } from "@/lib/position-auth-context"
 import { PositionAuthService, PositionAuth } from "@/lib/position-auth"
 import { useRouter } from "next/navigation"
-import { useToast } from "@/hooks/use-toast"
+import { toastError } from "@/hooks/use-toast"
+
 
 interface PositionLoginModalProps {
   isOpen: boolean
@@ -31,7 +32,7 @@ export function PositionLoginModal({
   const [isSubmitting, setIsSubmitting] = useState(false)
   const { signIn } = usePositionAuth()
   const router = useRouter()
-  const { toast } = useToast()
+
 
   // Get available positions based on modal type
   const getAvailablePositions = (): PositionAuth[] => {
@@ -76,11 +77,7 @@ export function PositionLoginModal({
     setIsSubmitting(true)
 
     if (!selectedPosition || !password) {
-      toast({
-        title: "Missing Information",
-        description: "Please select a position and enter password",
-        variant: "destructive",
-      })
+      toastError("Missing Information", "Please select a position and enter password")
       setIsSubmitting(false)
       return
     }
@@ -104,18 +101,10 @@ export function PositionLoginModal({
           router.push(`/checklist?position=${selectedPosition}`)
         }
       } else {
-        toast({
-          title: "Login Failed",
-          description: signInError || "Invalid position or password",
-          variant: "destructive",
-        })
+        toastError("Login Failed", signInError || "Invalid position or password")
       }
     } catch (error) {
-      toast({
-        title: "Login Error",
-        description: "Login failed. Please try again.",
-        variant: "destructive",
-      })
+      toastError("Login Error", "Login failed. Please try again.")
     } finally {
       setIsSubmitting(false)
     }

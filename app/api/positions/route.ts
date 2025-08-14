@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { requireAuth } from '@/lib/auth-server'
+import { requireAuth } from '@/lib/auth-middleware'
 import { createClient } from '@supabase/supabase-js'
 
 // Use service role key for positions API to bypass RLS (positions are reference data)
@@ -9,9 +9,16 @@ const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey)
 
 export async function GET(request: NextRequest) {
   try {
-    // Require authentication but allow all authenticated users to read positions
-    const user = await requireAuth(request)
-    console.log('Positions GET - Authentication successful for:', user.email)
+    // Check if this is a position-based auth request
+    const isPositionAuth = request.headers.get('X-Position-Auth') === 'true'
+    
+    if (isPositionAuth) {
+      console.log('Positions GET - Position-based auth request, allowing access to reference data')
+    } else {
+      // For Supabase auth, require authentication
+      const user = await requireAuth(request)
+      console.log('Positions GET - Supabase authentication successful for:', user.email)
+    }
 
     const { data: positions, error } = await supabaseAdmin
       .from('positions')

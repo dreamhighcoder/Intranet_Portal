@@ -9,9 +9,10 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
-import { Alert, AlertDescription } from "@/components/ui/alert"
+
 import { publicHolidaysApi } from "@/lib/api-client"
 import { Plus, Trash2, Download, Upload, Calendar, RefreshCw } from "lucide-react"
+import { toastError, toastSuccess } from "@/hooks/use-toast"
 
 interface PublicHoliday {
   date: string
@@ -27,7 +28,7 @@ export default function AdminPublicHolidaysPage() {
   const [loading, setLoading] = useState(true)
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [editingHoliday, setEditingHoliday] = useState<PublicHoliday | null>(null)
-  const [alert, setAlert] = useState<{ type: 'success' | 'error'; message: string } | null>(null)
+
   const [newHoliday, setNewHoliday] = useState({
     date: '',
     name: '',
@@ -49,20 +50,17 @@ export default function AdminPublicHolidaysPage() {
       setHolidays(data.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()))
     } catch (error) {
       console.error('Error loading holidays:', error)
-      showAlert('error', 'Failed to load public holidays')
+      toastError('Error', 'Failed to load public holidays')
     } finally {
       setLoading(false)
     }
   }
 
-  const showAlert = (type: 'success' | 'error', message: string) => {
-    setAlert({ type, message })
-    setTimeout(() => setAlert(null), 5000)
-  }
+
 
   const handleSaveHoliday = async () => {
     if (!newHoliday.date || !newHoliday.name) {
-      showAlert('error', 'Date and name are required')
+      toastError('Validation Error', 'Date and name are required')
       return
     }
 
@@ -73,12 +71,12 @@ export default function AdminPublicHolidaysPage() {
         setHolidays(holidays.map(h => 
           h.date === editingHoliday.date ? { ...h, ...newHoliday } : h
         ))
-        showAlert('success', 'Holiday updated successfully')
+        toastSuccess('Holiday Updated', 'Holiday updated successfully')
       } else {
         // Create new holiday
         await publicHolidaysApi.create(newHoliday)
         await loadHolidays() // Reload to get the full data
-        showAlert('success', 'Holiday added successfully')
+        toastSuccess('Holiday Added', 'Holiday added successfully')
       }
 
       setIsDialogOpen(false)
@@ -86,7 +84,7 @@ export default function AdminPublicHolidaysPage() {
       setNewHoliday({ date: '', name: '', region: 'NSW', source: 'manual' })
     } catch (error) {
       console.error('Error saving holiday:', error)
-      showAlert('error', 'Failed to save holiday')
+      toastError('Save Failed', 'Failed to save holiday')
     }
   }
 
@@ -98,10 +96,10 @@ export default function AdminPublicHolidaysPage() {
     try {
       await publicHolidaysApi.delete(date)
       setHolidays(holidays.filter(h => h.date !== date))
-      showAlert('success', 'Holiday deleted successfully')
+      toastSuccess('Holiday Deleted', 'Holiday deleted successfully')
     } catch (error) {
       console.error('Error deleting holiday:', error)
-      showAlert('error', 'Failed to delete holiday')
+      toastError('Delete Failed', 'Failed to delete holiday')
     }
   }
 
@@ -128,13 +126,13 @@ export default function AdminPublicHolidaysPage() {
       
       if (result.success) {
         await loadHolidays()
-        showAlert('success', `Imported ${result.imported} holidays`)
+        toastSuccess('Import Successful', `Imported ${result.imported} holidays`)
       } else {
-        showAlert('error', result.message || 'Failed to import holidays')
+        toastError('Import Failed', result.message || 'Failed to import holidays')
       }
     } catch (error) {
       console.error('Error importing holidays:', error)
-      showAlert('error', 'Failed to import holidays')
+      toastError('Import Failed', 'Failed to import holidays')
     }
   }
 

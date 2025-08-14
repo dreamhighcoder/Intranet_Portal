@@ -186,4 +186,37 @@ function useToast() {
   }
 }
 
-export { useToast, toast }
+// Utility functions for different toast types
+const toastSuccess = (title: string, description?: string) => {
+  return toast({
+    title,
+    description,
+    variant: "success",
+  })
+}
+
+const toastError = (title: string, description?: string) => {
+  return toast({
+    title,
+    description,
+    variant: "error",
+  })
+}
+
+const toastWarning = (title: string, description?: string) => {
+  return toast({
+    title,
+    description,
+    variant: "warning",
+  })
+}
+
+const toastInfo = (title: string, description?: string) => {
+  return toast({
+    title,
+    description,
+    variant: "default",
+  })
+}
+
+export { useToast, toast, toastSuccess, toastError, toastWarning, toastInfo }

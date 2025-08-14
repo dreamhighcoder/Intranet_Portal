@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { TrendingUp, Clock, AlertTriangle, Calendar } from "lucide-react"
 import { authenticatedGet } from "@/lib/api-client"
 import { useAuth } from "@/lib/auth"
+import { toastError } from "@/hooks/use-toast"
 
 interface DashboardStats {
   onTimeCompletionRate: number
@@ -37,6 +38,7 @@ export function KPIWidgets() {
         }
       } catch (error) {
         console.error('Error fetching dashboard stats:', error)
+        toastError("Dashboard Error", "Failed to load dashboard statistics")
         // Set fallback stats if request fails completely
         setStats({
           onTimeCompletionRate: 0,

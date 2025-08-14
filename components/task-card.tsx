@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import type { TaskWithDetails } from "@/lib/types"
 import { calculateTaskStatus, toggleTaskCompletion } from "@/lib/task-utils"
-import { useToast } from "@/hooks/use-toast"
+import { toastSuccess, toastError } from "@/hooks/use-toast"
 import { LoadingSpinner } from "@/components/loading-spinner"
 import { CheckCircle, Clock, AlertCircle, AlertTriangle, Circle } from "lucide-react"
 
@@ -17,7 +17,6 @@ interface TaskCardProps {
 
 export function TaskCard({ task, onTaskUpdate }: TaskCardProps) {
   const [isUpdating, setIsUpdating] = useState(false)
-  const { toast } = useToast()
   const status = calculateTaskStatus(task)
 
   const handleToggleCompletion = async () => {
@@ -26,18 +25,16 @@ export function TaskCard({ task, onTaskUpdate }: TaskCardProps) {
       await toggleTaskCompletion(task.id)
       onTaskUpdate?.()
 
-      toast({
-        title: status === "done" ? "Task reopened" : "Task completed",
-        description: `${task.master_task.title} has been ${status === "done" ? "reopened" : "marked as complete"}.`,
-        variant: "default",
-      })
+      toastSuccess(
+        status === "done" ? "Task reopened" : "Task completed",
+        `${task.master_task.title} has been ${status === "done" ? "reopened" : "marked as complete"}.`
+      )
     } catch (error) {
       console.error("Failed to update task:", error)
-      toast({
-        title: "Error",
-        description: "Failed to update task. Please try again.",
-        variant: "destructive",
-      })
+      toastError(
+        "Error",
+        "Failed to update task. Please try again."
+      )
     } finally {
       setIsUpdating(false)
     }

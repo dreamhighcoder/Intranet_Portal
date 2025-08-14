@@ -6,14 +6,15 @@ import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
 import { useState } from "react"
 import { Menu, X, LogOut, User } from "lucide-react"
-import { useToast } from "@/hooks/use-toast"
+import { toastSuccess } from "@/hooks/use-toast"
+
 
 export function Navigation() {
   const { user, isLoading, signOut, isAdmin } = usePositionAuth()
   const pathname = usePathname()
   const router = useRouter()
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
-  const { toast } = useToast()
+
 
   if (!user) return null
 
@@ -63,11 +64,10 @@ export function Navigation() {
 
   const handleLogout = async () => {
     signOut()
-    toast({
-      title: "Logged out",
-      description: "You have been successfully logged out.",
-      variant: "default",
-    })
+    toastSuccess(
+      "Logged out",
+      "You have been successfully logged out."
+    )
     // Redirect to home page after logout
     router.push('/')
   }
