@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect, useRef } from "react"
-import { useAuth } from "@/lib/auth"
+import { usePositionAuth } from "@/lib/position-auth-context"
 import { Navigation } from "@/components/navigation"
 import { MasterTaskForm } from "@/components/master-task-form"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -73,7 +73,7 @@ const frequencyLabels = {
 }
 
 export default function AdminMasterTasksPage() {
-  const { user, isLoading: authLoading } = useAuth()
+  const { user, isLoading: authLoading, isAdmin } = usePositionAuth()
 
   const [tasks, setTasks] = useState<MasterTask[]>([])
   const [positions, setPositions] = useState<Position[]>([])
@@ -96,13 +96,13 @@ export default function AdminMasterTasksPage() {
 
   useEffect(() => {
     // Wait for authentication to complete before loading data
-    if (!authLoading && user && user.profile?.role === 'admin') {
-      console.log('Authentication complete, loading data for admin user:', user.email)
+    if (!authLoading && user && isAdmin) {
+      console.log('Authentication complete, loading data for admin user:', user.position.name)
       loadData()
     } else if (!authLoading && !user) {
       console.log('Authentication complete but no user found')
-    } else if (!authLoading && user && user.profile?.role !== 'admin') {
-      console.log('Authentication complete but user is not admin:', user.profile?.role)
+    } else if (!authLoading && user && !isAdmin) {
+      console.log('Authentication complete but user is not admin:', user.position.name)
     }
   }, [authLoading, user])
 
@@ -514,12 +514,22 @@ export default function AdminMasterTasksPage() {
   }
 
   // Show access denied if user is not authenticated or not an admin
-  if (!user || user.profile?.role !== 'admin') {
+  if (!user || !isAdmin) {
+    // Debug info for troubleshooting
+    console.log('Master Tasks page access check:', { user, isAdmin, userRole: user?.role })
+    
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
           <h1 className="text-2xl font-bold text-red-600 mb-2">Access Denied</h1>
           <p className="text-gray-600">You don't have permission to access this page.</p>
+          <div className="mt-4 p-4 bg-gray-100 rounded text-sm text-left max-w-md">
+            <strong>Debug Info:</strong><br/>
+            User: {user ? 'Present' : 'Missing'}<br/>
+            IsAdmin: {isAdmin ? 'True' : 'False'}<br/>
+            User Role: {user?.role || 'Unknown'}<br/>
+            <a href="/admin/auth-test" className="text-blue-600 underline">Run Auth Test</a>
+          </div>
         </div>
       </div>
     )

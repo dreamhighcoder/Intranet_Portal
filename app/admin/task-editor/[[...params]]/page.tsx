@@ -3,7 +3,7 @@
 import type React from "react"
 
 import { useState, useEffect } from "react"
-import { useAuth } from "@/lib/auth"
+import { usePositionAuth } from "@/lib/position-auth-context"
 import { Navigation } from "@/components/navigation"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -18,7 +18,7 @@ import type { MasterTask, Position } from "@/lib/types"
 import { positionsApi, authenticatedGet, authenticatedPost, authenticatedPut } from "@/lib/api-client"
 
 export default function TaskEditorPage() {
-  const { user, isLoading } = useAuth()
+  const { user, isLoading, isAdmin } = usePositionAuth()
   const router = useRouter()
   const params = useParams()
   const taskId = params.params?.[0]
@@ -42,14 +42,14 @@ export default function TaskEditorPage() {
   const [isSaving, setIsSaving] = useState(false)
 
   useEffect(() => {
-    if (!isLoading && (!user || user.role !== "admin")) {
+    if (!isLoading && (!user || !isAdmin)) {
       router.push("/")
     }
-  }, [user, isLoading, router])
+  }, [user, isLoading, router, isAdmin])
 
   useEffect(() => {
     async function fetchData() {
-      if (user?.role !== 'admin') return
+      if (!isAdmin) return
       
       try {
         // Fetch positions
@@ -116,7 +116,7 @@ export default function TaskEditorPage() {
     )
   }
 
-  if (!user || user.role !== "admin") return null
+  if (!user || !isAdmin) return null
 
   return (
     <div className="min-h-screen bg-[var(--color-background)]">

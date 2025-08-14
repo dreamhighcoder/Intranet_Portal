@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { useAuth } from "@/lib/auth"
+import { usePositionAuth } from "@/lib/position-auth-context"
 import { Navigation } from "@/components/navigation"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -19,17 +19,17 @@ interface Settings {
 }
 
 export default function SettingsPage() {
-  const { user, isLoading } = useAuth()
+  const { user, isLoading, isAdmin } = usePositionAuth()
   const router = useRouter()
   const [settings, setSettings] = useState<Settings | null>(null)
   const [isLoadingSettings, setIsLoadingSettings] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
 
   useEffect(() => {
-    if (!isLoading && (!user || user.role !== "admin")) {
+    if (!isLoading && (!user || !isAdmin)) {
       router.push("/")
     }
-  }, [user, isLoading, router])
+  }, [user, isLoading, router, isAdmin])
 
   useEffect(() => {
     async function fetchSettings() {

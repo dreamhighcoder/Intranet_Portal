@@ -1,4 +1,5 @@
 import { createServerSupabaseClient } from '@/lib/supabase-server'
+import { supabase } from '@/lib/supabase'
 import { NextRequest } from 'next/server'
 
 export interface AuthUser {
@@ -12,10 +13,34 @@ export interface AuthUser {
 export async function getAuthUser(request: NextRequest): Promise<AuthUser | null> {
   try {
     const authHeader = request.headers.get('authorization')
-    console.log('Auth middleware - Authorization header present:', !!authHeader)
-    console.log('Auth middleware - Full authorization header:', authHeader ? authHeader.substring(0, 50) + '...' : 'none')
-    console.log('Auth middleware - Request headers:', Object.fromEntries([...request.headers.entries()]))
+    const positionAuthHeader = request.headers.get('x-position-auth')
     
+    console.log('Auth middleware - Authorization header present:', !!authHeader)
+    console.log('Auth middleware - Position auth header:', positionAuthHeader)
+    
+    // Handle position-based authentication first
+    if (positionAuthHeader === 'true') {
+      const userId = request.headers.get('x-position-user-id')
+      const userRole = request.headers.get('x-position-user-role') as 'admin' | 'viewer'
+      const displayName = request.headers.get('x-position-display-name')
+      
+      console.log('Auth middleware - Position auth data:', { userId, userRole, displayName })
+      
+      if (userId && userRole) {
+        return {
+          id: userId,
+          email: `${userId}@position.local`, // Synthetic email for position-based auth
+          role: userRole,
+          position_id: userRole === 'admin' ? undefined : userId,
+          display_name: displayName || userId
+        }
+      }
+      
+      console.log('Auth middleware - Invalid position auth data')
+      return null
+    }
+    
+    // Handle Supabase Bearer token authentication
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
       console.log('Auth middleware - Missing or invalid authorization header, returning null')
       return null

@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { useAuth } from "@/lib/auth"
+import { usePositionAuth } from "@/lib/position-auth-context"
 import { Navigation } from "@/components/navigation"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -23,7 +23,7 @@ interface PublicHoliday {
 }
 
 export default function AdminPublicHolidaysPage() {
-  const { user, isLoading: authLoading } = useAuth()
+  const { user, isLoading: authLoading, isAdmin } = usePositionAuth()
   const [holidays, setHolidays] = useState<PublicHoliday[]>([])
   const [loading, setLoading] = useState(true)
   const [isDialogOpen, setIsDialogOpen] = useState(false)
@@ -171,7 +171,7 @@ export default function AdminPublicHolidaysPage() {
     )
   }
 
-  if (!user || user.profile?.role !== 'admin') {
+  if (!user || !isAdmin) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">

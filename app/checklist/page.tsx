@@ -2,7 +2,6 @@
 
 import { useState, useEffect, useMemo } from "react"
 import { useSearchParams, useRouter } from "next/navigation"
-import { useAuth } from "@/lib/auth"
 import { usePositionAuth } from "@/lib/position-auth-context"
 import { Navigation } from "@/components/navigation"
 import { DateNavigator } from "@/components/date-navigator"
@@ -18,15 +17,11 @@ import Link from "next/link"
 import { toastError, toastSuccess } from "@/hooks/use-toast"
 
 export default function ChecklistPage() {
-  const { user: oldUser, isLoading: oldIsLoading, logout } = useAuth()
-  const { user: positionUser, isLoading: positionIsLoading, signOut, isAdmin } = usePositionAuth()
+  const { user, isLoading, signOut, isAdmin } = usePositionAuth()
   const router = useRouter()
   const searchParams = useSearchParams()
 
-  // Use position-based auth as primary, fallback to old auth for backward compatibility
-  const user = positionUser || oldUser
-  const isLoading = positionIsLoading && oldIsLoading
-  const userRole = positionUser ? (positionUser.role === 'admin' ? 'admin' : 'viewer') : oldUser?.profile?.role
+  const userRole = isAdmin ? 'admin' : 'viewer'
 
   const [currentDate, setCurrentDate] = useState(() => {
     return searchParams.get("date") || new Date().toISOString().split("T")[0]
@@ -49,14 +44,12 @@ export default function ChecklistPage() {
 
   // Create stable references to prevent infinite re-renders
   const userId = useMemo(() => {
-    if (positionUser) return positionUser.id
-    return oldUser?.id
-  }, [positionUser?.id, oldUser?.id])
+    return user?.id
+  }, [user?.id])
   
   const userPositionId = useMemo(() => {
-    if (positionUser) return positionUser.id
-    return oldUser?.profile?.position_id
-  }, [positionUser?.id, oldUser?.profile?.position_id])
+    return user?.id  // In position-based auth, user.id is the position ID
+  }, [user?.id])
   
   // Get position parameter from URL
   const urlPositionId = useMemo(() => searchParams.get("position"), [searchParams])
@@ -241,17 +234,12 @@ export default function ChecklistPage() {
   }
 
   const handleFinish = () => {
-    if (positionUser) {
-      signOut()
-    } else {
-      logout()
-    }
+    signOut()
     router.push("/")
   }
 
-  // Show loading if auth is still loading OR if we have a user but no profile yet OR local loading
-  const isAuthLoading = isLoading || (oldUser && !oldUser.profile)
-  const shouldShowLoading = isAuthLoading || loading
+  // Show loading if auth is still loading OR local loading
+  const shouldShowLoading = isLoading || loading
   
   if (shouldShowLoading) {
     return (
@@ -259,7 +247,7 @@ export default function ChecklistPage() {
         <div className="text-center">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[var(--color-primary)] mx-auto"></div>
           <p className="mt-2 text-[var(--color-text-secondary)]">
-            {isAuthLoading ? 'Loading user profile...' : 'Loading checklist...'}
+            {isLoading ? 'Loading user profile...' : 'Loading checklist...'}
           </p>
         </div>
       </div>
@@ -328,7 +316,7 @@ export default function ChecklistPage() {
         <div className="mb-6">
           <div className="flex items-center justify-between mb-2">
             <h1 className="text-3xl font-bold text-[var(--color-text-primary)]">
-              Checklist — {viewingPositionName ? viewingPositionName : (userRole === 'admin' ? 'All Positions' : (positionUser?.position?.displayName || oldUser?.position?.name || "Your Position"))} —{" "}
+              Checklist — {viewingPositionName ? viewingPositionName : (userRole === 'admin' ? 'All Positions' : (user?.position?.displayName || "Your Position"))} —{" "}
               {new Date(currentDate).toLocaleDateString("en-AU", {
                 weekday: "long",
                 year: "numeric",
@@ -365,7 +353,7 @@ export default function ChecklistPage() {
             </p>
           ) : userPositionId && (
             <p className="text-xs text-[var(--color-text-secondary)]">
-              Position: {positionUser?.position?.displayName || oldUser?.position?.name || 'Unknown Position'}
+              Position: {user?.position?.displayName || 'Unknown Position'}
             </p>
           )}
         </div>

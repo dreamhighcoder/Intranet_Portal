@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { useAuth } from "@/lib/auth"
+import { usePositionAuth } from "@/lib/position-auth-context"
 import { Navigation } from "@/components/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -13,7 +13,7 @@ import { Position, UserProfile } from "@/lib/types"
 import { positionsApi, authenticatedGet } from "@/lib/api-client"
 
 export default function UsersPositionsPage() {
-  const { user, isLoading } = useAuth()
+  const { user, isLoading, isAdmin } = usePositionAuth()
   const router = useRouter()
   const [activeTab, setActiveTab] = useState<"positions" | "users">("positions")
   const [positions, setPositions] = useState<Position[]>([])
@@ -28,7 +28,7 @@ export default function UsersPositionsPage() {
 
   useEffect(() => {
     async function fetchData() {
-      if (user?.role !== 'admin') return
+      if (!isAdmin) return
       
       try {
         const [positionsData, usersData] = await Promise.all([
@@ -51,7 +51,7 @@ export default function UsersPositionsPage() {
     }
 
     fetchData()
-  }, [user])
+  }, [user, isAdmin])
 
   const getPositionName = (positionId: string | undefined) => {
     return positions.find((p) => p.id === positionId)?.name || "Unknown"
@@ -68,7 +68,7 @@ export default function UsersPositionsPage() {
     )
   }
 
-  if (!user || user.role !== "admin") return null
+  if (!user || !isAdmin) return null
 
   return (
     <div className="min-h-screen bg-[var(--color-background)]">

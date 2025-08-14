@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { useAuth } from "@/lib/auth"
+import { usePositionAuth } from "@/lib/position-auth-context"
 import { Navigation } from "@/components/navigation"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -42,7 +42,7 @@ interface Position {
 }
 
 export default function AdminReportsPage() {
-  const { user, isLoading } = useAuth()
+  const { user, isLoading, isAdmin } = usePositionAuth()
   const [reportData, setReportData] = useState<ReportData | null>(null)
   const [positions, setPositions] = useState<Position[]>([])
   const [loading, setLoading] = useState(true)
@@ -55,21 +55,13 @@ export default function AdminReportsPage() {
 
   useEffect(() => {
     // Only load data if user is authenticated and is admin
-    if (!isLoading && user && user.profile) {
-      if (user.profile.role === 'admin') {
-        loadData()
-      } else {
-        // Stop loading for non-admin users
-        setLoading(false)
-      }
-    } else if (!isLoading && user && !user.profile) {
-      // User exists but no profile - stop loading
-      setLoading(false)
-    } else if (!isLoading && !user) {
-      // No user - stop loading
+    if (!isLoading && user && isAdmin) {
+      loadData()
+    } else if (!isLoading) {
+      // Stop loading for non-admin users or no user
       setLoading(false)
     }
-  }, [dateRange, selectedPosition, selectedCategory, user, isLoading])
+  }, [dateRange, selectedPosition, selectedCategory, user, isLoading, isAdmin])
 
   const loadData = async () => {
     setLoading(true)
@@ -191,8 +183,8 @@ export default function AdminReportsPage() {
     window.URL.revokeObjectURL(url)
   }
 
-  // Show loading until auth is resolved AND profile is loaded
-  if (isLoading || (user && !user.profile) || loading) {
+  // Show loading until auth is resolved
+  if (isLoading || loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
@@ -203,13 +195,23 @@ export default function AdminReportsPage() {
     )
   }
 
-  // Show access denied only after auth and profile are fully resolved
-  if (!user || user.profile?.role !== 'admin') {
+  // Show access denied only after auth is fully resolved
+  if (!user || !isAdmin) {
+    // Debug info for troubleshooting
+    console.log('Reports page access check:', { user, isAdmin, userRole: user?.role })
+    
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
           <h1 className="text-2xl font-bold text-red-600 mb-2">Access Denied</h1>
           <p className="text-gray-600">You don't have permission to access this page.</p>
+          <div className="mt-4 p-4 bg-gray-100 rounded text-sm text-left max-w-md">
+            <strong>Debug Info:</strong><br/>
+            User: {user ? 'Present' : 'Missing'}<br/>
+            IsAdmin: {isAdmin ? 'True' : 'False'}<br/>
+            User Role: {user?.role || 'Unknown'}<br/>
+            <a href="/admin/auth-test" className="text-blue-600 underline">Run Auth Test</a>
+          </div>
         </div>
       </div>
     )

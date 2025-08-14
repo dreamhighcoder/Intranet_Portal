@@ -56,6 +56,7 @@ export function Navigation() {
         { href: "/checklist", label: "Checklists" },
         { href: "/calendar", label: "Calendar" },
         { href: "/admin/reports", label: "Reports" },
+        { href: "/debug", label: "🔍 Debug", className: "text-orange-200 hover:text-orange-100" },
       ]
     : [
         { href: "/checklist", label: "Checklist" },

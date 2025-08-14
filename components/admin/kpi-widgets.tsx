@@ -4,7 +4,7 @@ import { useState, useEffect } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { TrendingUp, Clock, AlertTriangle, Calendar } from "lucide-react"
 import { authenticatedGet } from "@/lib/api-client"
-import { useAuth } from "@/lib/auth"
+import { usePositionAuth } from "@/lib/position-auth-context"
 import { toastError } from "@/hooks/use-toast"
 
 interface DashboardStats {
@@ -17,7 +17,7 @@ interface DashboardStats {
 export function KPIWidgets() {
   const [stats, setStats] = useState<DashboardStats | null>(null)
   const [isLoading, setIsLoading] = useState(true)
-  const { user, isLoading: authLoading } = useAuth()
+  const { user, isLoading: authLoading } = usePositionAuth()
 
   useEffect(() => {
     async function fetchDashboardStats() {
@@ -27,18 +27,29 @@ export function KPIWidgets() {
       }
       
       try {
+        console.log('KPIWidgets: Fetching dashboard data...')
         const data = await authenticatedGet('/api/dashboard')
-        if (data) {
+        console.log('KPIWidgets: Dashboard data received:', data)
+        
+        if (data && data.summary) {
           setStats({
-            onTimeCompletionRate: data.summary?.onTimeCompletionRate || 0,
-            avgTimeToCompleteHours: data.summary?.avgTimeToCompleteHours || 0,
-            missedLast7Days: data.summary?.missedLast7Days || 0,
-            totalTasks: data.summary?.totalTasks || 0,
+            onTimeCompletionRate: Math.round(data.summary.onTimeCompletionRate || 0),
+            avgTimeToCompleteHours: Math.round((data.summary.avgTimeToCompleteHours || 0) * 10) / 10,
+            missedLast7Days: data.summary.missedLast7Days || 0,
+            totalTasks: data.summary.totalTasks || 0,
+          })
+        } else {
+          // If no data or no summary, show zeros but don't show error
+          console.log('KPIWidgets: No dashboard data available, using zeros')
+          setStats({
+            onTimeCompletionRate: 0,
+            avgTimeToCompleteHours: 0,
+            missedLast7Days: 0,
+            totalTasks: 0,
           })
         }
       } catch (error) {
-        console.error('Error fetching dashboard stats:', error)
-        toastError("Dashboard Error", "Failed to load dashboard statistics")
+        console.error('KPIWidgets: Error fetching dashboard stats:', error)
         // Set fallback stats if request fails completely
         setStats({
           onTimeCompletionRate: 0,

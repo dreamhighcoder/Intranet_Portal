@@ -1,32 +1,64 @@
 "use client"
 
-import { useEffect } from "react"
-import { useAuth } from "@/lib/auth"
+import { useEffect, useState } from "react"
 import { usePositionAuth } from "@/lib/position-auth-context"
 import { Navigation } from "@/components/navigation"
 import { KPIWidgets } from "@/components/admin/kpi-widgets"
 import { RecentMissedTasks } from "@/components/admin/recent-missed-tasks"
-import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import Link from "next/link"
+import { Button } from "@/components/ui/button"
 import { useRouter } from "next/navigation"
-import { Users, ClipboardList, Calendar, Settings, BarChart3 } from "lucide-react"
+import Link from "next/link"
+import { Users, ClipboardList, Calendar, Settings, BarChart3, RefreshCw, Play } from "lucide-react"
+import { authenticatedGet } from "@/lib/api-client"
+import { toastSuccess, toastError } from "@/hooks/use-toast"
 
 export default function AdminDashboard() {
-  const { user: oldUser, isLoading: oldIsLoading } = useAuth()
-  const { user: positionUser, isLoading: positionIsLoading, isAdmin } = usePositionAuth()
+  const { user, isLoading, isAdmin } = usePositionAuth()
   const router = useRouter()
-
-  // Use position-based auth as primary, fallback to old auth for backward compatibility  
-  const user = positionUser || oldUser
-  const isLoading = positionIsLoading && oldIsLoading
-  const userIsAdmin = positionUser ? isAdmin : (oldUser?.profile?.role === "admin")
+  const [isGenerating, setIsGenerating] = useState(false)
+  const [diagnostics, setDiagnostics] = useState<{
+    masterTasks: number
+    taskInstances: number
+    positions: number
+  } | null>(null)
 
   useEffect(() => {
-    if (!isLoading && (!user || !userIsAdmin)) {
+    if (!isLoading && (!user || !isAdmin)) {
       router.push("/")
     }
-  }, [user, userIsAdmin, isLoading, router])
+  }, [user, isAdmin, isLoading, router])
+
+  useEffect(() => {
+    if (!isLoading && user && isAdmin) {
+      loadDiagnostics()
+    }
+  }, [user, isAdmin, isLoading])
+
+  const loadDiagnostics = async () => {
+    try {
+      console.log('AdminDashboard: Loading diagnostics...')
+      const [masterTasksData, taskInstancesData, positionsData] = await Promise.all([
+        authenticatedGet('/api/master-tasks?status=all'),
+        authenticatedGet('/api/task-instances'),
+        authenticatedGet('/api/positions')
+      ])
+
+      console.log('AdminDashboard: Diagnostics loaded:', {
+        masterTasksData: masterTasksData?.length || 0,
+        taskInstancesData: taskInstancesData?.length || 0, 
+        positionsData: positionsData?.length || 0
+      })
+
+      setDiagnostics({
+        masterTasks: masterTasksData?.length || 0,
+        taskInstances: taskInstancesData?.length || 0,
+        positions: positionsData?.length || 0
+      })
+    } catch (error) {
+      console.error('AdminDashboard: Error loading diagnostics:', error)
+    }
+  }
 
   if (isLoading) {
     return (
@@ -39,48 +71,85 @@ export default function AdminDashboard() {
     )
   }
 
-  if (!user || !userIsAdmin) return null
+  const handleGenerateTaskInstances = async () => {
+    setIsGenerating(true)
+    try {
+      const result = await authenticatedGet('/api/jobs/generate-instances?mode=custom&forceRegenerate=false')
+      if (result && result.success) {
+        toastSuccess("Task Generation Complete", 
+          `Generated ${result.stats.generated} task instances, skipped ${result.stats.skipped}`)
+        // Reload diagnostics and refresh the page to update KPI widgets
+        await loadDiagnostics()
+        window.location.reload()
+      } else {
+        toastError("Generation Failed", result?.message || "Failed to generate task instances")
+      }
+    } catch (error) {
+      console.error('Error generating task instances:', error)
+      toastError("Generation Error", "An error occurred while generating task instances")
+    } finally {
+      setIsGenerating(false)
+    }
+  }
+
+  if (!user || !isAdmin) return null
 
   const quickActions = [
     {
       title: "Master Tasks",
       description: "Manage checklist templates and task definitions",
-      href: "/admin/master-tasks",
       icon: ClipboardList,
+      href: "/admin/master-tasks",
       color: "text-blue-600",
       bgColor: "bg-blue-100",
     },
     {
-      title: "Users & Positions",
-      description: "Manage staff positions and user accounts",
-      href: "/admin/users-positions",
-      icon: Users,
+      title: "Reports",
+      description: "View performance analytics and completion reports",
+      icon: BarChart3,
+      href: "/admin/reports",
       color: "text-green-600",
       bgColor: "bg-green-100",
     },
     {
-      title: "Public Holidays",
-      description: "Configure public holidays for task scheduling",
-      href: "/admin/public-holidays",
-      icon: Calendar,
+      title: "User Management",
+      description: "Manage user positions and access permissions",
+      icon: Users,
+      href: "/admin/users-positions",
       color: "text-purple-600",
       bgColor: "bg-purple-100",
     },
     {
-      title: "Reports",
-      description: "Generate performance and compliance reports",
-      href: "/admin/reports",
-      icon: BarChart3,
+      title: "Calendar",
+      description: "View and manage scheduled tasks across all positions",
+      icon: Calendar,
+      href: "/calendar",
       color: "text-orange-600",
       bgColor: "bg-orange-100",
     },
     {
+      title: "Public Holidays",
+      description: "Configure public holidays and special dates",
+      icon: Calendar,
+      href: "/admin/public-holidays",
+      color: "text-indigo-600",
+      bgColor: "bg-indigo-100",
+    },
+    {
       title: "Settings",
       description: "System configuration and preferences",
-      href: "/admin/settings",
       icon: Settings,
+      href: "/admin/settings",
       color: "text-gray-600",
       bgColor: "bg-gray-100",
+    },
+    {
+      title: "Auth Test",
+      description: "Debug authentication and data loading issues",
+      icon: Settings,
+      href: "/admin/auth-test",
+      color: "text-orange-600",
+      bgColor: "bg-orange-100",
     },
   ]
 
@@ -92,37 +161,69 @@ export default function AdminDashboard() {
         {/* Header */}
         <div className="mb-8">
           <div className="pharmacy-gradient rounded-lg p-6 text-white">
-            <h1 className="text-3xl font-bold mb-2">Admin Dashboard</h1>
-            <p className="text-white/90">System overview and management tools</p>
+            <div className="flex items-center justify-between">
+              <div>
+                <h1 className="text-3xl font-bold mb-2">Admin Dashboard</h1>
+                <p className="text-white/90">
+                  Monitor task completion and manage pharmacy operations
+                </p>
+                {diagnostics && (
+                  <div className="text-sm text-white/80 mt-2">
+                    Database: {diagnostics.masterTasks} master tasks • {diagnostics.taskInstances} task instances • {diagnostics.positions} positions
+                  </div>
+                )}
+              </div>
+              <Button
+                onClick={handleGenerateTaskInstances}
+                disabled={isGenerating}
+                variant="outline"
+                className="bg-white/10 border-white/20 text-white hover:bg-white/20 flex items-center space-x-2"
+              >
+                {isGenerating ? (
+                  <RefreshCw className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Play className="w-4 h-4" />
+                )}
+                <span>{isGenerating ? 'Generating...' : 'Generate Task Instances'}</span>
+              </Button>
+            </div>
           </div>
         </div>
 
         {/* KPI Widgets */}
         <div className="mb-8">
-          <h2 className="text-xl font-semibold text-[var(--color-text-primary)] mb-4">Performance Overview</h2>
           <KPIWidgets />
         </div>
 
-        {/* Quick Actions */}
+        {/* Quick Actions Grid */}
         <div className="mb-8">
-          <h2 className="text-xl font-semibold text-[var(--color-text-primary)] mb-4">Quick Actions</h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          <h2 className="text-2xl font-bold mb-6 text-[var(--color-text)]">Quick Actions</h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {quickActions.map((action) => {
-              const Icon = action.icon
+              const IconComponent = action.icon
               return (
-                <Card key={action.title} className="card-surface hover:shadow-md transition-shadow h-[200px] flex flex-col">
+                <Card key={action.title} className="card-surface hover:shadow-lg transition-shadow">
                   <CardHeader className="pb-3">
-                    <div className="flex items-center space-x-3">
+                    <div className="flex items-center justify-between">
+                      <CardTitle className="text-lg text-[var(--color-text)]">
+                        {action.title}
+                      </CardTitle>
                       <div className={`p-2 rounded-lg ${action.bgColor}`}>
-                        <Icon className={`w-5 h-5 ${action.color}`} />
+                        <IconComponent className={`w-5 h-5 ${action.color}`} />
                       </div>
-                      <CardTitle className="text-lg">{action.title}</CardTitle>
                     </div>
                   </CardHeader>
-                  <CardContent className="flex-grow flex flex-col justify-between pt-0">
-                    <p className="text-[var(--color-text-secondary)] text-sm leading-relaxed">{action.description}</p>
-                    <Button asChild variant="outline" className="w-full bg-transparent mt-4">
-                      <Link href={action.href}>Manage</Link>
+                  <CardContent>
+                    <p className="text-sm text-[var(--color-text-secondary)] mb-4">
+                      {action.description}
+                    </p>
+                    <Button 
+                      asChild
+                      className="w-full bg-[var(--color-primary)] hover:bg-[var(--color-primary)]/90 text-[var(--color-primary-on)]"
+                    >
+                      <Link href={action.href}>
+                        Manage
+                      </Link>
                     </Button>
                   </CardContent>
                 </Card>
@@ -131,42 +232,10 @@ export default function AdminDashboard() {
           </div>
         </div>
 
-        {/* Recent Issues */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+        {/* Recent Missed Tasks */}
+        <div>
+          <h2 className="text-2xl font-bold mb-6 text-[var(--color-text)]">Recent Issues</h2>
           <RecentMissedTasks />
-
-          <Card className="card-surface">
-            <CardHeader>
-              <CardTitle>System Status</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                <div className="flex items-center justify-between p-3 bg-green-50 rounded-lg">
-                  <div>
-                    <h4 className="font-medium text-green-800">Task Scheduler</h4>
-                    <p className="text-sm text-green-600">Running normally</p>
-                  </div>
-                  <div className="w-3 h-3 bg-green-500 rounded-full"></div>
-                </div>
-
-                <div className="flex items-center justify-between p-3 bg-green-50 rounded-lg">
-                  <div>
-                    <h4 className="font-medium text-green-800">Database</h4>
-                    <p className="text-sm text-green-600">Connected</p>
-                  </div>
-                  <div className="w-3 h-3 bg-green-500 rounded-full"></div>
-                </div>
-
-                <div className="flex items-center justify-between p-3 bg-blue-50 rounded-lg">
-                  <div>
-                    <h4 className="font-medium text-blue-800">Last Backup</h4>
-                    <p className="text-sm text-blue-600">2 hours ago</p>
-                  </div>
-                  <div className="w-3 h-3 bg-blue-500 rounded-full"></div>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
         </div>
       </main>
     </div>

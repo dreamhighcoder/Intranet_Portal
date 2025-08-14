@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { useAuth } from "@/lib/auth"
+import { usePositionAuth } from "@/lib/position-auth-context"
 import { Navigation } from "@/components/navigation"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -17,7 +17,7 @@ interface JobResult {
 }
 
 export default function AdminJobsPage() {
-  const { user } = useAuth()
+  const { user, isAdmin } = usePositionAuth()
   const [isRunning, setIsRunning] = useState<string | null>(null)
   const [results, setResults] = useState<Record<string, JobResult>>({})
 
@@ -63,7 +63,7 @@ export default function AdminJobsPage() {
     setResults({})
   }
 
-  if (!user || user.profile?.role !== 'admin') {
+  if (!user || !isAdmin) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">

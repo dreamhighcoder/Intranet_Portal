@@ -1,4 +1,5 @@
 import { supabase } from './supabase'
+import { PositionAuthService } from './position-auth'
 
 /**
  * Utility function to make authenticated API calls
@@ -17,9 +18,15 @@ export async function authenticatedFetch(url: string, options: RequestInit = {})
   if (session?.access_token) {
     headers.Authorization = `Bearer ${session.access_token}`
   } else {
-    // For position-based auth, we'll add a special header to indicate the request
-    // The API will handle position-based requests differently
-    headers['X-Position-Auth'] = 'true'
+    // Check for position-based auth
+    const positionUser = PositionAuthService.getCurrentUser()
+    if (positionUser && positionUser.isAuthenticated) {
+      // For position-based auth, send the position data as headers
+      headers['X-Position-Auth'] = 'true'
+      headers['X-Position-User-Id'] = positionUser.id
+      headers['X-Position-User-Role'] = positionUser.role
+      headers['X-Position-Display-Name'] = positionUser.displayName
+    }
   }
 
   return fetch(url, {
@@ -37,7 +44,21 @@ export async function authenticatedGet<T = any>(url: string): Promise<T | null> 
     if (response.ok) {
       return await response.json()
     } else {
-      console.error(`Failed to fetch ${url}:`, response.status, response.statusText)
+      const errorText = await response.text()
+      console.error(`Failed to fetch ${url}:`, {
+        status: response.status,
+        statusText: response.statusText,
+        errorBody: errorText
+      })
+      
+      // If it's an authentication error, provide more context
+      if (response.status === 401) {
+        console.warn('Authentication failed for:', url)
+        const positionUser = PositionAuthService.getCurrentUser()
+        console.log('Current position user:', positionUser ? 
+          `${positionUser.displayName} (${positionUser.role})` : 'None')
+      }
+      
       return null
     }
   } catch (error) {

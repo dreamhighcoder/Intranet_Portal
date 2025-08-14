@@ -48,6 +48,21 @@ export function PositionAuthProvider({ children }: { children: React.ReactNode }
     isAdmin: user?.role === 'admin'
   }
 
+  // Debug logging
+  React.useEffect(() => {
+    console.log('PositionAuth Context Update:', {
+      user: user ? {
+        id: user.id,
+        role: user.role,
+        displayName: user.displayName,
+        isAuthenticated: user.isAuthenticated
+      } : null,
+      isLoading,
+      isAdmin: user?.role === 'admin',
+      userRole: user?.role
+    })
+  }, [user, isLoading])
+
   return (
     <PositionAuthContext.Provider value={value}>
       {children}
