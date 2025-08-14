@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { useAuth } from "@/lib/auth"
 import { Navigation } from "@/components/navigation"
 import { MasterTaskForm } from "@/components/master-task-form"
@@ -11,9 +11,11 @@ import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
-import { Alert, AlertDescription } from "@/components/ui/alert"
-import { masterTasksApi, positionsApi } from "@/lib/api-client"
+
+import { masterTasksApi, positionsApi, authenticatedGet } from "@/lib/api-client"
 import { supabase } from "@/lib/supabase"
+import * as XLSX from 'xlsx'
+import { useToast } from "@/hooks/use-toast"
 import { 
   Plus, 
   Edit, 
@@ -72,6 +74,7 @@ const frequencyLabels = {
 
 export default function AdminMasterTasksPage() {
   const { user, isLoading: authLoading } = useAuth()
+  const { toast } = useToast()
   const [tasks, setTasks] = useState<MasterTask[]>([])
   const [positions, setPositions] = useState<Position[]>([])
   const [loading, setLoading] = useState(true)
@@ -81,13 +84,15 @@ export default function AdminMasterTasksPage() {
   const [filterCategory, setFilterCategory] = useState("all")
   const [isTaskDialogOpen, setIsTaskDialogOpen] = useState(false)
   const [editingTask, setEditingTask] = useState<MasterTask | null>(null)
-  const [alert, setAlert] = useState<{ type: 'success' | 'error'; message: string } | null>(null)
   const [formLoading, setFormLoading] = useState(false)
   const [showMobileFilters, setShowMobileFilters] = useState(false)
   const [deletingTaskId, setDeletingTaskId] = useState<string | null>(null)
   const [generatingInstancesId, setGeneratingInstancesId] = useState<string | null>(null)
   const [deleteConfirmModal, setDeleteConfirmModal] = useState<{ isOpen: boolean; task: any | null }>({ isOpen: false, task: null })
   const [generateConfirmModal, setGenerateConfirmModal] = useState<{ isOpen: boolean; task: any | null }>({ isOpen: false, task: null })
+  
+  // File input ref for import functionality
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     // Wait for authentication to complete before loading data
@@ -116,15 +121,18 @@ export default function AdminMasterTasksPage() {
     } catch (error) {
       console.error('Error loading data:', error)
       const errorMessage = error instanceof Error ? error.message : 'Unknown error'
-      showAlert('error', `Failed to load data: ${errorMessage}`)
+      showToast('error', 'Loading Failed', `Failed to load data: ${errorMessage}`)
     } finally {
       setLoading(false)
     }
   }
 
-  const showAlert = (type: 'success' | 'error', message: string) => {
-    setAlert({ type, message })
-    setTimeout(() => setAlert(null), 5000)
+  const showToast = (type: 'success' | 'error', title: string, description?: string) => {
+    toast({
+      title,
+      description,
+      variant: type === 'error' ? 'destructive' : 'default',
+    })
   }
 
   const handleStatusChange = async (taskId: string, newStatus: 'draft' | 'active' | 'inactive') => {
@@ -145,7 +153,7 @@ export default function AdminMasterTasksPage() {
         task.id === taskId ? updatedTask : task
       ))
       
-      showAlert('success', `Task status changed to ${newStatus}`)
+      showToast('success', 'Status Updated', `Task status changed to ${newStatus}`)
     } catch (error) {
       console.error('Error updating task status:', error)
       
@@ -153,7 +161,7 @@ export default function AdminMasterTasksPage() {
       await loadData()
       
       const errorMessage = error instanceof Error ? error.message : 'Unknown error'
-      showAlert('error', `Failed to update task status: ${errorMessage}`)
+      showToast('error', 'Update Failed', `Failed to update task status: ${errorMessage}`)
     }
   }
 
@@ -177,11 +185,11 @@ export default function AdminMasterTasksPage() {
       // Immediately remove from UI
       setTasks(tasks.filter(t => t.id !== task.id))
       
-      showAlert('success', `Task "${task.title}" deleted successfully`)
+      showToast('success', 'Task Deleted', `"${task.title}" was deleted successfully`)
     } catch (error) {
       console.error('Error deleting task:', error)
       const errorMessage = error instanceof Error ? error.message : 'Unknown error'
-      showAlert('error', `Failed to delete task: ${errorMessage}`)
+      showToast('error', 'Delete Failed', `Failed to delete task: ${errorMessage}`)
     } finally {
       setDeletingTaskId(null)
     }
@@ -203,7 +211,7 @@ export default function AdminMasterTasksPage() {
           task.id === editingTask.id ? updatedTask : task
         ))
         
-        showAlert('success', 'Task updated successfully')
+        showToast('success', 'Task Updated', 'Task was updated successfully')
       } else {
         // Create new task
         console.log('Creating new task')
@@ -213,7 +221,7 @@ export default function AdminMasterTasksPage() {
         // Immediately add the new task to the UI
         setTasks([newTask, ...tasks])
         
-        showAlert('success', 'Task created successfully')
+        showToast('success', 'Task Created', 'New task was created successfully')
       }
       
       // Close dialog and reset state
@@ -226,7 +234,7 @@ export default function AdminMasterTasksPage() {
     } catch (error) {
       console.error('Error saving task:', error)
       const errorMessage = error instanceof Error ? error.message : 'Unknown error'
-      showAlert('error', `Failed to ${editingTask ? 'update' : 'create'} task: ${errorMessage}`)
+      showToast('error', `${editingTask ? 'Update' : 'Create'} Failed`, `Failed to ${editingTask ? 'update' : 'create'} task: ${errorMessage}`)
     } finally {
       setFormLoading(false)
     }
@@ -261,26 +269,12 @@ export default function AdminMasterTasksPage() {
     try {
       console.log('Generating instances for task:', taskId || 'all tasks')
       
-      // Get current session for authentication
-      const { data: { session } } = await supabase.auth.getSession()
-      if (!session?.access_token) {
-        throw new Error('Authentication required')
-      }
-
-      const response = await fetch(`/api/jobs/generate-instances?mode=custom${taskId ? `&masterTaskId=${taskId}` : ''}`, {
-        method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${session.access_token}`,
-          'Content-Type': 'application/json'
-        }
-      })
+      // Use authenticated API call
+      const result = await authenticatedGet(`/api/jobs/generate-instances?mode=custom${taskId ? `&masterTaskId=${taskId}` : ''}`)
       
-      if (!response.ok) {
-        const errorData = await response.json()
-        throw new Error(errorData.error || 'Failed to generate instances')
+      if (!result) {
+        throw new Error('Failed to generate instances')
       }
-      
-      const result = await response.json()
       
       if (result.success) {
         const message = taskId 
@@ -291,14 +285,14 @@ export default function AdminMasterTasksPage() {
           ? ` (${result.stats.skipped} skipped as they already exist)`
           : ''
         
-        showAlert('success', message + details)
+        showToast('success', 'Instances Generated', message + details)
       } else {
-        showAlert('error', result.message || 'Failed to generate instances')
+        showToast('error', 'Generation Failed', result.message || 'Failed to generate instances')
       }
     } catch (error) {
       console.error('Error generating instances:', error)
       const errorMessage = error instanceof Error ? error.message : 'Failed to generate instances'
-      showAlert('error', `❌ ${errorMessage}`)
+      showToast('error', 'Generation Failed', errorMessage)
     } finally {
       if (taskId) {
         setGeneratingInstancesId(null)
@@ -306,7 +300,190 @@ export default function AdminMasterTasksPage() {
     }
   }
 
+  // Export handler function
+  const handleExport = async () => {
+    try {
+      if (filteredTasks.length === 0) {
+        showToast('error', 'Export Failed', 'No tasks to export')
+        return
+      }
 
+      // Create export data from current filtered tasks
+      const exportData = filteredTasks.map(task => ({
+        'Title': task.title,
+        'Description': task.description || '',
+        'Position': task.positions?.name || task.position?.name || '',
+        'Frequency': frequencyLabels[task.frequency as keyof typeof frequencyLabels] || task.frequency,
+        'Category': task.category || '',
+        'Status': task.publish_status,
+        'Default Due Time': task.default_due_time || '',
+        'Timing': task.timing || '',
+        'Weekdays': task.weekdays?.join(',') || '',
+        'Months': task.months?.join(',') || '',
+        'Sticky Once Off': task.sticky_once_off ? 'Yes' : 'No',
+        'Allow Edit When Locked': task.allow_edit_when_locked ? 'Yes' : 'No',
+        'Publish Delay Date': task.publish_delay_date || ''
+      }))
+
+      // Create Excel workbook
+      const worksheet = XLSX.utils.json_to_sheet(exportData)
+      const workbook = XLSX.utils.book_new()
+      XLSX.utils.book_append_sheet(workbook, worksheet, 'Master Tasks')
+
+      // Generate Excel file and download
+      const excelBuffer = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' })
+      const blob = new Blob([excelBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
+      
+      const link = document.createElement('a')
+      const url = URL.createObjectURL(blob)
+      link.setAttribute('href', url)
+      link.setAttribute('download', `master_tasks_export_${new Date().toISOString().split('T')[0]}.xlsx`)
+      link.style.visibility = 'hidden'
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      URL.revokeObjectURL(url)
+
+      showToast('success', 'Export Successful', `Exported ${exportData.length} master tasks to Excel`)
+    } catch (error) {
+      console.error('Error exporting tasks:', error)
+      const errorMessage = error instanceof Error ? error.message : 'Failed to export tasks'
+      showToast('error', 'Export Failed', errorMessage)
+    }
+  }
+
+  // Import handler function
+  const handleImport = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    if (!file) return
+
+    try {
+      let importData: any[] = []
+      const fileName = file.name.toLowerCase()
+
+      if (fileName.endsWith('.csv')) {
+        // Handle CSV files
+        const text = await file.text()
+        const lines = text.split('\n').filter(line => line.trim())
+        
+        if (lines.length < 2) {
+          throw new Error('File must contain at least a header row and one data row')
+        }
+
+        const headers = lines[0].split(',').map(h => h.trim().replace(/"/g, ''))
+        
+        for (let i = 1; i < lines.length; i++) {
+          const values = lines[i].split(',').map(v => v.trim().replace(/"/g, ''))
+          const row: any = {}
+          
+          headers.forEach((header, index) => {
+            row[header] = values[index] || ''
+          })
+          
+          importData.push(row)
+        }
+      } else if (fileName.endsWith('.xlsx') || fileName.endsWith('.xls')) {
+        // Handle Excel files
+        const arrayBuffer = await file.arrayBuffer()
+        const workbook = XLSX.read(arrayBuffer, { type: 'array' })
+        const sheetName = workbook.SheetNames[0]
+        const worksheet = workbook.Sheets[sheetName]
+        importData = XLSX.utils.sheet_to_json(worksheet)
+      } else {
+        throw new Error('Unsupported file format. Please use CSV or Excel files.')
+      }
+
+      if (importData.length === 0) {
+        throw new Error('No data found in the file')
+      }
+
+      // Validate required headers
+      const requiredHeaders = ['Title', 'Position', 'Frequency']
+      const firstRow = importData[0]
+      const availableHeaders = Object.keys(firstRow)
+      
+      const missingHeaders = requiredHeaders.filter(header => !availableHeaders.includes(header))
+      if (missingHeaders.length > 0) {
+        throw new Error(`Missing required columns: ${missingHeaders.join(', ')}`)
+      }
+
+      // Process and validate data
+      const processedData = []
+      for (let i = 0; i < importData.length; i++) {
+        const row = importData[i]
+        
+        // Find position ID
+        const position = positions.find(p => p.name === row['Position'])
+        if (!position) {
+          throw new Error(`Position "${row['Position']}" not found in row ${i + 2}`)
+        }
+
+        // Map data to master task format
+        const taskData = {
+          title: row['Title']?.toString().trim(),
+          description: row['Description']?.toString().trim() || '',
+          position_id: position.id,
+          frequency: Object.keys(frequencyLabels).find(key => 
+            frequencyLabels[key as keyof typeof frequencyLabels] === row['Frequency']
+          ) || row['Frequency'],
+          category: row['Category']?.toString().trim() || '',
+          publish_status: (['draft', 'active', 'inactive'].includes(row['Status']) ? row['Status'] : 'draft') as 'draft' | 'active' | 'inactive',
+          default_due_time: row['Default Due Time']?.toString().trim() || null,
+          timing: row['Timing']?.toString().trim() || '',
+          weekdays: row['Weekdays'] ? 
+            row['Weekdays'].toString().split(',').map((w: string) => parseInt(w.trim())).filter((w: number) => !isNaN(w) && w >= 0 && w <= 6) : [],
+          months: row['Months'] ? 
+            row['Months'].toString().split(',').map((m: string) => parseInt(m.trim())).filter((m: number) => !isNaN(m) && m >= 1 && m <= 12) : [],
+          sticky_once_off: row['Sticky Once Off']?.toString().toLowerCase() === 'yes',
+          allow_edit_when_locked: row['Allow Edit When Locked']?.toString().toLowerCase() === 'yes',
+          publish_delay_date: row['Publish Delay Date']?.toString().trim() || null
+        }
+
+        if (!taskData.title) {
+          throw new Error(`Title is required in row ${i + 2}`)
+        }
+
+        processedData.push(taskData)
+      }
+
+      // Import tasks one by one
+      let successCount = 0
+      let errorCount = 0
+      const errors: string[] = []
+      
+      for (let i = 0; i < processedData.length; i++) {
+        const taskData = processedData[i]
+        try {
+          const newTask = await masterTasksApi.create(taskData)
+          setTasks(prevTasks => [newTask, ...prevTasks])
+          successCount++
+        } catch (error) {
+          console.error('Error importing task:', taskData.title, error)
+          errorCount++
+          errors.push(`Row ${i + 2}: ${taskData.title} - ${error instanceof Error ? error.message : 'Unknown error'}`)
+        }
+      }
+
+      if (successCount > 0) {
+        showToast('success', 'Import Successful', `Successfully imported ${successCount} tasks${errorCount > 0 ? ` (${errorCount} failed)` : ''}`)
+        if (errors.length > 0 && errors.length <= 5) {
+          console.log('Import errors:', errors)
+        }
+      } else {
+        showToast('error', 'Import Failed', `${errorCount} tasks could not be imported`)
+      }
+
+    } catch (error) {
+      console.error('Error importing file:', error)
+      const errorMessage = error instanceof Error ? error.message : 'Failed to import file'
+      showToast('error', 'Import Failed', errorMessage)
+    } finally {
+      // Reset file input
+      if (fileInputRef.current) {
+        fileInputRef.current.value = ''
+      }
+    }
+  }
 
   // Filter tasks based on search and filters
   const filteredTasks = tasks.filter(task => {
@@ -398,35 +575,13 @@ export default function AdminMasterTasksPage() {
           </div>
         </div>
 
-        {/* Alert */}
-        {alert && (
-          <Alert className={`mb-6 ${alert.type === 'success' ? 'border-green-200 bg-green-50' : 'border-red-200 bg-red-50'}`}>
-            <AlertDescription className={alert.type === 'success' ? 'text-green-800' : 'text-red-800'}>
-              {alert.message}
-            </AlertDescription>
-          </Alert>
-        )}
 
-        {/* Debug Info - Remove this after testing */}
-        <Card className="mb-6 bg-blue-50 border-blue-200">
-          <CardContent className="pt-4">
-            <h4 className="font-semibold text-blue-800 mb-2">Authentication Status</h4>
-            <div className="text-sm text-blue-700 space-y-1">
-              <div>Auth Loading: {authLoading ? 'Yes' : 'No'}</div>
-              <div>User: {user ? user.email : 'None'}</div>
-              <div>Role: {user?.profile?.role || 'None'}</div>
-              <div>Position: {user?.profile?.position_id || 'None'}</div>
-              <div>Tasks Loaded: {tasks.length}</div>
-              <div>Positions Loaded: {positions.length}</div>
-            </div>
-          </CardContent>
-        </Card>
 
 
 
         {/* Filters */}
         <Card className="card-surface mb-6">
-          <CardContent className="pt-4 lg:pt-6">
+          <CardContent className="pt-4 pb-4">
             {/* Mobile Filter Toggle */}
             <div className="lg:hidden mb-4">
               <Button
@@ -442,22 +597,21 @@ export default function AdminMasterTasksPage() {
               </Button>
             </div>
 
-            {/* Search - Always visible */}
-            <div className="mb-4 lg:mb-0">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
-                <Input
-                  placeholder="Search tasks..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-10"
-                />
-              </div>
-            </div>
-
             {/* Filters - Hidden on mobile unless toggled */}
             <div className={`${showMobileFilters ? 'block' : 'hidden'} lg:block`}>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-3 lg:gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3">
+                {/* Search Field - Wider than others */}
+                <div className="relative lg:col-span-2">
+                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+                  <Input
+                    placeholder="Search tasks..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="pl-10"
+                  />
+                </div>
+                
+                {/* Position Filter */}
                 <Select value={filterPosition} onValueChange={setFilterPosition}>
                   <SelectTrigger>
                     <SelectValue placeholder="All Positions" />
@@ -472,6 +626,7 @@ export default function AdminMasterTasksPage() {
                   </SelectContent>
                 </Select>
 
+                {/* Status Filter */}
                 <Select value={filterStatus} onValueChange={setFilterStatus}>
                   <SelectTrigger>
                     <SelectValue placeholder="All Statuses" />
@@ -484,6 +639,7 @@ export default function AdminMasterTasksPage() {
                   </SelectContent>
                 </Select>
 
+                {/* Category Filter */}
                 <Select value={filterCategory} onValueChange={setFilterCategory}>
                   <SelectTrigger>
                     <SelectValue placeholder="All Categories" />
@@ -498,14 +654,28 @@ export default function AdminMasterTasksPage() {
                   </SelectContent>
                 </Select>
 
-                <div className="sm:col-span-2 lg:col-span-1 xl:col-span-2">
-                  <div className="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-2">
-                    <Button variant="outline" size="sm" className="flex-1">
-                      <Download className="w-4 h-4 mr-2" />
-                      Export
-                    </Button>
-                    <Button variant="outline" size="sm" className="flex-1">
-                      <Upload className="w-4 h-4 mr-2" />
+                {/* Export and Import Buttons - Same width */}
+                <div className="grid grid-cols-2 gap-2">
+                  <Button variant="outline" size="sm" onClick={handleExport} className="w-full">
+                    <Download className="w-4 h-4 mr-1" />
+                    Export
+                  </Button>
+                  
+                  <div className="relative">
+                    <input
+                      type="file"
+                      ref={fileInputRef}
+                      onChange={handleImport}
+                      accept=".csv,.xlsx,.xls"
+                      className="hidden"
+                    />
+                    <Button 
+                      variant="outline" 
+                      size="sm" 
+                      onClick={() => fileInputRef.current?.click()}
+                      className="w-full"
+                    >
+                      <Upload className="w-4 h-4 mr-1" />
                       Import
                     </Button>
                   </div>

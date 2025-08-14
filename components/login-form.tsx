@@ -123,7 +123,7 @@ export function LoginForm() {
               className="w-full bg-[var(--color-primary)] hover:bg-[var(--color-primary)]/90 text-[var(--color-primary-on)] border-0"
               disabled={isLoading || isSubmitting}
             >
-              {isLoading || isSubmitting ? "Signing in..." : "Sign In"}
+              {isLoading || isSubmitting ? "Signing in..." : "Login"}
             </Button>
 
             <div className="text-center">

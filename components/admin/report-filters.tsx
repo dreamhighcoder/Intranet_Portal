@@ -10,6 +10,8 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { CalendarIcon, Download } from "lucide-react"
 import { TASK_CATEGORIES } from "@/lib/constants"
 import { Position } from "@/lib/types"
+import { positionsApi } from "@/lib/api-client"
+import { useAuth } from "@/lib/auth"
 
 interface ReportFiltersProps {
   onFiltersChange: (filters: any) => void
@@ -19,6 +21,7 @@ interface ReportFiltersProps {
 export function ReportFilters({ onFiltersChange, onExport }: ReportFiltersProps) {
   const [positions, setPositions] = useState<Position[]>([])
   const [isLoadingPositions, setIsLoadingPositions] = useState(true)
+  const { user, isLoading } = useAuth()
   const [dateRange, setDateRange] = useState({
     from: new Date(new Date().setDate(new Date().getDate() - 30)),
     to: new Date(),
@@ -29,13 +32,15 @@ export function ReportFilters({ onFiltersChange, onExport }: ReportFiltersProps)
 
   useEffect(() => {
     async function fetchPositions() {
+      if (isLoading || !user) {
+        setIsLoadingPositions(false)
+        return
+      }
+      
       try {
-        const response = await fetch('/api/positions')
-        if (response.ok) {
-          const data = await response.json()
+        const data = await positionsApi.getAll()
+        if (data) {
           setPositions(data)
-        } else {
-          console.error('Failed to fetch positions')
         }
       } catch (error) {
         console.error('Error fetching positions:', error)
@@ -45,7 +50,7 @@ export function ReportFilters({ onFiltersChange, onExport }: ReportFiltersProps)
     }
 
     fetchPositions()
-  }, [])
+  }, [user, isLoading])
 
   const handleApplyFilters = () => {
     onFiltersChange({

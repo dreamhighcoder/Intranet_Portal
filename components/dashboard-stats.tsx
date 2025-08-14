@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { authenticatedGet } from "@/lib/api-client"
 
 interface DashboardStats {
   newSince9am: number
@@ -17,17 +18,14 @@ export function DashboardStats() {
   useEffect(() => {
     async function fetchDashboardStats() {
       try {
-        const response = await fetch('/api/dashboard')
-        if (response.ok) {
-          const data = await response.json()
+        const data = await authenticatedGet('/api/dashboard')
+        if (data) {
           setStats({
             newSince9am: data.summary.newSince9am || 0,
             dueToday: data.today.total || 0,
             overdue: data.summary.overdueTasks || 0,
             missed: data.summary.missedLast7Days || 0,
           })
-        } else {
-          console.error('Failed to fetch dashboard stats')
         }
       } catch (error) {
         console.error('Error fetching dashboard stats:', error)

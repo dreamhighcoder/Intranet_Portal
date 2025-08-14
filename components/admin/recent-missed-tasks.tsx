@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
+import { taskInstancesApi } from "@/lib/api-client"
 
 interface TaskInstance {
   id: string
@@ -31,13 +32,10 @@ export function RecentMissedTasks() {
         
         const dateRange = `${startDate.toISOString().split('T')[0]},${endDate.toISOString().split('T')[0]}`
         
-        // Fetch missed tasks
-        const missedResponse = await fetch(`/api/task-instances?status=missed&dateRange=${dateRange}`)
-        const overdueResponse = await fetch(`/api/task-instances?status=overdue&dateRange=${dateRange}`)
-        
+        // Fetch missed and overdue tasks
         const [missedData, overdueData] = await Promise.all([
-          missedResponse.ok ? missedResponse.json() : [],
-          overdueResponse.ok ? overdueResponse.json() : []
+          taskInstancesApi.getAll({ status: 'missed', dateRange }),
+          taskInstancesApi.getAll({ status: 'overdue', dateRange })
         ])
         
         // Combine and sort by due date (most recent first)

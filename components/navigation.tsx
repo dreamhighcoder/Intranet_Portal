@@ -1,23 +1,24 @@
 "use client"
 
 import { Button } from "@/components/ui/button"
-import { useAuth } from "@/lib/auth"
+import { usePositionAuth } from "@/lib/position-auth-context"
 import Link from "next/link"
-import { usePathname } from "next/navigation"
+import { usePathname, useRouter } from "next/navigation"
 import { useState } from "react"
 import { Menu, X, LogOut, User } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 
 export function Navigation() {
-  const { user, isLoading, signOut } = useAuth()
+  const { user, isLoading, signOut, isAdmin } = usePositionAuth()
   const pathname = usePathname()
+  const router = useRouter()
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
   const { toast } = useToast()
 
   if (!user) return null
 
-  // Don't render navigation until profile is fully loaded to prevent flickering
-  if (isLoading || (user && !user.profile)) {
+  // Don't render navigation until user is fully loaded
+  if (isLoading) {
     return (
       <nav
         className="shadow-lg sticky top-0 z-50"
@@ -33,7 +34,7 @@ export function Navigation() {
                 <svg className="w-8 h-8" fill="currentColor" viewBox="0 0 24 24">
                   <path d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 9.172V5L8 4z" />
                 </svg>
-                <span className="font-semibold text-lg">Pharmacy Portal</span>
+                <span className="font-semibold text-lg">Richmond Pharmacy</span>
               </div>
             </div>
             <div className="hidden md:flex items-center space-x-4">
@@ -47,27 +48,28 @@ export function Navigation() {
     )
   }
 
-  const isAdmin = user.profile?.role === "admin"
-
-  const navItems = [
-    { href: "/", label: "Home" },
-    { href: "/checklist", label: "Checklist" },
-    { href: "/calendar", label: "Calendar" },
-    ...(isAdmin
-      ? [
-          { href: "/admin", label: "Admin" },
-          { href: "/admin/reports", label: "Reports" },
-        ]
-      : []),
-  ]
+  // Navigation items based on role
+  const navItems = isAdmin
+    ? [
+        { href: "/admin", label: "Dashboard" },
+        { href: "/checklist", label: "Checklists" },
+        { href: "/calendar", label: "Calendar" },
+        { href: "/admin/reports", label: "Reports" },
+      ]
+    : [
+        { href: "/checklist", label: "Checklist" },
+        { href: "/calendar", label: "Calendar" },
+      ]
 
   const handleLogout = async () => {
-    await signOut()
+    signOut()
     toast({
       title: "Logged out",
       description: "You have been successfully logged out.",
       variant: "default",
     })
+    // Redirect to home page after logout
+    router.push('/')
   }
 
   return (
@@ -81,16 +83,13 @@ export function Navigation() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between items-center h-16">
           <div className="flex items-center space-x-8">
-            <Link
-              href="/"
-              className="flex items-center space-x-2 hover:opacity-80 transition-opacity"
-              style={{ color: "var(--color-primary-on)" }}
-            >
+            {/* Logo and Title - No link since we're in authenticated state */}
+            <div className="flex items-center space-x-2">
               <svg className="w-8 h-8" fill="currentColor" viewBox="0 0 24 24">
                 <path d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 9.172V5L8 4z" />
               </svg>
-              <span className="font-semibold text-lg">Pharmacy Portal</span>
-            </Link>
+              <span className="font-semibold text-lg">Richmond Pharmacy</span>
+            </div>
 
             {/* Desktop Navigation */}
             <div className="hidden md:flex space-x-4">
@@ -122,7 +121,9 @@ export function Navigation() {
           <div className="hidden md:flex items-center space-x-4">
             <div className="flex items-center space-x-2 text-sm" style={{ color: "rgba(255, 255, 255, 0.8)" }}>
               <User className="w-4 h-4" />
-              <span>Welcome, {user.profile?.display_name || user.email}</span>
+              <span>
+                Welcome, {user.position.displayName === "Administrator" ? "Administrator" : user.position.displayName}
+              </span>
             </div>
             <Button
               variant="outline"
@@ -181,7 +182,7 @@ export function Navigation() {
               ))}
               <div className="border-t border-white/20 pt-2 mt-2">
                 <div className="px-3 py-2 text-sm" style={{ color: "rgba(255, 255, 255, 0.8)" }}>
-                  Welcome, {user.profile?.display_name || user.email}
+                  Welcome, {user.position.displayName === "Administrator" ? "Administrator" : user.position.displayName}
                 </div>
                 <Button
                   variant="ghost"

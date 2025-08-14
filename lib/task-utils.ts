@@ -1,5 +1,5 @@
 import type { TaskInstance, TaskWithDetails, TaskStatus } from "./types"
-import { taskInstancesApi } from "./api"
+import { taskInstancesApi } from "./api-client"
 
 // Get tasks with full details for a specific date
 export async function getTasksForDate(date: string): Promise<TaskWithDetails[]> {
@@ -94,7 +94,7 @@ export function calculateTaskStatus(task: TaskInstance): TaskStatus {
   if (task.due_date < today) {
     // Check if it was missed (not completed by end of due date)
     const endOfDueDate = new Date(`${task.due_date}T23:59:59`)
-    if (now > endOfDueDate && task.status !== "done") {
+    if (now > endOfDueDate) {
       return "missed"
     }
     return "overdue"

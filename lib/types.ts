@@ -132,7 +132,7 @@ export interface SystemConfig {
 export interface TaskWithDetails extends TaskInstance {
   master_task: MasterTask
   position: Position
-  audit_logs?: TaskAuditLog[]
+  audit_logs?: AuditLog[]
 }
 
 export interface DashboardStats {
@@ -147,12 +147,21 @@ export interface DashboardStats {
 }
 
 export type PositionType =
+  | "administrator"
   | "pharmacist-primary"
   | "pharmacist-supporting"
   | "pharmacy-assistants"
   | "dispensary-technicians"
   | "daa-packers"
   | "operational-managerial"
+
+export interface PositionAuth {
+  id: string
+  name: string
+  displayName: string
+  password: string
+  role: "admin" | "viewer"
+}
 
 export type TaskStatus = "not_due" | "due_today" | "overdue" | "missed" | "done"
 export type UserRole = "admin" | "viewer"
@@ -173,7 +182,5 @@ export type TaskTiming = "morning" | "before_close" | "custom"
 export type PublishStatus = "active" | "draft" | "inactive"
 
 export interface OutstandingTask extends TaskWithDetails {
-  acknowledged?: boolean
-  resolved?: boolean
   follow_up_notes?: string
 }

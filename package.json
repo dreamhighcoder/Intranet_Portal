@@ -47,7 +47,7 @@
     "clsx": "^2.1.1",
     "cmdk": "1.0.4",
     "date-fns": "4.1.0",
-
+    "dotenv": "^17.2.1",
     "embla-carousel-react": "8.5.1",
     "geist": "latest",
     "input-otp": "1.4.1",
@@ -63,6 +63,7 @@
     "sonner": "^1.7.4",
     "tailwind-merge": "^2.5.5",
     "tailwindcss-animate": "^1.0.7",
+    "xlsx": "^0.18.5",
     "zod": "3.25.67"
   },
   "devDependencies": {
@@ -70,6 +71,7 @@
     "@types/node": "^22",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "@types/xlsx": "^0.0.36",
     "postcss": "^8.5",
     "tailwindcss": "^4.1.9",
     "tsx": "^4.19.2",

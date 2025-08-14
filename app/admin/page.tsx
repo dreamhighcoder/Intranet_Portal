@@ -2,6 +2,7 @@
 
 import { useEffect } from "react"
 import { useAuth } from "@/lib/auth"
+import { usePositionAuth } from "@/lib/position-auth-context"
 import { Navigation } from "@/components/navigation"
 import { KPIWidgets } from "@/components/admin/kpi-widgets"
 import { RecentMissedTasks } from "@/components/admin/recent-missed-tasks"
@@ -12,14 +13,20 @@ import { useRouter } from "next/navigation"
 import { Users, ClipboardList, Calendar, Settings, BarChart3 } from "lucide-react"
 
 export default function AdminDashboard() {
-  const { user, isLoading } = useAuth()
+  const { user: oldUser, isLoading: oldIsLoading } = useAuth()
+  const { user: positionUser, isLoading: positionIsLoading, isAdmin } = usePositionAuth()
   const router = useRouter()
 
+  // Use position-based auth as primary, fallback to old auth for backward compatibility  
+  const user = positionUser || oldUser
+  const isLoading = positionIsLoading && oldIsLoading
+  const userIsAdmin = positionUser ? isAdmin : (oldUser?.profile?.role === "admin")
+
   useEffect(() => {
-    if (!isLoading && (!user || user.profile?.role !== "admin")) {
+    if (!isLoading && (!user || !userIsAdmin)) {
       router.push("/")
     }
-  }, [user, isLoading, router])
+  }, [user, userIsAdmin, isLoading, router])
 
   if (isLoading) {
     return (
@@ -32,7 +39,7 @@ export default function AdminDashboard() {
     )
   }
 
-  if (!user || user.profile?.role !== "admin") return null
+  if (!user || !userIsAdmin) return null
 
   const quickActions = [
     {

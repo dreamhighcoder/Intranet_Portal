@@ -3,6 +3,7 @@
 import { useState, useEffect, useMemo } from "react"
 import { useSearchParams, useRouter } from "next/navigation"
 import { useAuth } from "@/lib/auth"
+import { usePositionAuth } from "@/lib/position-auth-context"
 import { Navigation } from "@/components/navigation"
 import { DateNavigator } from "@/components/date-navigator"
 import { TaskFilters } from "@/components/task-filters"
@@ -11,12 +12,20 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { getTasksByPosition, getTaskCounts, calculateTaskStatus, completeTask, undoTask } from "@/lib/task-utils"
-import { Check, X, Eye, LogOut } from "lucide-react"
+import { positionsApi } from "@/lib/api-client"
+import { Check, X, Eye, LogOut, Settings } from "lucide-react"
+import Link from "next/link"
 
 export default function ChecklistPage() {
-  const { user, isLoading, logout } = useAuth()
+  const { user: oldUser, isLoading: oldIsLoading, logout } = useAuth()
+  const { user: positionUser, isLoading: positionIsLoading, signOut, isAdmin } = usePositionAuth()
   const router = useRouter()
   const searchParams = useSearchParams()
+
+  // Use position-based auth as primary, fallback to old auth for backward compatibility
+  const user = positionUser || oldUser
+  const isLoading = positionIsLoading && oldIsLoading
+  const userRole = positionUser ? (positionUser.role === 'admin' ? 'admin' : 'viewer') : oldUser?.profile?.role
 
   const [currentDate, setCurrentDate] = useState(() => {
     return searchParams.get("date") || new Date().toISOString().split("T")[0]
@@ -27,6 +36,7 @@ export default function ChecklistPage() {
   const [selectedPosition, setSelectedPosition] = useState("all")
   const [refreshKey, setRefreshKey] = useState(0)
   const [tasks, setTasks] = useState<any[]>([])
+  const [positions, setPositions] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [taskCounts, setTaskCounts] = useState({
     total: 0,
@@ -37,16 +47,44 @@ export default function ChecklistPage() {
   })
 
   // Create stable references to prevent infinite re-renders
-  const userRole = useMemo(() => user?.profile?.role, [user?.profile?.role])
-  const userId = useMemo(() => user?.id, [user?.id])
-  const userPositionId = useMemo(() => user?.profile?.position_id, [user?.profile?.position_id])
+  const userId = useMemo(() => {
+    if (positionUser) return positionUser.id
+    return oldUser?.id
+  }, [positionUser?.id, oldUser?.id])
+  
+  const userPositionId = useMemo(() => {
+    if (positionUser) return positionUser.id
+    return oldUser?.profile?.position_id
+  }, [positionUser?.id, oldUser?.profile?.position_id])
+  
+  // Get position parameter from URL
+  const urlPositionId = useMemo(() => searchParams.get("position"), [searchParams])
+  
+  // Determine which position to show tasks for
+  const viewingPositionId = useMemo(() => {
+    // If URL has a position parameter, use it (admins can view any position, users can only view if it matches their position)
+    if (urlPositionId) {
+      if (userRole === 'admin' || urlPositionId === userPositionId) {
+        return urlPositionId
+      }
+    }
+    // Otherwise, use user's own position for non-admin users
+    return userRole === 'admin' ? null : userPositionId
+  }, [urlPositionId, userRole, userPositionId])
+  
+  // Get the position name for display
+  const viewingPositionName = useMemo(() => {
+    if (!viewingPositionId) return null
+    const position = positions.find(p => p.id === viewingPositionId)
+    return position?.name
+  }, [viewingPositionId, positions])
 
   // Apply filters to tasks with memoization to prevent unnecessary re-computations
   // This must be before any conditional returns to follow Rules of Hooks
   const filteredTasks = useMemo(() => {
     return tasks.filter((task) => {
-      // Position filter (only for admin users)
-      if (userRole === 'admin' && selectedPosition !== "all" && task.master_task.position_id !== selectedPosition) {
+      // Position filter (only for admin users when NOT viewing a specific position)
+      if (userRole === 'admin' && !viewingPositionId && selectedPosition !== "all" && task.master_task.position_id !== selectedPosition) {
         return false
       }
 
@@ -65,16 +103,33 @@ export default function ChecklistPage() {
 
       return true
     })
-  }, [tasks, selectedPosition, selectedCategory, selectedStatus, userRole])
+  }, [tasks, selectedPosition, selectedCategory, selectedStatus, userRole, viewingPositionId])
 
   // Handle auth redirect
   useEffect(() => {
     if (!isLoading && !user) {
-      router.push("/login")
+      router.push("/")
     }
   }, [user, isLoading, router])
 
-  // Load tasks when date, refresh key, or user changes
+  // Load positions data
+  useEffect(() => {
+    const loadPositions = async () => {
+      try {
+        const positionsData = await positionsApi.getAll()
+        setPositions(positionsData || [])
+      } catch (error) {
+        console.error('Error loading positions:', error)
+        setPositions([])
+      }
+    }
+
+    if (!isLoading && user) {
+      loadPositions()
+    }
+  }, [isLoading, user])
+
+  // Load tasks when date, refresh key, user, or viewing position changes
   useEffect(() => {
     const loadTasks = async () => {
       // Only proceed if auth is complete and user is fully loaded
@@ -96,36 +151,38 @@ export default function ChecklistPage() {
         return
       }
       
-      // For non-admin users, require position_id
-      if (userRole !== 'admin' && !userPositionId) {
-        setLoading(false)
-        setTasks([])
-        return
-      }
-      
       setLoading(true)
       try {
-        if (userRole === 'admin') {
-          // Admin users can see all tasks
+        if (viewingPositionId) {
+          // Load tasks for specific position
           const [tasksByPosition, counts] = await Promise.all([
             getTasksByPosition(currentDate),
             getTaskCounts(currentDate)
           ])
           
-          // Show all tasks for admin
+          const positionTasks = tasksByPosition[viewingPositionId] || []
+          setTasks(positionTasks)
+          setTaskCounts(counts)
+        } else if (userRole === 'admin') {
+          // Admin users can see all tasks when no specific position is selected
+          const [tasksByPosition, counts] = await Promise.all([
+            getTasksByPosition(currentDate),
+            getTaskCounts(currentDate)
+          ])
+          
           const allTasks = Object.values(tasksByPosition).flat()
           setTasks(allTasks)
           setTaskCounts(counts)
         } else {
-          // Regular users see only their position's tasks
-          const [tasksByPosition, counts] = await Promise.all([
-            getTasksByPosition(currentDate),
-            getTaskCounts(currentDate)
-          ])
-          
-          const userPositionTasks = userPositionId ? tasksByPosition[userPositionId] || [] : []
-          setTasks(userPositionTasks)
-          setTaskCounts(counts)
+          // Fallback: Regular users with no position should see empty list
+          setTasks([])
+          setTaskCounts({
+            total: 0,
+            done: 0,
+            due_today: 0,
+            overdue: 0,
+            missed: 0
+          })
         }
       } catch (error) {
         console.error('Error loading tasks:', error)
@@ -136,7 +193,7 @@ export default function ChecklistPage() {
     }
 
     loadTasks()
-  }, [currentDate, refreshKey, isLoading, userId, userRole, userPositionId])
+  }, [currentDate, refreshKey, isLoading, userId, userRole, userPositionId, viewingPositionId])
 
   useEffect(() => {
     const dateParam = searchParams.get("date")
@@ -181,12 +238,16 @@ export default function ChecklistPage() {
   }
 
   const handleFinish = () => {
-    logout()
-    router.push("/login")
+    if (positionUser) {
+      signOut()
+    } else {
+      logout()
+    }
+    router.push("/")
   }
 
   // Show loading if auth is still loading OR if we have a user but no profile yet OR local loading
-  const isAuthLoading = isLoading || (user && !user.profile)
+  const isAuthLoading = isLoading || (oldUser && !oldUser.profile)
   const shouldShowLoading = isAuthLoading || loading
   
   if (shouldShowLoading) {
@@ -202,13 +263,13 @@ export default function ChecklistPage() {
     )
   }
 
-  // Only show access denied after auth is complete and user has no profile  
-  if (!user || !user.profile) {
+  // Only show access denied after auth is complete and no user
+  if (!user) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
           <h1 className="text-2xl font-bold text-red-600 mb-2">Access Denied</h1>
-          <p className="text-gray-600">Unable to load your user profile. Please contact an administrator.</p>
+          <p className="text-gray-600">Please log in to access your checklist.</p>
         </div>
       </div>
     )
@@ -262,25 +323,46 @@ export default function ChecklistPage() {
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Header */}
         <div className="mb-6">
-          <h1 className="text-3xl font-bold text-[var(--color-text-primary)] mb-2">
-            Checklist — {userRole === 'admin' ? 'All Positions' : (user?.position?.name || "Your Position")} —{" "}
-            {new Date(currentDate).toLocaleDateString("en-AU", {
-              weekday: "long",
-              year: "numeric",
-              month: "long",
-              day: "numeric",
-            })}
-          </h1>
+          <div className="flex items-center justify-between mb-2">
+            <h1 className="text-3xl font-bold text-[var(--color-text-primary)]">
+              Checklist — {viewingPositionName ? viewingPositionName : (userRole === 'admin' ? 'All Positions' : (positionUser?.position?.displayName || oldUser?.position?.name || "Your Position"))} —{" "}
+              {new Date(currentDate).toLocaleDateString("en-AU", {
+                weekday: "long",
+                year: "numeric",
+                month: "long",
+                day: "numeric",
+              })}
+            </h1>
+            {/* Checklist Management Button for Administrators */}
+            {userRole === 'admin' && (
+              <Button
+                asChild
+                variant="outline"
+                className="bg-transparent border-[var(--color-border)] text-[var(--color-text)] hover:bg-[var(--color-secondary)]"
+              >
+                <Link href="/admin/master-tasks" className="flex items-center space-x-2">
+                  <Settings className="w-4 h-4" />
+                  <span>Checklist Management</span>
+                </Link>
+              </Button>
+            )}
+          </div>
           <p className="text-[var(--color-text-secondary)]">
             {filteredTasks.length} tasks • {filteredTasks.filter((t) => t.status === "done").length} completed
           </p>
-          {userRole === 'admin' ? (
+          {viewingPositionName ? (
+            <p className="text-xs text-[var(--color-text-secondary)]">
+              Viewing: {viewingPositionName} checklist
+              {userRole === 'admin' && " (as Administrator)"}
+              {userRole !== 'admin' && urlPositionId === userPositionId && " (your position)"}
+            </p>
+          ) : userRole === 'admin' ? (
             <p className="text-xs text-[var(--color-text-secondary)]">
               Viewing as Administrator - All positions shown
             </p>
           ) : userPositionId && (
             <p className="text-xs text-[var(--color-text-secondary)]">
-              Position: {user?.position?.name || 'Unknown Position'}
+              Position: {positionUser?.position?.displayName || oldUser?.position?.name || 'Unknown Position'}
             </p>
           )}
         </div>
@@ -299,7 +381,7 @@ export default function ChecklistPage() {
             onPositionChange={setSelectedPosition}
             onCategoryChange={setSelectedCategory}
             onStatusChange={setSelectedStatus}
-            hidePositionFilter={userRole !== "admin"}
+            hidePositionFilter={userRole !== "admin" || !!viewingPositionId}
           />
         </div>
 
@@ -316,7 +398,7 @@ export default function ChecklistPage() {
                   <TableRow>
                     <TableHead>Task Title</TableHead>
                     <TableHead>Category</TableHead>
-                    {userRole === 'admin' && <TableHead>Position</TableHead>}
+                    {userRole === 'admin' && !viewingPositionId && <TableHead>Position</TableHead>}
                     <TableHead>Frequency</TableHead>
                     <TableHead>Due Date/Time</TableHead>
                     <TableHead>Status</TableHead>
@@ -334,7 +416,7 @@ export default function ChecklistPage() {
                         <TableCell>
                           <Badge variant="outline">{task.master_task.category}</Badge>
                         </TableCell>
-                        {userRole === 'admin' && (
+                        {userRole === 'admin' && !viewingPositionId && (
                           <TableCell>
                             <Badge variant="secondary">{task.master_task.position?.name || 'No Position'}</Badge>
                           </TableCell>

@@ -5,6 +5,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge"
 import { TASK_CATEGORIES } from "@/lib/constants"
 import { Position } from "@/lib/types"
+import { positionsApi } from "@/lib/api-client"
+import { useAuth } from "@/lib/auth"
 
 interface TaskFiltersProps {
   selectedPosition: string
@@ -27,21 +29,19 @@ export function TaskFilters({
 }: TaskFiltersProps) {
   const [positions, setPositions] = useState<Position[]>([])
   const [isLoadingPositions, setIsLoadingPositions] = useState(true)
+  const { user, isLoading } = useAuth()
 
   useEffect(() => {
     async function fetchPositions() {
-      if (hidePositionFilter) {
+      if (hidePositionFilter || isLoading || !user) {
         setIsLoadingPositions(false)
         return
       }
       
       try {
-        const response = await fetch('/api/positions')
-        if (response.ok) {
-          const data = await response.json()
+        const data = await positionsApi.getAll()
+        if (data) {
           setPositions(data)
-        } else {
-          console.error('Failed to fetch positions')
         }
       } catch (error) {
         console.error('Error fetching positions:', error)
@@ -51,7 +51,7 @@ export function TaskFilters({
     }
 
     fetchPositions()
-  }, [hidePositionFilter])
+  }, [hidePositionFilter, user, isLoading])
 
   const statusOptions = [
     { value: "all", label: "All Status" },

@@ -1,24 +1,37 @@
 "use client"
 
-import { useAuth } from "@/lib/auth"
+import { useState } from "react"
+import { usePositionAuth } from "@/lib/position-auth-context"
 import { Navigation } from "@/components/navigation"
+import { PublicNavigation } from "@/components/public-navigation"
+import { PositionLoginModal } from "@/components/position-login-modal"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import Link from "next/link"
+import { Users, Stethoscope, Package, Building } from "lucide-react"
+import { PositionAuthService } from "@/lib/position-auth"
 import { useRouter } from "next/navigation"
 import { useEffect } from "react"
-import { Users, Stethoscope, Package, Wrench, Shield, Building } from "lucide-react"
 
 export default function HomePage() {
-  const { user, isLoading } = useAuth()
+  const { user, isLoading } = usePositionAuth()
+  const [isLoginModalOpen, setIsLoginModalOpen] = useState(false)
+  const [modalType, setModalType] = useState<"general" | "checklist">("general")
+  const [selectedChecklistPositionId, setSelectedChecklistPositionId] = useState<string>("")
+  const [selectedChecklistTitle, setSelectedChecklistTitle] = useState<string>("")
   const router = useRouter()
 
+  // Redirect authenticated users based on their role
   useEffect(() => {
-    if (!isLoading && !user) {
-      router.push("/login")
+    if (!isLoading && user) {
+      if (user.role === 'admin') {
+        router.push('/admin')
+      } else {
+        router.push(`/checklist?position=${user.id}`)
+      }
     }
   }, [user, isLoading, router])
 
+  // Show loading state
   if (isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center" style={{ backgroundColor: "var(--color-bg)" }}>
@@ -35,66 +48,94 @@ export default function HomePage() {
     )
   }
 
-  if (!user) {
-    return null // Will redirect to login
+  // If user is authenticated, they'll be redirected, so show loading
+  if (user) {
+    return (
+      <div className="min-h-screen flex items-center justify-center" style={{ backgroundColor: "var(--color-bg)" }}>
+        <div className="text-center">
+          <div
+            className="animate-spin rounded-full h-8 w-8 border-b-2 mx-auto"
+            style={{ borderColor: "var(--color-primary)" }}
+          ></div>
+          <p className="mt-2" style={{ color: "var(--color-text-muted)" }}>
+            Loading...
+          </p>
+        </div>
+      </div>
+    )
   }
 
+  // Get checklist positions (excluding administrator)
+  const checklistPositions = PositionAuthService.getChecklistPositions()
+  
   const staffChecklists = [
     {
       title: "Checklist – Pharmacist (Primary)",
       description: "Licensed pharmacist duties and clinical responsibilities",
       icon: Stethoscope,
-      href: "/checklist?position=pharmacist-primary",
+      positionId: "550e8400-e29b-41d4-a716-446655440001",
       iconBg: "var(--color-primary)",
     },
     {
       title: "Checklist – Pharmacist (Supporting)",
       description: "Supporting pharmacist tasks and backup duties",
       icon: Stethoscope,
-      href: "/checklist?position=pharmacist-supporting",
+      positionId: "550e8400-e29b-41d4-a716-446655440002",
       iconBg: "#1565c0", // Due today blue
     },
     {
       title: "Checklist – Pharmacy Assistants",
       description: "Dispensing assistance and customer service tasks",
       icon: Users,
-      href: "/checklist?position=pharmacy-assistants",
+      positionId: "550e8400-e29b-41d4-a716-446655440003",
       iconBg: "var(--accent-green)",
     },
     {
       title: "Checklist – Dispensary Technicians",
       description: "Technical dispensing and preparation tasks",
       icon: Package,
-      href: "/checklist?position=dispensary-technicians",
+      positionId: "550e8400-e29b-41d4-a716-446655440004",
       iconBg: "#2e7d32", // Done green
     },
     {
       title: "Checklist – DAA Packers",
       description: "Dose administration aid packing and quality control",
       icon: Package,
-      href: "/checklist?position=daa-packers",
+      positionId: "550e8400-e29b-41d4-a716-446655440005",
       iconBg: "#fb8c00", // Overdue orange
     },
     {
       title: "Checklist – Operational/Managerial",
       description: "Management oversight and operational tasks",
       icon: Building,
-      href: "/checklist?position=operational-managerial",
+      positionId: "550e8400-e29b-41d4-a716-446655440006",
       iconBg: "#d12c2c", // Missed red
     },
   ]
 
+  const handleLoginClick = () => {
+    setModalType("general")
+    setIsLoginModalOpen(true)
+  }
+
+  const handleChecklistClick = (checklist: typeof staffChecklists[0]) => {
+    setModalType("checklist")
+    setSelectedChecklistPositionId(checklist.positionId)
+    setSelectedChecklistTitle(checklist.title.replace("Checklist – ", ""))
+    setIsLoginModalOpen(true)
+  }
+
   return (
     <div className="min-h-screen" style={{ backgroundColor: "var(--color-bg)" }}>
-      <Navigation />
+      <PublicNavigation onLoginClick={handleLoginClick} />
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Welcome Banner */}
         <div className="mb-8">
           <div className="pharmacy-gradient rounded-lg p-6" style={{ color: "var(--color-primary-on)" }}>
-            <h1 className="text-3xl font-bold mb-2">Welcome back, {user.profile?.display_name || user.email?.split('@')[0] || 'User'}!</h1>
+            <h1 className="text-3xl font-bold mb-2">Welcome to Richmond Pharmacy</h1>
             <p className="opacity-90">
-              {user.profile?.role === "admin" ? "Administrator" : user.profile?.display_name || "User"} • Ready to manage your tasks
+              Access your position-specific checklist to manage daily tasks and responsibilities
             </p>
           </div>
         </div>
@@ -127,10 +168,10 @@ export default function HomePage() {
                       {checklist.description}
                     </p>
                     <Button
-                      asChild
+                      onClick={() => handleChecklistClick(checklist)}
                       className="w-full bg-[var(--color-primary)] hover:bg-[var(--color-primary)]/90 text-[var(--color-primary-on)] border-0 mt-auto"
                     >
-                      <Link href={checklist.href}>Open Checklist</Link>
+                      Open Checklist
                     </Button>
                   </CardContent>
                 </Card>
@@ -138,79 +179,16 @@ export default function HomePage() {
             })}
           </div>
         </div>
-
-        {/* Quick Admin Access */}
-        {user.profile?.role === "admin" && (
-          <div className="mb-8">
-            <h2 className="text-xl font-semibold mb-4" style={{ color: "var(--color-text)" }}>
-              Administrative Tools
-            </h2>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <Card className="card-surface hover:shadow-md transition-shadow">
-                <CardHeader>
-                  <CardTitle className="text-lg flex items-center" style={{ color: "var(--color-text)" }}>
-                    <Shield className="h-5 w-5 mr-2" style={{ color: "var(--color-primary)" }} />
-                    Admin Dashboard
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <p className="mb-4" style={{ color: "var(--color-text-muted)" }}>
-                    View reports, manage tasks and system settings
-                  </p>
-                  <Button
-                    asChild
-                    variant="outline"
-                    className="w-full bg-transparent border-[var(--color-border)] text-[var(--color-text)] hover:bg-[var(--color-secondary)]"
-                  >
-                    <Link href="/admin">Admin Panel</Link>
-                  </Button>
-                </CardContent>
-              </Card>
-
-              <Card className="card-surface hover:shadow-md transition-shadow">
-                <CardHeader>
-                  <CardTitle className="text-lg flex items-center" style={{ color: "var(--color-text)" }}>
-                    <Wrench className="h-5 w-5 mr-2" style={{ color: "var(--color-primary)" }} />
-                    Master Tasks
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <p className="mb-4" style={{ color: "var(--color-text-muted)" }}>
-                    Create and manage master task templates
-                  </p>
-                  <Button
-                    asChild
-                    variant="outline"
-                    className="w-full bg-transparent border-[var(--color-border)] text-[var(--color-text)] hover:bg-[var(--color-secondary)]"
-                  >
-                    <Link href="/admin/master-tasks">Manage Tasks</Link>
-                  </Button>
-                </CardContent>
-              </Card>
-
-              <Card className="card-surface hover:shadow-md transition-shadow">
-                <CardHeader>
-                  <CardTitle className="text-lg" style={{ color: "var(--color-text)" }}>
-                    Calendar View
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <p className="mb-4" style={{ color: "var(--color-text-muted)" }}>
-                    Navigate tasks by date and plan ahead
-                  </p>
-                  <Button
-                    asChild
-                    variant="outline"
-                    className="w-full bg-transparent border-[var(--color-border)] text-[var(--color-text)] hover:bg-[var(--color-secondary)]"
-                  >
-                    <Link href="/calendar">View Calendar</Link>
-                  </Button>
-                </CardContent>
-              </Card>
-            </div>
-          </div>
-        )}
       </main>
+
+      {/* Login Modal */}
+      <PositionLoginModal
+        isOpen={isLoginModalOpen}
+        onClose={() => setIsLoginModalOpen(false)}
+        modalType={modalType}
+        checklistPositionId={selectedChecklistPositionId}
+        checklistTitle={selectedChecklistTitle}
+      />
     </div>
   )
 }

@@ -10,6 +10,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Edit, Trash2, Plus, Users, Briefcase } from "lucide-react"
 import { useRouter } from "next/navigation"
 import { Position, UserProfile } from "@/lib/types"
+import { positionsApi, authenticatedGet } from "@/lib/api-client"
 
 export default function UsersPositionsPage() {
   const { user, isLoading } = useAuth()
@@ -30,18 +31,16 @@ export default function UsersPositionsPage() {
       if (user?.role !== 'admin') return
       
       try {
-        const [positionsResponse, usersResponse] = await Promise.all([
-          fetch('/api/positions'),
-          fetch('/api/user-profiles')
+        const [positionsData, usersData] = await Promise.all([
+          positionsApi.getAll(),
+          authenticatedGet('/api/user-profiles')
         ])
 
-        if (positionsResponse.ok) {
-          const positionsData = await positionsResponse.json()
+        if (positionsData) {
           setPositions(positionsData)
         }
 
-        if (usersResponse.ok) {
-          const usersData = await usersResponse.json()
+        if (usersData) {
           setUsers(usersData)
         }
       } catch (error) {

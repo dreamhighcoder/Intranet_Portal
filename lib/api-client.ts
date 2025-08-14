@@ -1,188 +1,180 @@
 import { supabase } from './supabase'
 
-class ApiError extends Error {
-  constructor(public status: number, message: string) {
-    super(message)
-    this.name = 'ApiError'
-  }
-}
-
-async function apiRequest<T>(endpoint: string, options?: RequestInit): Promise<T> {
-  // Get current session with retry logic
-  let session = null
-  let attempts = 0
-  const maxAttempts = 3
+/**
+ * Utility function to make authenticated API calls
+ * Automatically includes the Bearer token from the current session
+ */
+export async function authenticatedFetch(url: string, options: RequestInit = {}): Promise<Response> {
+  // Get the current session to include auth token
+  const { data: { session } } = await supabase.auth.getSession()
   
-  while (!session && attempts < maxAttempts) {
-    attempts++
-    const { data: { session: currentSession }, error: sessionError } = await supabase.auth.getSession()
-    
-    if (sessionError) {
-      console.error(`Session error (attempt ${attempts}):`, sessionError)
-      if (attempts === maxAttempts) {
-        throw new ApiError(401, 'Authentication failed')
-      }
-      // Wait a bit before retry
-      await new Promise(resolve => setTimeout(resolve, 500))
-      continue
-    }
-    
-    if (currentSession?.access_token) {
-      session = currentSession
-      break
-    }
-    
-    console.log(`No session found (attempt ${attempts}/${maxAttempts})`)
-    if (attempts < maxAttempts) {
-      // Try to refresh the session
-      const { data: { session: refreshedSession } } = await supabase.auth.refreshSession()
-      if (refreshedSession?.access_token) {
-        session = refreshedSession
-        break
-      }
-      await new Promise(resolve => setTimeout(resolve, 500))
-    }
-  }
-  
-  if (!session?.access_token) {
-    console.error('No session or access token found after all attempts')
-    throw new ApiError(401, 'Authentication required')
-  }
-
-  const url = `/api${endpoint}`
-  const headers = {
+  const headers: HeadersInit = {
     'Content-Type': 'application/json',
-    'Authorization': `Bearer ${session.access_token}`,
-    ...options?.headers,
+    ...options.headers,
+  }
+  
+  if (session?.access_token) {
+    headers.Authorization = `Bearer ${session.access_token}`
   }
 
-  console.log('Making API request:', {
-    endpoint,
-    hasToken: true,
-    tokenLength: session.access_token.length
-  })
-
-  const response = await fetch(url, {
+  return fetch(url, {
     ...options,
     headers,
   })
+}
 
-  if (!response.ok) {
-    const errorData = await response.json().catch(() => ({ error: 'Unknown error' }))
-    console.error('API request failed:', {
-      endpoint,
-      status: response.status,
-      statusText: response.statusText,
-      error: errorData.error || errorData.message
-    })
-    throw new ApiError(response.status, errorData.error || errorData.message || 'API request failed')
+/**
+ * Utility function to make authenticated GET requests and return JSON
+ */
+export async function authenticatedGet<T = any>(url: string): Promise<T | null> {
+  try {
+    const response = await authenticatedFetch(url)
+    if (response.ok) {
+      return await response.json()
+    } else {
+      console.error(`Failed to fetch ${url}:`, response.status, response.statusText)
+      return null
+    }
+  } catch (error) {
+    console.error(`Error fetching ${url}:`, error)
+    return null
   }
-
-  return response.json()
 }
 
-// Master Tasks API
-export const masterTasksApi = {
-  getAll: (params?: { position_id?: string; status?: string }): Promise<any[]> => {
-    const searchParams = new URLSearchParams()
-    if (params?.position_id) searchParams.append('position_id', params.position_id)
-    if (params?.status) searchParams.append('status', params.status)
-    const query = searchParams.toString() ? `?${searchParams.toString()}` : ''
-    return apiRequest(`/master-tasks${query}`)
-  },
-
-  getById: (id: string): Promise<any> => 
-    apiRequest(`/master-tasks/${id}`),
-
-  create: (data: any): Promise<any> => 
-    apiRequest('/master-tasks', {
+/**
+ * Utility function to make authenticated POST requests
+ */
+export async function authenticatedPost<T = any>(url: string, data: any): Promise<T | null> {
+  try {
+    const response = await authenticatedFetch(url, {
       method: 'POST',
       body: JSON.stringify(data),
-    }),
-
-  update: (id: string, data: any): Promise<any> => 
-    apiRequest(`/master-tasks/${id}`, {
-      method: 'PUT',
-      body: JSON.stringify(data),
-    }),
-
-  delete: (id: string): Promise<void> => 
-    apiRequest(`/master-tasks/${id}`, {
-      method: 'DELETE',
-    }),
+    })
+    if (response.ok) {
+      return await response.json()
+    } else {
+      const error = await response.json().catch(() => ({ error: 'Unknown error' }))
+      throw new Error(error.error || `Failed to post to ${url}`)
+    }
+  } catch (error) {
+    console.error(`Error posting to ${url}:`, error)
+    throw error
+  }
 }
 
-// Positions API
-export const positionsApi = {
-  getAll: (): Promise<any[]> => apiRequest('/positions'),
-
-  getById: (id: string): Promise<any> => 
-    apiRequest(`/positions/${id}`),
-
-  create: (data: any): Promise<any> => 
-    apiRequest('/positions', {
-      method: 'POST',
-      body: JSON.stringify(data),
-    }),
-
-  update: (id: string, data: any): Promise<any> => 
-    apiRequest(`/positions/${id}`, {
+/**
+ * Utility function to make authenticated PUT requests
+ */
+export async function authenticatedPut<T = any>(url: string, data: any): Promise<T | null> {
+  try {
+    const response = await authenticatedFetch(url, {
       method: 'PUT',
       body: JSON.stringify(data),
-    }),
-
-  delete: (id: string): Promise<void> => 
-    apiRequest(`/positions/${id}`, {
-      method: 'DELETE',
-    }),
+    })
+    if (response.ok) {
+      return await response.json()
+    } else {
+      const error = await response.json().catch(() => ({ error: 'Unknown error' }))
+      throw new Error(error.error || `Failed to put to ${url}`)
+    }
+  } catch (error) {
+    console.error(`Error putting to ${url}:`, error)
+    throw error
+  }
 }
 
-// Task Instances API
+/**
+ * Utility function to make authenticated DELETE requests
+ */
+export async function authenticatedDelete(url: string): Promise<boolean> {
+  try {
+    const response = await authenticatedFetch(url, {
+      method: 'DELETE',
+    })
+    return response.ok
+  } catch (error) {
+    console.error(`Error deleting ${url}:`, error)
+    return false
+  }
+}
+
+// API client objects for specific endpoints
 export const taskInstancesApi = {
-  getAll: (params?: { date?: string; position_id?: string; status?: string }): Promise<any[]> => {
-    const searchParams = new URLSearchParams()
-    if (params?.date) searchParams.append('date', params.date)
-    if (params?.position_id) searchParams.append('position_id', params.position_id)
-    if (params?.status) searchParams.append('status', params.status)
-    const query = searchParams.toString() ? `?${searchParams.toString()}` : ''
-    return apiRequest(`/task-instances${query}`)
+  async getAll(filters: Record<string, any> = {}) {
+    const params = new URLSearchParams()
+    Object.entries(filters).forEach(([key, value]) => {
+      if (value !== undefined && value !== null) {
+        params.append(key, String(value))
+      }
+    })
+    const url = `/api/task-instances${params.toString() ? `?${params.toString()}` : ''}`
+    return await authenticatedGet(url) || []
   },
 
-  getById: (id: string): Promise<any> => 
-    apiRequest(`/task-instances/${id}`),
+  async getById(id: string) {
+    return await authenticatedGet(`/api/task-instances/${id}`)
+  },
 
-  update: (id: string, data: any): Promise<any> => 
-    apiRequest(`/task-instances/${id}`, {
-      method: 'PUT',
-      body: JSON.stringify(data),
-    }),
+  async create(data: any) {
+    return await authenticatedPost('/api/task-instances', data)
+  },
 
-  complete: (id: string): Promise<any> => 
-    apiRequest(`/task-instances/${id}/complete`, {
-      method: 'POST',
-    }),
+  async update(id: string, data: any) {
+    return await authenticatedPut(`/api/task-instances/${id}`, data)
+  },
 
-  uncomplete: (id: string): Promise<any> => 
-    apiRequest(`/task-instances/${id}/uncomplete`, {
-      method: 'POST',
-    }),
+  async delete(id: string) {
+    return await authenticatedDelete(`/api/task-instances/${id}`)
+  }
 }
 
-// Public Holidays API
-export const publicHolidaysApi = {
-  getAll: (): Promise<any[]> => apiRequest('/public-holidays'),
+export const masterTasksApi = {
+  async getAll(filters: Record<string, any> = {}) {
+    const params = new URLSearchParams()
+    Object.entries(filters).forEach(([key, value]) => {
+      if (value !== undefined && value !== null) {
+        params.append(key, String(value))
+      }
+    })
+    const url = `/api/master-tasks${params.toString() ? `?${params.toString()}` : ''}`
+    return await authenticatedGet(url) || []
+  },
 
-  create: (data: any): Promise<any> => 
-    apiRequest('/public-holidays', {
-      method: 'POST',
-      body: JSON.stringify(data),
-    }),
+  async getById(id: string) {
+    return await authenticatedGet(`/api/master-tasks/${id}`)
+  },
 
-  delete: (date: string): Promise<void> => 
-    apiRequest('/public-holidays', {
-      method: 'DELETE',
-      body: JSON.stringify({ date }),
-    }),
+  async create(data: any) {
+    return await authenticatedPost('/api/master-tasks', data)
+  },
+
+  async update(id: string, data: any) {
+    return await authenticatedPut(`/api/master-tasks/${id}`, data)
+  },
+
+  async delete(id: string) {
+    return await authenticatedDelete(`/api/master-tasks/${id}`)
+  }
 }
 
-export { ApiError }
+export const positionsApi = {
+  async getAll() {
+    return await authenticatedGet('/api/positions') || []
+  },
+
+  async getById(id: string) {
+    return await authenticatedGet(`/api/positions/${id}`)
+  },
+
+  async create(data: any) {
+    return await authenticatedPost('/api/positions', data)
+  },
+
+  async update(id: string, data: any) {
+    return await authenticatedPut(`/api/positions/${id}`, data)
+  },
+
+  async delete(id: string) {
+    return await authenticatedDelete(`/api/positions/${id}`)
+  }
+}

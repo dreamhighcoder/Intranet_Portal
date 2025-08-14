@@ -15,6 +15,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { TASK_CATEGORIES, TASK_FREQUENCIES, TASK_TIMINGS } from "@/lib/constants"
 import { useRouter, useParams } from "next/navigation"
 import type { MasterTask, Position } from "@/lib/types"
+import { positionsApi, authenticatedGet, authenticatedPost, authenticatedPut } from "@/lib/api-client"
 
 export default function TaskEditorPage() {
   const { user, isLoading } = useAuth()
@@ -52,17 +53,15 @@ export default function TaskEditorPage() {
       
       try {
         // Fetch positions
-        const positionsResponse = await fetch('/api/positions')
-        if (positionsResponse.ok) {
-          const positionsData = await positionsResponse.json()
+        const positionsData = await positionsApi.getAll()
+        if (positionsData) {
           setPositions(positionsData)
         }
 
         // Fetch existing task if editing
         if (isEditing && taskId) {
-          const taskResponse = await fetch(`/api/master-tasks/${taskId}`)
-          if (taskResponse.ok) {
-            const taskData = await taskResponse.json()
+          const taskData = await authenticatedGet(`/api/master-tasks/${taskId}`)
+          if (taskData) {
             setFormData(taskData)
           } else {
             console.error('Task not found')
@@ -84,25 +83,15 @@ export default function TaskEditorPage() {
     setIsSaving(true)
 
     try {
-      const url = isEditing 
-        ? `/api/master-tasks/${taskId}`
-        : '/api/master-tasks'
-      
-      const method = isEditing ? 'PUT' : 'POST'
-      
-      const response = await fetch(url, {
-        method,
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(formData),
-      })
+      const result = isEditing 
+        ? await authenticatedPut(`/api/master-tasks/${taskId}`, formData)
+        : await authenticatedPost('/api/master-tasks', formData)
 
-      if (response.ok) {
-        const result = await response.json()
+      if (result) {
         console.log('Task saved:', result)
         router.push("/admin/master-tasks")
       } else {
-        const error = await response.json()
-        throw new Error(error.error || 'Failed to save task')
+        throw new Error('Failed to save task')
       }
     } catch (error) {
       console.error('Error saving task:', error)
