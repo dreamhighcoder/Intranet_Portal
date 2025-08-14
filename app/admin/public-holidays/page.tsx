@@ -186,7 +186,7 @@ export default function AdminPublicHolidaysPage() {
     <div className="min-h-screen bg-[var(--color-background)]">
       <Navigation />
 
-      <main className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <main className="max-w-screen-2xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Header */}
         <div className="mb-8">
           <div className="pharmacy-gradient rounded-lg p-6 text-white">

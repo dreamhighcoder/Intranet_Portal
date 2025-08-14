@@ -129,7 +129,7 @@ export default function HomePage() {
     <div className="min-h-screen" style={{ backgroundColor: "var(--color-bg)" }}>
       <PublicNavigation onLoginClick={handleLoginClick} />
 
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <main className="max-w-screen-2xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Welcome Banner */}
         <div className="mb-8">
           <div className="pharmacy-gradient rounded-lg p-6" style={{ color: "var(--color-primary-on)" }}>

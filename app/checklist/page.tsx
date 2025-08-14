@@ -323,7 +323,7 @@ export default function ChecklistPage() {
     <div className="min-h-screen bg-[var(--color-background)]">
       <Navigation />
 
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <main className="max-w-screen-2xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Header */}
         <div className="mb-6">
           <div className="flex items-center justify-between mb-2">

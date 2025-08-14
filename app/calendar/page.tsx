@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { useAuth } from "@/lib/auth"
+import { usePositionAuth } from "@/lib/position-auth-context"
 import { Navigation } from "@/components/navigation"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -30,7 +30,7 @@ interface Position {
 }
 
 export default function CalendarPage() {
-  const { user, isLoading } = useAuth()
+  const { user, isLoading } = usePositionAuth()
   const [currentDate, setCurrentDate] = useState(new Date())
   const [events, setEvents] = useState<Record<string, CalendarEvent>>({})
   const [positions, setPositions] = useState<Position[]>([])
@@ -188,7 +188,7 @@ export default function CalendarPage() {
     <div className="min-h-screen bg-[var(--color-background)]">
       <Navigation />
 
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <main className="max-w-screen-2xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Header */}
         <div className="mb-8">
           <div className="pharmacy-gradient rounded-lg p-6 text-white">

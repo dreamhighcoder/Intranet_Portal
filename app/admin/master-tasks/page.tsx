@@ -529,7 +529,7 @@ export default function AdminMasterTasksPage() {
     <div className="min-h-screen bg-[var(--color-background)]">
       <Navigation />
 
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <main className="max-w-screen-2xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Header */}
         <div className="mb-6 lg:mb-8">
           <div className="pharmacy-gradient rounded-lg p-4 lg:p-6 text-white">
