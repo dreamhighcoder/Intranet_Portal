@@ -19,19 +19,34 @@ export function PositionAuthProvider({ children }: { children: React.ReactNode }
 
   useEffect(() => {
     // Check for existing authentication on mount
-    const currentUser = PositionAuthService.getCurrentUser()
-    setUser(currentUser)
-    setIsLoading(false)
+    const loadCurrentUser = async () => {
+      try {
+        const currentUser = await PositionAuthService.getCurrentUser()
+        setUser(currentUser)
+      } catch (error) {
+        console.error('Error loading current user:', error)
+        setUser(null)
+      } finally {
+        setIsLoading(false)
+      }
+    }
+    
+    loadCurrentUser()
   }, [])
 
   const signIn = async (positionId: string, password: string): Promise<{ success: boolean; error?: string }> => {
-    const result = PositionAuthService.authenticate(positionId, password)
-    
-    if (result.success && result.user) {
-      setUser(result.user)
-      return { success: true }
-    } else {
-      return { success: false, error: result.error }
+    try {
+      const result = await PositionAuthService.authenticate(positionId, password)
+      
+      if (result.success && result.user) {
+        setUser(result.user)
+        return { success: true }
+      } else {
+        return { success: false, error: result.error }
+      }
+    } catch (error) {
+      console.error('Sign in error:', error)
+      return { success: false, error: 'Authentication failed' }
     }
   }
 

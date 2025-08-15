@@ -56,7 +56,6 @@ export function Navigation() {
         { href: "/checklist", label: "Checklists" },
         { href: "/calendar", label: "Calendar" },
         { href: "/admin/reports", label: "Reports" },
-        { href: "/debug", label: "🔍 Debug", className: "text-orange-200 hover:text-orange-100" },
       ]
     : [
         { href: "/checklist", label: "Checklist" },
@@ -108,7 +107,7 @@ export function Navigation() {
                           color: "var(--color-text)",
                         }
                       : {
-                          color: "rgba(255, 255, 255, 0.8)",
+                          color: "white",
                         }
                   }
                 >
@@ -120,7 +119,7 @@ export function Navigation() {
 
           {/* Desktop User Menu */}
           <div className="hidden md:flex items-center space-x-4">
-            <div className="flex items-center space-x-2 text-sm" style={{ color: "rgba(255, 255, 255, 0.8)" }}>
+            <div className="flex items-center space-x-2 text-sm" style={{ color: "white" }}>
               <User className="w-4 h-4" />
               <span>
                 Welcome, {user.position.displayName === "Administrator" ? "Administrator" : user.position.displayName}
@@ -174,7 +173,7 @@ export function Navigation() {
                           color: "var(--color-text)",
                         }
                       : {
-                          color: "rgba(255, 255, 255, 0.8)",
+                          color: "white",
                         }
                   }
                 >
@@ -182,7 +181,7 @@ export function Navigation() {
                 </Link>
               ))}
               <div className="border-t border-white/20 pt-2 mt-2">
-                <div className="px-3 py-2 text-sm" style={{ color: "rgba(255, 255, 255, 0.8)" }}>
+                <div className="px-3 py-2 text-sm" style={{ color: "white" }}>
                   Welcome, {user.position.displayName === "Administrator" ? "Administrator" : user.position.displayName}
                 </div>
                 <Button

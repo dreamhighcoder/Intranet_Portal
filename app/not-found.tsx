@@ -21,7 +21,7 @@ export default function NotFound() {
             homepage.
           </p>
           <div className="flex flex-col space-y-2">
-            <Button asChild className="bg-[var(--color-primary)] hover:bg-[var(--color-primary)]/90">
+            <Button asChild className="bg-[var(--color-primary)] hover:bg-[var(--color-primary)]/90 text-[var(--color-primary-on)]">
               <Link href="/">
                 <Home className="w-4 h-4 mr-2" />
                 Go Home

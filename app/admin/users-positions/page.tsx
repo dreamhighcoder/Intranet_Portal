@@ -10,7 +10,12 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Edit, Trash2, Plus, Users, Briefcase } from "lucide-react"
 import { useRouter } from "next/navigation"
 import { Position, UserProfile } from "@/lib/types"
-import { positionsApi, authenticatedGet } from "@/lib/api-client"
+import { positionsApi, authenticatedGet, authenticatedDelete } from "@/lib/api-client"
+import { PositionAuthService } from "@/lib/position-auth"
+import { PositionDialog } from "@/components/position-dialog"
+import { UserDialog } from "@/components/user-dialog"
+import { ConfirmDeleteDialog } from "@/components/confirm-delete-dialog"
+import { toastSuccess, toastError } from "@/hooks/use-toast"
 
 export default function UsersPositionsPage() {
   const { user, isLoading, isAdmin } = usePositionAuth()
@@ -19,6 +24,17 @@ export default function UsersPositionsPage() {
   const [positions, setPositions] = useState<Position[]>([])
   const [users, setUsers] = useState<UserProfile[]>([])
   const [isLoadingData, setIsLoadingData] = useState(true)
+  
+  // Dialog states
+  const [positionDialogOpen, setPositionDialogOpen] = useState(false)
+  const [userDialogOpen, setUserDialogOpen] = useState(false)
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
+  
+  // Selected items for editing
+  const [selectedPosition, setSelectedPosition] = useState<Position | null>(null)
+  const [selectedUser, setSelectedUser] = useState<UserProfile | null>(null)
+  const [itemToDelete, setItemToDelete] = useState<{ type: 'position' | 'user'; id: string; name: string } | null>(null)
+  const [isDeleting, setIsDeleting] = useState(false)
 
   useEffect(() => {
     if (!isLoading && (!user || user.role !== "admin")) {
@@ -55,6 +71,106 @@ export default function UsersPositionsPage() {
 
   const getPositionName = (positionId: string | undefined) => {
     return positions.find((p) => p.id === positionId)?.name || "Unknown"
+  }
+
+  // Count admin users for delete protection
+  const adminCount = users.filter(user => user.role === "admin").length
+  
+  // Check if a user can be deleted (cannot delete last admin)
+  const canDeleteUser = (user: UserProfile) => {
+    if (user.role !== "admin") return true
+    return adminCount > 1
+  }
+
+  const refreshData = async () => {
+    try {
+      // Clear positions cache to ensure fresh data
+      PositionAuthService.clearCache()
+      
+      const [positionsData, usersData] = await Promise.all([
+        positionsApi.getAll(),
+        authenticatedGet('/api/user-profiles')
+      ])
+
+      if (positionsData) {
+        setPositions(positionsData)
+      }
+
+      if (usersData) {
+        setUsers(usersData)
+      }
+    } catch (error) {
+      console.error('Error refreshing data:', error)
+    }
+  }
+
+  // Position handlers
+  const handleAddPosition = () => {
+    setSelectedPosition(null)
+    setPositionDialogOpen(true)
+  }
+
+  const handleEditPosition = (position: Position) => {
+    setSelectedPosition(position)
+    setPositionDialogOpen(true)
+  }
+
+  const handleDeletePosition = (position: Position) => {
+    setItemToDelete({ type: 'position', id: position.id, name: position.name })
+    setDeleteDialogOpen(true)
+  }
+
+  // User handlers
+  const handleAddUser = () => {
+    setSelectedUser(null)
+    setUserDialogOpen(true)
+  }
+
+  const handleEditUser = (user: UserProfile) => {
+    setSelectedUser(user)
+    setUserDialogOpen(true)
+  }
+
+  const handleDeleteUser = (user: UserProfile) => {
+    setItemToDelete({ type: 'user', id: user.id, name: user.display_name || user.id })
+    setDeleteDialogOpen(true)
+  }
+
+  // Delete confirmation handler
+  const handleConfirmDelete = async () => {
+    if (!itemToDelete) return
+
+    setIsDeleting(true)
+    
+    try {
+      const endpoint = itemToDelete.type === 'position' 
+        ? `/api/positions/${itemToDelete.id}`
+        : `/api/user-profiles/${itemToDelete.id}`
+      
+      await authenticatedDelete(endpoint)
+      
+      toastSuccess(
+        `${itemToDelete.type === 'position' ? 'Position' : 'User'} Deleted`,
+        `${itemToDelete.name} has been deleted successfully`
+      )
+      
+      // Clear positions cache if a position was deleted
+      if (itemToDelete.type === 'position') {
+        PositionAuthService.clearCache()
+      }
+      
+      await refreshData()
+      setDeleteDialogOpen(false)
+      setItemToDelete(null)
+    } catch (error) {
+      console.error('Error deleting item:', error)
+      toastError(
+        "Delete Failed", 
+        `Failed to delete ${itemToDelete.type}. Please try again.`
+      )
+    } finally {
+      setIsDeleting(false)
+    }
   }
 
   if (isLoading || isLoadingData) {
@@ -114,7 +230,10 @@ export default function UsersPositionsPage() {
             <CardHeader>
               <div className="flex items-center justify-between">
                 <CardTitle>Positions</CardTitle>
-                <Button className="bg-[var(--color-primary)] hover:bg-[var(--color-primary)]/90">
+                <Button 
+                  className="bg-[var(--color-primary)] hover:bg-[var(--color-primary)]/90 text-[var(--color-primary-on)]"
+                  onClick={handleAddPosition}
+                >
                   <Plus className="w-4 h-4 mr-2" />
                   Add Position
                 </Button>
@@ -126,6 +245,7 @@ export default function UsersPositionsPage() {
                   <TableRow>
                     <TableHead>Name</TableHead>
                     <TableHead>Description</TableHead>
+                    <TableHead>Password</TableHead>
                     <TableHead>Created</TableHead>
                     <TableHead>Actions</TableHead>
                   </TableRow>
@@ -139,15 +259,25 @@ export default function UsersPositionsPage() {
                       <TableCell>
                         <div className="text-[var(--color-text-secondary)]">{position.description}</div>
                       </TableCell>
+                      <TableCell>
+                        <div className="font-mono text-sm text-[var(--color-text-muted)]">
+                          {position.password_hash ? atob(position.password_hash) : 'Not set'}
+                        </div>
+                      </TableCell>
                       <TableCell>{new Date(position.created_at).toLocaleDateString("en-AU")}</TableCell>
                       <TableCell>
                         <div className="flex items-center space-x-2">
-                          <Button size="sm" variant="outline">
+                          <Button 
+                            size="sm" 
+                            variant="outline"
+                            onClick={() => handleEditPosition(position)}
+                          >
                             <Edit className="w-4 h-4" />
                           </Button>
                           <Button
                             size="sm"
                             variant="outline"
+                            onClick={() => handleDeletePosition(position)}
                             className="text-red-600 hover:text-red-700 bg-transparent"
                           >
                             <Trash2 className="w-4 h-4" />
@@ -168,7 +298,10 @@ export default function UsersPositionsPage() {
             <CardHeader>
               <div className="flex items-center justify-between">
                 <CardTitle>Users</CardTitle>
-                <Button className="bg-[var(--color-primary)] hover:bg-[var(--color-primary)]/90">
+                <Button 
+                  className="bg-[var(--color-primary)] hover:bg-[var(--color-primary)]/90 text-white"
+                  onClick={handleAddUser}
+                >
                   <Plus className="w-4 h-4 mr-2" />
                   Add User
                 </Button>
@@ -210,13 +343,20 @@ export default function UsersPositionsPage() {
                       </TableCell>
                       <TableCell>
                         <div className="flex items-center space-x-2">
-                          <Button size="sm" variant="outline">
+                          <Button 
+                            size="sm" 
+                            variant="outline"
+                            onClick={() => handleEditUser(userProfile)}
+                          >
                             <Edit className="w-4 h-4" />
                           </Button>
                           <Button
                             size="sm"
                             variant="outline"
+                            onClick={() => handleDeleteUser(userProfile)}
                             className="text-red-600 hover:text-red-700 bg-transparent"
+                            disabled={!canDeleteUser(userProfile)}
+                            title={!canDeleteUser(userProfile) ? "Cannot delete the last administrator" : "Delete user"}
                           >
                             <Trash2 className="w-4 h-4" />
                           </Button>
@@ -229,6 +369,32 @@ export default function UsersPositionsPage() {
             </CardContent>
           </Card>
         )}
+
+        {/* Dialogs */}
+        <PositionDialog
+          isOpen={positionDialogOpen}
+          onClose={() => setPositionDialogOpen(false)}
+          position={selectedPosition}
+          onSave={refreshData}
+        />
+
+        <UserDialog
+          isOpen={userDialogOpen}
+          onClose={() => setUserDialogOpen(false)}
+          user={selectedUser}
+          positions={positions}
+          onSave={refreshData}
+        />
+
+        <ConfirmDeleteDialog
+          isOpen={deleteDialogOpen}
+          onClose={() => setDeleteDialogOpen(false)}
+          onConfirm={handleConfirmDelete}
+          title={`Delete ${itemToDelete?.type === 'position' ? 'Position' : 'User'}`}
+          description={`Are you sure you want to delete this ${itemToDelete?.type}? This action cannot be undone.`}
+          itemName={itemToDelete?.name}
+          isLoading={isDeleting}
+        />
       </main>
     </div>
   )

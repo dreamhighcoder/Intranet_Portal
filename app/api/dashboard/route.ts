@@ -1,6 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabase } from '@/lib/supabase'
 import { requireAuth } from '@/lib/auth-middleware'
+import { createClient } from '@supabase/supabase-js'
+
+// Use service role client to bypass RLS (we enforce auth/authorization in code)
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
+const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
+const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey)
 
 export async function GET(request: NextRequest) {
   try {
@@ -19,7 +24,7 @@ export async function GET(request: NextRequest) {
     const todayStr = new Date().toISOString().split('T')[0]
 
     // Build base query with position filter if needed
-    let baseQuery = supabase.from('task_instances')
+    let baseQuery = supabaseAdmin.from('task_instances')
     
     if (positionId && user.role !== 'admin') {
       // Non-admin users can only see their own position
@@ -224,7 +229,7 @@ export async function GET(request: NextRequest) {
 
 async function calculateTrends(startDate: string, endDate: string, positionId?: string | null) {
   try {
-    let query = supabase
+    let query = supabaseAdmin
       .from('task_instances')
       .select(`
         due_date,

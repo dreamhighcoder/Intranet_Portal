@@ -15,19 +15,34 @@ export async function authenticatedFetch(url: string, options: RequestInit = {})
   // Try to get Supabase session first
   const { data: { session } } = await supabase.auth.getSession()
   
+  console.log('API Client - Supabase session:', !!session?.access_token)
+  
   if (session?.access_token) {
     headers.Authorization = `Bearer ${session.access_token}`
+    console.log('API Client - Using Supabase auth')
   } else {
     // Check for position-based auth
-    const positionUser = PositionAuthService.getCurrentUser()
+    const positionUser = await PositionAuthService.getCurrentUser()
+    console.log('API Client - Position user:', positionUser ? {
+      id: positionUser.id,
+      role: positionUser.role,
+      displayName: positionUser.displayName,
+      isAuthenticated: positionUser.isAuthenticated
+    } : 'None')
+    
     if (positionUser && positionUser.isAuthenticated) {
       // For position-based auth, send the position data as headers
       headers['X-Position-Auth'] = 'true'
       headers['X-Position-User-Id'] = positionUser.id
       headers['X-Position-User-Role'] = positionUser.role
       headers['X-Position-Display-Name'] = positionUser.displayName
+      console.log('API Client - Using position-based auth for:', positionUser.displayName)
+    } else {
+      console.log('API Client - No authentication available')
     }
   }
+  
+  console.log('API Client - Final headers:', Object.fromEntries(Object.entries(headers)))
 
   return fetch(url, {
     ...options,
@@ -54,7 +69,7 @@ export async function authenticatedGet<T = any>(url: string): Promise<T | null> 
       // If it's an authentication error, provide more context
       if (response.status === 401) {
         console.warn('Authentication failed for:', url)
-        const positionUser = PositionAuthService.getCurrentUser()
+        const positionUser = await PositionAuthService.getCurrentUser()
         console.log('Current position user:', positionUser ? 
           `${positionUser.displayName} (${positionUser.role})` : 'None')
       }
@@ -79,8 +94,22 @@ export async function authenticatedPost<T = any>(url: string, data: any): Promis
     if (response.ok) {
       return await response.json()
     } else {
-      const error = await response.json().catch(() => ({ error: 'Unknown error' }))
-      throw new Error(error.error || `Failed to post to ${url}`)
+      console.error(`API Error - URL: ${url}, Status: ${response.status}, StatusText: ${response.statusText}`)
+      const errorText = await response.text()
+      console.error(`API Error - Response body:`, errorText)
+      
+      let errorMessage = `Failed to post to ${url}`
+      try {
+        const errorJson = JSON.parse(errorText)
+        errorMessage = errorJson.error || errorMessage
+      } catch {
+        // If response is not JSON, use the text as error message
+        if (errorText) {
+          errorMessage = errorText
+        }
+      }
+      
+      throw new Error(errorMessage)
     }
   } catch (error) {
     console.error(`Error posting to ${url}:`, error)

@@ -1,16 +1,24 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabase } from '@/lib/supabase'
+import { requireAuth } from '@/lib/auth-middleware'
+import { createClient } from '@supabase/supabase-js'
+
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
+const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
+const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey)
 
 export async function GET(request: NextRequest) {
   try {
+    // Require authentication; authorize via code, query via service client
+    const user = await requireAuth(request)
+
     const searchParams = request.nextUrl.searchParams
     const date = searchParams.get('date')
     const dateRange = searchParams.get('dateRange')
-    const positionId = searchParams.get('position_id')
+    const positionIdParam = searchParams.get('position_id')
     const status = searchParams.get('status')
     const category = searchParams.get('category')
 
-    let query = supabase
+    let query = supabaseAdmin
       .from('task_instances')
       .select(`
         *,
@@ -29,6 +37,9 @@ export async function GET(request: NextRequest) {
         )
       `)
 
+    // For non-admins, force restrict to their position
+    const effectivePositionId = user.role === 'admin' ? positionIdParam : (positionIdParam || user.position_id || null)
+
     // Filter by date or date range
     if (date) {
       query = query.eq('due_date', date)
@@ -40,9 +51,9 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // Filter by position if provided
-    if (positionId) {
-      query = query.eq('master_tasks.position_id', positionId)
+    // Filter by position if provided/effective
+    if (effectivePositionId) {
+      query = query.eq('master_tasks.position_id', effectivePositionId)
     }
 
     // Filter by status if provided
@@ -98,12 +109,21 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(transformedData)
   } catch (error) {
     console.error('Unexpected error:', error)
+    if (error instanceof Error && error.message.includes('Authentication')) {
+      return NextResponse.json({ error: 'Authentication required' }, { status: 401 })
+    }
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }
 
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
   try {
+    // Only admins can create task instances via API
+    const user = await requireAuth(request)
+    if (user.role !== 'admin') {
+      return NextResponse.json({ error: 'Admin access required' }, { status: 403 })
+    }
+
     const body = await request.json()
     const { master_task_id, instance_date, due_date, due_time } = body
 
@@ -111,7 +131,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
     }
 
-    const { data: taskInstance, error } = await supabase
+    const { data: taskInstance, error } = await supabaseAdmin
       .from('task_instances')
       .insert([{
         master_task_id,
@@ -145,6 +165,9 @@ export async function POST(request: Request) {
     return NextResponse.json(taskInstance, { status: 201 })
   } catch (error) {
     console.error('Unexpected error:', error)
+    if (error instanceof Error && error.message.includes('Authentication')) {
+      return NextResponse.json({ error: 'Authentication required' }, { status: 401 })
+    }
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }

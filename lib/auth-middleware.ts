@@ -17,6 +17,7 @@ export async function getAuthUser(request: NextRequest): Promise<AuthUser | null
     
     console.log('Auth middleware - Authorization header present:', !!authHeader)
     console.log('Auth middleware - Position auth header:', positionAuthHeader)
+    console.log('Auth middleware - All headers:', Object.fromEntries(request.headers.entries()))
     
     // Handle position-based authentication first
     if (positionAuthHeader === 'true') {

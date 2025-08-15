@@ -30,26 +30,62 @@ export function PositionLoginModal({
   const [selectedPosition, setSelectedPosition] = useState("")
   const [password, setPassword] = useState("")
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [availablePositions, setAvailablePositions] = useState<PositionAuth[]>([])
+  const [isLoadingPositions, setIsLoadingPositions] = useState(true)
   const { signIn } = usePositionAuth()
   const router = useRouter()
 
+  // Load available positions based on modal type
+  useEffect(() => {
+    const loadAvailablePositions = async () => {
+      setIsLoadingPositions(true)
+      try {
+        // Hardcoded Administrator position (always available)
+        const hardcodedAdmin: PositionAuth = {
+          id: 'administrator',
+          name: 'administrator',
+          displayName: 'Administrator',
+          password: 'admin123',
+          role: 'admin'
+        }
 
-  // Get available positions based on modal type
-  const getAvailablePositions = (): PositionAuth[] => {
-    if (modalType === "checklist" && checklistPositionId) {
-      // For checklist modal: show the specific position first, then Administrator
-      const specificPosition = PositionAuthService.getAllPositions().find(p => p.id === checklistPositionId)
-      const adminPosition = PositionAuthService.getAllPositions().find(p => p.id === 'administrator')
-      return [specificPosition, adminPosition].filter(Boolean) as PositionAuth[]
+        if (modalType === "checklist" && checklistPositionId) {
+          // For checklist modal: show the specific position first, then Administrator
+          const allPositions = await PositionAuthService.getAllPositions()
+          const specificPosition = allPositions.find(p => p.id === checklistPositionId)
+          
+          if (specificPosition) {
+            setAvailablePositions([specificPosition, hardcodedAdmin])
+          } else {
+            // Fallback if specific position not found
+            setAvailablePositions([hardcodedAdmin])
+          }
+        } else {
+          // For general modal: show Administrator first, then all other positions
+          const allPositions = await PositionAuthService.getAllPositions()
+          const others = allPositions.filter(p => !p.displayName.toLowerCase().includes('administrator') && p.id !== 'administrator')
+          setAvailablePositions([hardcodedAdmin, ...others])
+        }
+      } catch (error) {
+        console.error('Error loading positions:', error)
+        // Fallback to hardcoded Administrator only
+        const hardcodedAdmin: PositionAuth = {
+          id: 'administrator',
+          name: 'administrator',
+          displayName: 'Administrator',
+          password: 'admin123',
+          role: 'admin'
+        }
+        setAvailablePositions([hardcodedAdmin])
+      } finally {
+        setIsLoadingPositions(false)
+      }
     }
-    // For general modal: show all positions with Administrator first
-    const allPositions = PositionAuthService.getAllPositions()
-    const admin = allPositions.find(p => p.id === 'administrator')
-    const others = allPositions.filter(p => p.id !== 'administrator')
-    return admin ? [admin, ...others] : allPositions
-  }
 
-  const availablePositions = getAvailablePositions()
+    if (isOpen) {
+      loadAvailablePositions()
+    }
+  }, [isOpen, modalType, checklistPositionId])
 
   // Set default values when modal opens
   useEffect(() => {
@@ -89,7 +125,7 @@ export function PositionLoginModal({
         onClose()
         
         // Redirect based on authentication result
-        const user = PositionAuthService.getCurrentUser()
+        const user = await PositionAuthService.getCurrentUser()
         if (user?.role === 'admin') {
           // Admin always goes to dashboard regardless of modal type
           router.push('/admin')
@@ -152,9 +188,9 @@ export function PositionLoginModal({
             <Label htmlFor="position" className="text-[var(--color-text)]">
               Position
             </Label>
-            <Select value={selectedPosition} onValueChange={setSelectedPosition} disabled={isSubmitting}>
+            <Select value={selectedPosition} onValueChange={setSelectedPosition} disabled={isSubmitting || isLoadingPositions}>
               <SelectTrigger className="w-full bg-[var(--color-surface)] border-[var(--color-border)] text-[var(--color-text)]">
-                <SelectValue placeholder="Select your position" />
+                <SelectValue placeholder={isLoadingPositions ? "Loading positions..." : "Select your position"} />
               </SelectTrigger>
               <SelectContent>
                 {availablePositions.map((position) => (

@@ -143,14 +143,6 @@ export default function AdminDashboard() {
       color: "text-gray-600",
       bgColor: "bg-gray-100",
     },
-    {
-      title: "Auth Test",
-      description: "Debug authentication and data loading issues",
-      icon: Settings,
-      href: "/admin/auth-test",
-      color: "text-orange-600",
-      bgColor: "bg-orange-100",
-    },
   ]
 
   return (

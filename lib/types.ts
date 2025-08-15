@@ -24,6 +24,7 @@ export interface Position {
   id: string
   name: string
   description: string
+  password_hash?: string
   created_at: string
 }
 

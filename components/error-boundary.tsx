@@ -74,7 +74,7 @@ function DefaultErrorFallback({ error, resetError }: { error?: Error; resetError
             </details>
           )}
           <div className="flex flex-col space-y-2">
-            <Button onClick={resetError} className="bg-[var(--color-primary)] hover:bg-[var(--color-primary)]/90">
+            <Button onClick={resetError} className="bg-[var(--color-primary)] hover:bg-[var(--color-primary)]/90 text-[var(--color-primary-on)]">
               <RefreshCw className="w-4 h-4 mr-2" />
               Try Again
             </Button>

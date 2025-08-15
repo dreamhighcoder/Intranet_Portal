@@ -11,6 +11,7 @@ CREATE TABLE IF NOT EXISTS positions (
     id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
     name TEXT NOT NULL UNIQUE,
     description TEXT,
+    password_hash TEXT,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
@@ -128,6 +129,7 @@ CREATE TABLE IF NOT EXISTS notification_settings (
 -- ========================================
 
 -- Core indexes for performance
+CREATE INDEX IF NOT EXISTS idx_positions_password_hash ON positions(password_hash);
 CREATE INDEX IF NOT EXISTS idx_user_profiles_position_id ON user_profiles(position_id);
 CREATE INDEX IF NOT EXISTS idx_user_profiles_role ON user_profiles(role);
 CREATE INDEX IF NOT EXISTS idx_master_tasks_position_id ON master_tasks(position_id);

@@ -99,7 +99,7 @@ export function MasterTasksTable() {
       <CardHeader>
         <div className="flex items-center justify-between">
           <CardTitle>Master Tasks</CardTitle>
-          <Button asChild className="bg-[var(--color-primary)] hover:bg-[var(--color-primary)]/90">
+          <Button asChild className="bg-[var(--color-primary)] hover:bg-[var(--color-primary)]/90 text-[var(--color-primary-on)]">
             <Link href="/admin/task-editor">
               <Plus className="w-4 h-4 mr-2" />
               New Task

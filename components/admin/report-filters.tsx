@@ -171,7 +171,7 @@ export function ReportFilters({ onFiltersChange, onExport }: ReportFiltersProps)
         </div>
 
         <div className="flex items-center justify-between pt-4 border-t">
-          <Button onClick={handleApplyFilters} className="bg-[var(--color-primary)] hover:bg-[var(--color-primary)]/90">
+          <Button onClick={handleApplyFilters} className="bg-[var(--color-primary)] hover:bg-[var(--color-primary)]/90 text-[var(--color-primary-on)]">
             Apply Filters
           </Button>
 

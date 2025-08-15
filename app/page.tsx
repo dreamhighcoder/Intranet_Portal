@@ -31,6 +31,82 @@ export default function HomePage() {
     }
   }, [user, isLoading, router])
 
+  // State for dynamic checklist positions
+  const [staffChecklists, setStaffChecklists] = useState<Array<{
+    title: string
+    description: string
+    icon: any
+    positionId: string
+    iconBg: string
+  }>>([])
+  
+  // Helper function to get position descriptions
+  const getPositionDescription = (displayName: string): string => {
+    const descriptions: Record<string, string> = {
+      "Pharmacist (Primary)": "Licensed pharmacist duties and clinical responsibilities",
+      "Pharmacist (Supporting)": "Supporting pharmacist tasks and backup duties", 
+      "Pharmacy Assistants": "Dispensing assistance and customer service tasks",
+      "Dispensary Technicians": "Technical dispensing and preparation tasks",
+      "DAA Packers": "Dose administration aid packing and quality control",
+      "Operational/Managerial": "Management oversight and operational tasks"
+    }
+    
+    return descriptions[displayName] || `${displayName} tasks and responsibilities`
+  }
+
+  // Load positions from database
+  useEffect(() => {
+    const loadPositions = async () => {
+      try {
+        const positions = await PositionAuthService.getChecklistPositions()
+        const iconMap = [Stethoscope, Users, Package, Building]
+        const colorMap = ["var(--color-primary)", "#1565c0", "var(--accent-green)", "#2e7d32", "#fb8c00", "#d12c2c"]
+        
+        const checklists = positions.map((position, index) => ({
+          title: `Checklist – ${position.displayName}`,
+          description: getPositionDescription(position.displayName),
+          icon: iconMap[index % iconMap.length],
+          positionId: position.id,
+          iconBg: colorMap[index % colorMap.length]
+        }))
+        
+        setStaffChecklists(checklists)
+      } catch (error) {
+        console.error('Error loading positions:', error)
+        // Fallback to hardcoded positions if database fails
+        const fallbackPositions = PositionAuthService.getChecklistPositionsFallback()
+        const iconMap = [Stethoscope, Users, Package, Building]
+        const colorMap = ["var(--color-primary)", "#1565c0", "var(--accent-green)", "#2e7d32", "#fb8c00", "#d12c2c"]
+        
+        const checklists = fallbackPositions.map((position, index) => ({
+          title: `Checklist – ${position.displayName}`,
+          description: getPositionDescription(position.displayName),
+          icon: iconMap[index % iconMap.length],
+          positionId: position.id,
+          iconBg: colorMap[index % colorMap.length]
+        }))
+        
+        setStaffChecklists(checklists)
+      }
+    }
+
+    // refresh when positions updated anywhere (create/update/delete)
+    const onPositionsUpdated = () => {
+      if (!isLoading && !user) {
+        loadPositions()
+      }
+    }
+    window.addEventListener('positions-updated', onPositionsUpdated)
+    
+    if (!isLoading && !user) {
+      loadPositions()
+    }
+
+    return () => {
+      window.removeEventListener('positions-updated', onPositionsUpdated)
+    }
+  }, [isLoading, user])
+
   // Show loading state
   if (isLoading) {
     return (
@@ -65,53 +141,7 @@ export default function HomePage() {
     )
   }
 
-  // Get checklist positions (excluding administrator)
-  const checklistPositions = PositionAuthService.getChecklistPositions()
-  
-  const staffChecklists = [
-    {
-      title: "Checklist – Pharmacist (Primary)",
-      description: "Licensed pharmacist duties and clinical responsibilities",
-      icon: Stethoscope,
-      positionId: "550e8400-e29b-41d4-a716-446655440001",
-      iconBg: "var(--color-primary)",
-    },
-    {
-      title: "Checklist – Pharmacist (Supporting)",
-      description: "Supporting pharmacist tasks and backup duties",
-      icon: Stethoscope,
-      positionId: "550e8400-e29b-41d4-a716-446655440002",
-      iconBg: "#1565c0", // Due today blue
-    },
-    {
-      title: "Checklist – Pharmacy Assistants",
-      description: "Dispensing assistance and customer service tasks",
-      icon: Users,
-      positionId: "550e8400-e29b-41d4-a716-446655440003",
-      iconBg: "var(--accent-green)",
-    },
-    {
-      title: "Checklist – Dispensary Technicians",
-      description: "Technical dispensing and preparation tasks",
-      icon: Package,
-      positionId: "550e8400-e29b-41d4-a716-446655440004",
-      iconBg: "#2e7d32", // Done green
-    },
-    {
-      title: "Checklist – DAA Packers",
-      description: "Dose administration aid packing and quality control",
-      icon: Package,
-      positionId: "550e8400-e29b-41d4-a716-446655440005",
-      iconBg: "#fb8c00", // Overdue orange
-    },
-    {
-      title: "Checklist – Operational/Managerial",
-      description: "Management oversight and operational tasks",
-      icon: Building,
-      positionId: "550e8400-e29b-41d4-a716-446655440006",
-      iconBg: "#d12c2c", // Missed red
-    },
-  ]
+
 
   const handleLoginClick = () => {
     setModalType("general")
