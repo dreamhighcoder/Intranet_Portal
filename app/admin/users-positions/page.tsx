@@ -66,7 +66,13 @@ export default function UsersPositionsPage() {
           adminUsers: usersData?.filter(u => u.role === 'admin').length || 0,
           adminPositions: positionsData?.filter(p => 
             p.password_hash && (p.name.toLowerCase().includes('administrator') || p.name.toLowerCase().includes('admin'))
-          ).length || 0
+          ).length || 0,
+          samplePosition: positionsData?.[0] ? {
+            id: positionsData[0].id,
+            name: positionsData[0].name,
+            created_at: positionsData[0].created_at,
+            created_at_type: typeof positionsData[0].created_at
+          } : null
         })
       } catch (error) {
         console.error('Error fetching data:', error)
@@ -81,6 +87,25 @@ export default function UsersPositionsPage() {
   const getPositionName = (positionId: string | undefined) => {
     return positions.find((p) => p.id === positionId)?.name || "Unknown"
   }
+
+  // Helper function to safely format dates
+  const formatDate = (dateString: string | undefined | null) => {
+    if (!dateString) return "Unknown"
+    
+    try {
+      const date = new Date(dateString)
+      if (isNaN(date.getTime())) {
+        return "Invalid Date"
+      }
+      return date.toLocaleDateString("en-AU")
+    } catch (error) {
+      console.error("Error formatting date:", dateString, error)
+      return "Invalid Date"
+    }
+  }
+
+  // Backward compatibility
+  const formatCreatedDate = formatDate
 
   // Count total admins for delete protection (both user profiles and position-based)
   const adminUserCount = users.filter(user => user.role === "admin").length
@@ -365,6 +390,7 @@ export default function UsersPositionsPage() {
                     <TableHead>Description</TableHead>
                     <TableHead>Password</TableHead>
                     <TableHead>Created</TableHead>
+                    <TableHead>Updated</TableHead>
                     <TableHead>Actions</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -382,7 +408,8 @@ export default function UsersPositionsPage() {
                           {position.password_hash ? atob(position.password_hash) : 'Not set'}
                         </div>
                       </TableCell>
-                      <TableCell>{new Date(position.created_at).toLocaleDateString("en-AU")}</TableCell>
+                      <TableCell>{formatDate(position.created_at)}</TableCell>
+                      <TableCell>{formatDate(position.updated_at)}</TableCell>
                       <TableCell>
                         <div className="flex items-center space-x-2">
                           <Button 
@@ -468,7 +495,7 @@ export default function UsersPositionsPage() {
                         </Badge>
                       </TableCell>
                       <TableCell>
-                        {userProfile.updated_at ? new Date(userProfile.updated_at).toLocaleDateString("en-AU") : "Never"}
+                        {formatCreatedDate(userProfile.updated_at) !== "Unknown" ? formatCreatedDate(userProfile.updated_at) : "Never"}
                       </TableCell>
                       <TableCell>
                         <div className="flex items-center space-x-2">

@@ -26,6 +26,7 @@ export interface Position {
   description: string
   password_hash?: string
   created_at: string
+  updated_at: string
 }
 
 export interface MasterTask {
