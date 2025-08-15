@@ -59,6 +59,15 @@ export default function UsersPositionsPage() {
         if (usersData) {
           setUsers(usersData)
         }
+        
+        console.log('🔍 Fetched data:', {
+          positions: positionsData?.length || 0,
+          users: usersData?.length || 0,
+          adminUsers: usersData?.filter(u => u.role === 'admin').length || 0,
+          adminPositions: positionsData?.filter(p => 
+            p.password_hash && (p.name.toLowerCase().includes('administrator') || p.name.toLowerCase().includes('admin'))
+          ).length || 0
+        })
       } catch (error) {
         console.error('Error fetching data:', error)
       } finally {
@@ -73,13 +82,97 @@ export default function UsersPositionsPage() {
     return positions.find((p) => p.id === positionId)?.name || "Unknown"
   }
 
-  // Count admin users for delete protection
-  const adminCount = users.filter(user => user.role === "admin").length
+  // Count total admins for delete protection (both user profiles and position-based)
+  const adminUserCount = users.filter(user => user.role === "admin").length
+  const adminPositionCount = positions.filter(position => 
+    position.password_hash && 
+    (position.name.toLowerCase().includes('administrator') || position.name.toLowerCase().includes('admin'))
+  ).length
+  
+  const totalAdminCount = adminUserCount + adminPositionCount
+  
+  // Debug logging
+  console.log("🔍 Admin count analysis:", {
+    adminUserCount,
+    adminPositionCount, 
+    totalAdminCount,
+    adminUsers: users.filter(user => user.role === "admin").map(u => ({
+      id: u.id,
+      displayName: u.display_name,
+      role: u.role
+    })),
+    adminPositions: positions.filter(p => 
+      p.password_hash && (p.name.toLowerCase().includes('administrator') || p.name.toLowerCase().includes('admin'))
+    ).map(p => ({
+      id: p.id,
+      name: p.name,
+      hasPassword: !!p.password_hash
+    }))
+  })
   
   // Check if a user can be deleted (cannot delete last admin)
   const canDeleteUser = (user: UserProfile) => {
-    if (user.role !== "admin") return true
-    return adminCount > 1
+    // If data is still loading, disable delete for safety
+    if (isLoadingData || users.length === 0) {
+      console.log("Data still loading or empty, disabling delete")
+      return false
+    }
+    
+    // Non-admin users can always be deleted
+    if (user.role !== "admin") {
+      console.log("User is not admin, can delete:", user.display_name, user.role)
+      return true
+    }
+    
+    // Admin users can only be deleted if there are other admins available (users + positions)
+    // If we delete this admin user, we need at least 1 admin remaining (either user or position)
+    const remainingAdminCount = totalAdminCount - 1
+    const canDelete = remainingAdminCount > 0
+    
+    console.log("🔍 Admin delete check:", {
+      userToDelete: user.display_name,
+      totalAdminCount,
+      remainingAfterDelete: remainingAdminCount,
+      canDelete,
+      adminUserCount,
+      adminPositionCount
+    })
+    
+    return canDelete
+  }
+
+  // Check if a position can be deleted (cannot delete last admin position)
+  const canDeletePosition = (position: Position) => {
+    // If data is still loading, disable delete for safety
+    if (isLoadingData || positions.length === 0) {
+      console.log("Data still loading or empty, disabling position delete")
+      return false
+    }
+    
+    // Non-admin positions can always be deleted
+    const isAdminPosition = position.password_hash && 
+      (position.name.toLowerCase().includes('administrator') || position.name.toLowerCase().includes('admin'))
+    
+    if (!isAdminPosition) {
+      console.log("Position is not admin, can delete:", position.name)
+      return true
+    }
+    
+    // Admin positions can only be deleted if there are other admins available (users + positions)
+    // If we delete this admin position, we need at least 1 admin remaining (either user or position)
+    const remainingAdminCount = totalAdminCount - 1
+    const canDelete = remainingAdminCount > 0
+    
+    console.log("🔍 Admin position delete check:", {
+      positionToDelete: position.name,
+      totalAdminCount,
+      remainingAfterDelete: remainingAdminCount,
+      canDelete,
+      adminUserCount,
+      adminPositionCount
+    })
+    
+    return canDelete
   }
 
   const refreshData = async () => {
@@ -116,6 +209,19 @@ export default function UsersPositionsPage() {
   }
 
   const handleDeletePosition = (position: Position) => {
+    console.log("=== DELETE POSITION CLICKED ===")
+    console.log("Position to delete:", position)
+    console.log("Position name:", position.name)
+    console.log("Is admin position:", position.password_hash && 
+      (position.name.toLowerCase().includes('administrator') || position.name.toLowerCase().includes('admin')))
+    console.log("Can delete this position:", canDeletePosition(position))
+    
+    if (!canDeletePosition(position)) {
+      console.log("DELETE BLOCKED: Cannot delete this position")
+      toastError("Cannot Delete", "Cannot delete the last administrator position. At least one admin (user or position) must remain.")
+      return
+    }
+    
     setItemToDelete({ type: 'position', id: position.id, name: position.name })
     setDeleteDialogOpen(true)
   }
@@ -132,6 +238,18 @@ export default function UsersPositionsPage() {
   }
 
   const handleDeleteUser = (user: UserProfile) => {
+    console.log("=== DELETE USER CLICKED ===")
+    console.log("User to delete:", user)
+    console.log("User role:", user.role)
+    console.log("Current admin count:", totalAdminCount)
+    console.log("Can delete this user:", canDeleteUser(user))
+    
+    if (!canDeleteUser(user)) {
+      console.log("DELETE BLOCKED: Cannot delete this user")
+      toastError("Cannot Delete", "Cannot delete the last administrator. At least one admin (user or position) must remain.")
+      return
+    }
+    
     setItemToDelete({ type: 'user', id: user.id, name: user.display_name || user.id })
     setDeleteDialogOpen(true)
   }
@@ -278,7 +396,12 @@ export default function UsersPositionsPage() {
                             size="sm"
                             variant="outline"
                             onClick={() => handleDeletePosition(position)}
-                            className="text-red-600 hover:text-red-700 bg-transparent"
+                            className={`${!canDeletePosition(position)
+                              ? "text-gray-400 hover:text-gray-400 bg-gray-50 cursor-not-allowed" 
+                              : "text-red-600 hover:text-red-700 bg-transparent"
+                            }`}
+                            disabled={!canDeletePosition(position)}
+                            title={!canDeletePosition(position) ? "Cannot delete the last administrator position" : "Delete position"}
                           >
                             <Trash2 className="w-4 h-4" />
                           </Button>
@@ -297,7 +420,13 @@ export default function UsersPositionsPage() {
           <Card className="card-surface">
             <CardHeader>
               <div className="flex items-center justify-between">
-                <CardTitle>Users</CardTitle>
+                <CardTitle>
+                  Users {totalAdminCount > 0 && (
+                    <span className="text-sm font-normal text-gray-500 ml-2">
+                      ({adminUserCount} user admin{adminUserCount !== 1 ? 's' : ''}{adminPositionCount > 0 ? `, ${adminPositionCount} position admin${adminPositionCount !== 1 ? 's' : ''}` : ''})
+                    </span>
+                  )}
+                </CardTitle>
                 <Button 
                   className="bg-[var(--color-primary)] hover:bg-[var(--color-primary)]/90 text-white"
                   onClick={handleAddUser}
@@ -354,7 +483,10 @@ export default function UsersPositionsPage() {
                             size="sm"
                             variant="outline"
                             onClick={() => handleDeleteUser(userProfile)}
-                            className="text-red-600 hover:text-red-700 bg-transparent"
+                            className={`${!canDeleteUser(userProfile) 
+                              ? "text-gray-400 hover:text-gray-400 bg-gray-50 cursor-not-allowed" 
+                              : "text-red-600 hover:text-red-700 bg-transparent"
+                            }`}
                             disabled={!canDeleteUser(userProfile)}
                             title={!canDeleteUser(userProfile) ? "Cannot delete the last administrator" : "Delete user"}
                           >

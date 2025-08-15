@@ -87,6 +87,37 @@ export async function DELETE(
       return NextResponse.json({ error: 'Admin access required' }, { status: 403 })
     }
 
+    // Check if this user is an admin and if it's the last admin
+    const { data: userToDelete, error: fetchError } = await supabase
+      .from('user_profiles')
+      .select('role')
+      .eq('id', params.id)
+      .single()
+
+    if (fetchError) {
+      console.error('Error fetching user to delete:', fetchError)
+      return NextResponse.json({ error: 'User not found' }, { status: 404 })
+    }
+
+    // If trying to delete an admin, check that it's not the last one
+    if (userToDelete.role === 'admin') {
+      const { data: adminUsers, error: adminError } = await supabase
+        .from('user_profiles')
+        .select('id')
+        .eq('role', 'admin')
+
+      if (adminError) {
+        console.error('Error counting admins:', adminError)
+        return NextResponse.json({ error: 'Failed to verify admin count' }, { status: 500 })
+      }
+
+      if (adminUsers.length <= 1) {
+        return NextResponse.json({ 
+          error: 'Cannot delete the last administrator. At least one administrator must remain.' 
+        }, { status: 400 })
+      }
+    }
+
     // Delete user profile first
     const { error: profileError } = await supabase
       .from('user_profiles')

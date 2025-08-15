@@ -69,8 +69,25 @@ export function PositionDialog({ isOpen, onClose, position, onSave }: PositionDi
       onSave()
       handleClose()
     } catch (error) {
-      console.error('Error saving position:', error)
-      toastError("Save Failed", "Failed to save position. Please try again.")
+      // Try to extract the specific error message from the API response
+      let errorMessage = "Failed to save position. Please try again."
+      
+      if (error instanceof Error) {
+        // Check if this is a validation error with a specific message
+        const lowerErrorMessage = error.message.toLowerCase()
+        if (lowerErrorMessage.includes("password is already in use") || 
+            lowerErrorMessage.includes("password") && lowerErrorMessage.includes("already")) {
+          errorMessage = "This password is already in use by another position. Please choose a different password."
+          setPassword("") // Clear the password field
+        } else if (lowerErrorMessage.includes("duplicate") || lowerErrorMessage.includes("already exists")) {
+          errorMessage = "A position with similar details already exists. Please check the name and password."
+        } else if (error.message.trim() !== "" && !error.message.startsWith("Failed to post")) {
+          // Use any specific error message from the server that's not a generic fetch error
+          errorMessage = error.message
+        }
+      }
+      
+      toastError("Save Failed", errorMessage)
     } finally {
       setIsLoading(false)
     }
@@ -129,6 +146,11 @@ export function PositionDialog({ isOpen, onClose, position, onSave }: PositionDi
             />
             <p className="text-xs text-gray-600 mt-1">
               This password will be used for position-based authentication
+              {(name.toLowerCase().includes('admin') || name.toLowerCase().includes('administrator')) && (
+                <span className="block text-amber-600 mt-1 font-medium">
+                  ⚠️ Admin positions must have unique passwords. Each admin position requires a different password for security.
+                </span>
+              )}
             </p>
           </div>
 

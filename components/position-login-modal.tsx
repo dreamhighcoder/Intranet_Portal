@@ -40,43 +40,65 @@ export function PositionLoginModal({
     const loadAvailablePositions = async () => {
       setIsLoadingPositions(true)
       try {
-        // Hardcoded Administrator position (always available)
-        const hardcodedAdmin: PositionAuth = {
-          id: 'administrator',
+        const allPositions = await PositionAuthService.getAllPositions()
+        console.log('🔍 All positions loaded:', allPositions.map(p => ({
+          id: p.id,
+          name: p.name,
+          displayName: p.displayName,
+          role: p.role
+        })))
+
+        // Separate admin and non-admin positions
+        const admins = allPositions.filter(p => 
+          p.role === 'admin' || 
+          p.name.toLowerCase().includes('admin') || 
+          p.displayName.toLowerCase().includes('admin')
+        )
+        const others = allPositions.filter(p => 
+          p.role !== 'admin' && 
+          !p.name.toLowerCase().includes('admin') && 
+          !p.displayName.toLowerCase().includes('admin')
+        )
+
+        // Create consolidated administrator entry if any admin positions exist
+        const consolidatedAdmin: PositionAuth | null = admins.length > 0 ? {
+          id: 'administrator-consolidated',
           name: 'administrator',
           displayName: 'Administrator',
-          password: 'admin123',
+          password: '', // Not used - authentication will check all admin positions
           role: 'admin'
-        }
+        } : null
 
         if (modalType === "checklist" && checklistPositionId) {
-          // For checklist modal: show the specific position first, then Administrator
-          const allPositions = await PositionAuthService.getAllPositions()
+          // For checklist modal: show the specific position first, then consolidated admin
           const specificPosition = allPositions.find(p => p.id === checklistPositionId)
           
           if (specificPosition) {
-            setAvailablePositions([specificPosition, hardcodedAdmin])
+            const positions = [specificPosition]
+            // Only add consolidated admin if it's not the same as the specific position
+            const isSpecificPositionAdmin = admins.some(admin => admin.id === specificPosition.id)
+            if (consolidatedAdmin && !isSpecificPositionAdmin) {
+              positions.push(consolidatedAdmin)
+            }
+            setAvailablePositions(positions)
           } else {
-            // Fallback if specific position not found
-            setAvailablePositions([hardcodedAdmin])
+            // Fallback to consolidated administrator only
+            setAvailablePositions(consolidatedAdmin ? [consolidatedAdmin] : [])
           }
         } else {
-          // For general modal: show Administrator first, then all other positions
-          const allPositions = await PositionAuthService.getAllPositions()
-          const others = allPositions.filter(p => !p.displayName.toLowerCase().includes('administrator') && p.id !== 'administrator')
-          setAvailablePositions([hardcodedAdmin, ...others])
+          // For general modal: show consolidated administrator first, then all other positions
+          const positions = []
+          if (consolidatedAdmin) {
+            positions.push(consolidatedAdmin)
+          }
+          positions.push(...others)
+          
+          setAvailablePositions(positions)
         }
       } catch (error) {
         console.error('Error loading positions:', error)
-        // Fallback to hardcoded Administrator only
-        const hardcodedAdmin: PositionAuth = {
-          id: 'administrator',
-          name: 'administrator',
-          displayName: 'Administrator',
-          password: 'admin123',
-          role: 'admin'
-        }
-        setAvailablePositions([hardcodedAdmin])
+        // Fallback to empty array - user will see no positions available
+        setAvailablePositions([])
       } finally {
         setIsLoadingPositions(false)
       }
@@ -89,16 +111,17 @@ export function PositionLoginModal({
 
   // Set default values when modal opens
   useEffect(() => {
-    if (isOpen) {
+    if (isOpen && availablePositions.length > 0) {
       if (modalType === "checklist" && checklistPositionId) {
         // For checklist modal: default to the corresponding position
         setSelectedPosition(checklistPositionId)
       } else if (modalType === "general") {
-        // For general modal: default to Administrator
-        setSelectedPosition("administrator")
+        // For general modal: default to consolidated administrator or first available
+        const consolidatedAdmin = availablePositions.find(p => p.id === 'administrator-consolidated')
+        setSelectedPosition(consolidatedAdmin?.id || availablePositions[0]?.id || "")
       }
     }
-  }, [isOpen, modalType, checklistPositionId])
+  }, [isOpen, modalType, checklistPositionId, availablePositions])
 
   // Get modal title
   const getModalTitle = (): string => {
@@ -234,7 +257,7 @@ export function PositionLoginModal({
           <div className="mt-6 p-4 bg-[var(--color-tertiary)] rounded-lg">
             <p className="text-sm text-[var(--color-text)] mb-2 font-medium">Demo Passwords:</p>
             <div className="text-xs space-y-1 text-[var(--color-text-muted)]">
-              <p>Administrator: admin123</p>
+              <p>Administrator: Any admin password from your database</p>
               <p>Pharmacist (Primary): pharmprim123</p>
               <p>Pharmacist (Supporting): pharmsup123</p>
               <p>Pharmacy Assistants: assistant123</p>

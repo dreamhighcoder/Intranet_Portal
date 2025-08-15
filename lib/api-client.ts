@@ -94,9 +94,7 @@ export async function authenticatedPost<T = any>(url: string, data: any): Promis
     if (response.ok) {
       return await response.json()
     } else {
-      console.error(`API Error - URL: ${url}, Status: ${response.status}, StatusText: ${response.statusText}`)
       const errorText = await response.text()
-      console.error(`API Error - Response body:`, errorText)
       
       let errorMessage = `Failed to post to ${url}`
       try {
@@ -112,7 +110,7 @@ export async function authenticatedPost<T = any>(url: string, data: any): Promis
       throw new Error(errorMessage)
     }
   } catch (error) {
-    console.error(`Error posting to ${url}:`, error)
+    // Only re-throw the error, don't log it here
     throw error
   }
 }
@@ -231,5 +229,27 @@ export const positionsApi = {
 
   async delete(id: string) {
     return await authenticatedDelete(`/api/positions/${id}`)
+  }
+}
+
+export const publicHolidaysApi = {
+  async getAll(filters: { year?: string; region?: string } = {}) {
+    const params = new URLSearchParams()
+    if (filters.year) params.append('year', filters.year)
+    if (filters.region) params.append('region', filters.region)
+    
+    const url = `/api/public-holidays${params.toString() ? `?${params.toString()}` : ''}`
+    return await authenticatedGet(url) || []
+  },
+
+  async create(data: { date: string; name: string; region?: string; source?: string }) {
+    return await authenticatedPost('/api/public-holidays', data)
+  },
+
+  async delete(date: string) {
+    return await authenticatedFetch('/api/public-holidays', {
+      method: 'DELETE',
+      body: JSON.stringify({ date }),
+    }).then(response => response.ok)
   }
 }

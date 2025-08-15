@@ -1,65 +1,6 @@
 import { PositionAuth, PositionType, Position } from './types'
 
-// Default fallback positions for when database is not available
-const FALLBACK_POSITION_AUTH_CONFIG: PositionAuth[] = [
-  {
-    id: 'administrator',
-    name: 'administrator',
-    displayName: 'Administrator',
-    password: 'admin123',
-    role: 'admin'
-  },
-  // Also try to match the database Administrator by UUID if it was created
-  {
-    id: 'd103cf6c-8e5b-454c-aeab-d4f6b6403bea',
-    name: 'administrator',
-    displayName: 'Administrator', 
-    password: 'admin123',
-    role: 'admin'
-  },
-  {
-    id: '550e8400-e29b-41d4-a716-446655440001',
-    name: 'pharmacist-primary',
-    displayName: 'Pharmacist (Primary)',
-    password: 'pharmprim123',
-    role: 'viewer'
-  },
-  {
-    id: '550e8400-e29b-41d4-a716-446655440002',
-    name: 'pharmacist-supporting',
-    displayName: 'Pharmacist (Supporting)',
-    password: 'pharmsup123',
-    role: 'viewer'
-  },
-  {
-    id: '550e8400-e29b-41d4-a716-446655440003',
-    name: 'pharmacy-assistants',
-    displayName: 'Pharmacy Assistants',
-    password: 'assistant123',
-    role: 'viewer'
-  },
-  {
-    id: '550e8400-e29b-41d4-a716-446655440004',
-    name: 'dispensary-technicians',
-    displayName: 'Dispensary Technicians',
-    password: 'tech123',
-    role: 'viewer'
-  },
-  {
-    id: '550e8400-e29b-41d4-a716-446655440005',
-    name: 'daa-packers',
-    displayName: 'DAA Packers',
-    password: 'packer123',
-    role: 'viewer'
-  },
-  {
-    id: '550e8400-e29b-41d4-a716-446655440006',
-    name: 'operational-managerial',
-    displayName: 'Operational/Managerial',
-    password: 'ops123',
-    role: 'viewer'
-  }
-]
+// No hardcoded fallback positions - all authentication must use database
 
 // Cache for positions data
 let positionsCache: PositionAuth[] | null = null
@@ -89,52 +30,43 @@ async function fetchPositionsFromDatabase(): Promise<PositionAuth[]> {
     })))
     
     // Convert Position[] to PositionAuth[]
-    const positionAuths: PositionAuth[] = positions.map(pos => {
-      const decodedPassword = pos.password_hash ? 
-        Buffer.from(pos.password_hash, 'base64').toString() : 
-        getDefaultPassword(pos.name)
-      
-      console.log(`🔓 Processing position "${pos.name}":`, {
-        hasPasswordHash: !!pos.password_hash,
-        passwordHash: pos.password_hash ? pos.password_hash.substring(0, 10) + '...' : 'NONE',
-        decodedPassword: decodedPassword
-      })
-      
-      // Determine role based on position name or ID
-      let role: 'admin' | 'viewer' = 'viewer'
-      const nameCheck = pos.name.toLowerCase()
-      const idCheck = pos.id.toLowerCase()
-      
-      if (nameCheck.includes('administrator') || 
-          nameCheck.includes('admin') || 
-          idCheck === 'administrator' ||
-          idCheck === 'd103cf6c-8e5b-454c-aeab-d4f6b6403bea') {
-        role = 'admin'
-      }
+    const positionAuths: PositionAuth[] = positions
+      .filter(pos => pos.password_hash) // Only include positions with passwords
+      .map(pos => {
+        const decodedPassword = Buffer.from(pos.password_hash!, 'base64').toString()
+        
+        console.log(`🔓 Processing position "${pos.name}":`, {
+          hasPasswordHash: !!pos.password_hash,
+          passwordHash: pos.password_hash ? pos.password_hash.substring(0, 10) + '...' : 'NONE',
+          decodedPassword: decodedPassword
+        })
+        
+        // Determine role based on position name
+        let role: 'admin' | 'viewer' = 'viewer'
+        const nameCheck = pos.name.toLowerCase()
+        
+        if (nameCheck.includes('administrator') || nameCheck.includes('admin')) {
+          role = 'admin'
+        }
 
-      return {
-        id: pos.id,
-        name: pos.name.toLowerCase().replace(/\s+/g, '-'),
-        displayName: pos.name,
-        password: decodedPassword,
-        role
-      }
-    })
+        return {
+          id: pos.id,
+          name: pos.name.toLowerCase().replace(/\s+/g, '-'),
+          displayName: pos.name,
+          password: decodedPassword,
+          role
+        }
+      })
     
+    console.log('🔓 Processed positions with valid passwords:', positionAuths.length)
     return positionAuths
   } catch (error) {
     console.error('Error fetching positions from database:', error)
-    return FALLBACK_POSITION_AUTH_CONFIG
+    throw new Error(`Database connection required for authentication: ${error.message}`)
   }
 }
 
-function getDefaultPassword(positionName: string): string {
-  // Generate default passwords based on position name for fallback
-  const fallback = FALLBACK_POSITION_AUTH_CONFIG.find(
-    p => p.displayName === positionName
-  )
-  return fallback ? fallback.password : 'default123'
-}
+
 
 export interface PositionAuthUser {
   id: string
@@ -174,101 +106,160 @@ export class PositionAuthService {
     }
   }
 
-  // Authenticate with position and password
+  // Authenticate with position and password - ALL authentication must use database
   static async authenticate(positionId: string, password: string): Promise<{ success: boolean; user?: PositionAuthUser; error?: string }> {
     console.log('🔐 Authentication attempt:', { positionId, password: '***' })
     
-    // Check for hardcoded Administrator first
-    if (positionId === 'administrator' || positionId === 'd103cf6c-8e5b-454c-aeab-d4f6b6403bea') {
-      const hardcodedAdmin: PositionAuth = {
-        id: positionId, // Use the provided ID
-        name: 'administrator',
-        displayName: 'Administrator',
-        password: 'admin123',
-        role: 'admin'
+    try {
+      // Fetch all positions from database - no fallbacks or hardcoded values
+      const positions = await this.getPositions()
+      console.log('📋 Available positions from database:', positions.map(p => ({ 
+        id: p.id, 
+        name: p.name, 
+        displayName: p.displayName, 
+        hasPassword: !!p.password,
+        passwordLength: p.password?.length || 0
+      })))
+      
+      // Handle consolidated administrator ID
+      if (positionId === 'administrator-consolidated') {
+        console.log('🔍 Consolidated administrator login detected')
+        
+        // Find all admin positions and check if any has the matching password
+        const adminPositions = positions.filter(p => 
+          p.role === 'admin' || 
+          p.name.toLowerCase().includes('admin') || 
+          p.displayName.toLowerCase().includes('admin')
+        )
+        
+        console.log('👑 Found admin positions for consolidated login:', adminPositions.map(p => ({
+          id: p.id,
+          name: p.name,
+          displayName: p.displayName,
+          hasPassword: !!p.password
+        })))
+        
+        // Try to authenticate against any admin position with matching password
+        const matchingAdminPosition = adminPositions.find(p => p.password === password)
+        
+        if (matchingAdminPosition) {
+          console.log('✅ Found matching admin position for consolidated login:', matchingAdminPosition.displayName)
+          
+          const user: PositionAuthUser = {
+            id: matchingAdminPosition.id,
+            position: matchingAdminPosition,
+            role: matchingAdminPosition.role,
+            displayName: 'Administrator', // Use consolidated display name for UI consistency
+            isAuthenticated: true,
+            loginTime: new Date()
+          }
+          
+          // Store in localStorage
+          if (typeof window !== 'undefined') {
+            localStorage.setItem(this.STORAGE_KEY, JSON.stringify(user))
+          }
+          
+          console.log('✅ Consolidated administrator authentication successful')
+          return { success: true, user }
+        }
+        
+        console.log('❌ No admin position found with matching password for consolidated login')
+        return { success: false, error: 'Invalid administrator password' }
+      }
+
+      let matchedPosition = positions.find(p => p.id === positionId)
+      console.log('🎯 Found position by ID:', matchedPosition ? { 
+        id: matchedPosition.id, 
+        name: matchedPosition.name, 
+        displayName: matchedPosition.displayName,
+        hasPassword: !!matchedPosition.password,
+        passwordLength: matchedPosition.password?.length || 0
+      } : 'NOT FOUND')
+      
+      if (!matchedPosition) {
+        console.log('❌ Position not found for ID:', positionId)
+        return { success: false, error: 'Position not found' }
       }
       
-      console.log('🎯 Using hardcoded Administrator position with ID:', positionId)
-      console.log('🔑 Password comparison:', { 
-        provided: password, 
-        expected: hardcodedAdmin.password, 
-        match: hardcodedAdmin.password === password 
-      })
-      
-      if (hardcodedAdmin.password !== password) {
-        console.log('❌ Password mismatch for hardcoded Administrator')
-        return { success: false, error: 'Invalid password' }
+      // Check if password matches the selected position
+      if (matchedPosition.password === password) {
+        console.log('✅ Direct position/password match')
+        const user: PositionAuthUser = {
+          id: matchedPosition.id,
+          position: matchedPosition,
+          role: matchedPosition.role,
+          displayName: matchedPosition.displayName,
+          isAuthenticated: true,
+          loginTime: new Date()
+        }
+        
+        // Store in localStorage
+        if (typeof window !== 'undefined') {
+          localStorage.setItem(this.STORAGE_KEY, JSON.stringify(user))
+        }
+        
+        console.log('✅ Direct authentication successful for:', matchedPosition.displayName)
+        return { success: true, user }
       }
       
-      const user: PositionAuthUser = {
-        id: hardcodedAdmin.id,
-        position: hardcodedAdmin,
-        role: hardcodedAdmin.role,
-        displayName: hardcodedAdmin.displayName,
-        isAuthenticated: true,
-        loginTime: new Date()
+      // If direct match failed, check if this is an administrator position
+      // and try to find ANY administrator position with matching password
+      const isAdminPosition = matchedPosition.role === 'admin' || 
+        matchedPosition.name.toLowerCase().includes('admin') || 
+        matchedPosition.displayName.toLowerCase().includes('admin')
+        
+      if (isAdminPosition) {
+        console.log('🔍 Administrator position detected, checking for any matching admin password...')
+        
+        // Find all admin positions and check if any has the matching password
+        const adminPositions = positions.filter(p => 
+          p.role === 'admin' || 
+          p.name.toLowerCase().includes('admin') || 
+          p.displayName.toLowerCase().includes('admin')
+        )
+        
+        console.log('👑 Found admin positions:', adminPositions.map(p => ({
+          id: p.id,
+          name: p.name,
+          displayName: p.displayName,
+          hasPassword: !!p.password
+        })))
+        
+        // Try to authenticate against any admin position with matching password
+        const matchingAdminPosition = adminPositions.find(p => p.password === password)
+        
+        if (matchingAdminPosition) {
+          console.log('✅ Found matching admin position:', matchingAdminPosition.displayName)
+          
+          const user: PositionAuthUser = {
+            id: matchingAdminPosition.id,
+            position: matchingAdminPosition,
+            role: matchingAdminPosition.role,
+            displayName: matchingAdminPosition.displayName,
+            isAuthenticated: true,
+            loginTime: new Date()
+          }
+          
+          // Store in localStorage
+          if (typeof window !== 'undefined') {
+            localStorage.setItem(this.STORAGE_KEY, JSON.stringify(user))
+          }
+          
+          console.log('✅ Multi-admin authentication successful for:', matchingAdminPosition.displayName)
+          return { success: true, user }
+        }
+        
+        console.log('❌ No admin position found with matching password')
+        return { success: false, error: 'Invalid administrator password' }
       }
       
-      // Store in localStorage
-      if (typeof window !== 'undefined') {
-        localStorage.setItem(this.STORAGE_KEY, JSON.stringify(user))
-      }
-      
-      console.log('✅ Hardcoded Administrator authentication successful')
-      return { success: true, user }
-    }
-    
-    // For other positions, fetch from database
-    const positions = await this.getPositions()
-    console.log('📋 Available positions:', positions.map(p => ({ 
-      id: p.id, 
-      name: p.name, 
-      displayName: p.displayName, 
-      hasPassword: !!p.password,
-      passwordLength: p.password?.length || 0
-    })))
-    
-    const position = positions.find(p => p.id === positionId)
-    console.log('🎯 Found position:', position ? { 
-      id: position.id, 
-      name: position.name, 
-      displayName: position.displayName,
-      hasPassword: !!position.password,
-      passwordLength: position.password?.length || 0,
-      expectedPassword: position.password
-    } : 'NOT FOUND')
-    
-    if (!position) {
-      console.log('❌ Position not found for ID:', positionId)
-      return { success: false, error: 'Position not found' }
-    }
-    
-    console.log('🔑 Password comparison:', { 
-      provided: password, 
-      expected: position.password, 
-      match: position.password === password 
-    })
-    
-    if (position.password !== password) {
-      console.log('❌ Password mismatch')
+      console.log('❌ Password mismatch for non-admin position')
       return { success: false, error: 'Invalid password' }
+      
+    } catch (error) {
+      console.error('❌ Authentication failed:', error)
+      return { success: false, error: error instanceof Error ? error.message : 'Authentication failed - database connection required' }
     }
-    
-    const user: PositionAuthUser = {
-      id: position.id,
-      position,
-      role: position.role,
-      displayName: position.displayName,
-      isAuthenticated: true,
-      loginTime: new Date()
-    }
-    
-    // Store in localStorage
-    if (typeof window !== 'undefined') {
-      localStorage.setItem(this.STORAGE_KEY, JSON.stringify(user))
-    }
-    
-    return { success: true, user }
   }
   
   // Get current authenticated user
@@ -324,13 +315,13 @@ export class PositionAuthService {
     return positions.filter(p => p.name !== 'administrator' && !p.displayName.toLowerCase().includes('administrator'))
   }
 
-  // Synchronous fallback methods for backward compatibility
+  // Synchronous fallback methods for backward compatibility - return cache only
   static getAllPositionsFallback(): PositionAuth[] {
-    return positionsCache || FALLBACK_POSITION_AUTH_CONFIG
+    return positionsCache || []
   }
   
   static getChecklistPositionsFallback(): PositionAuth[] {
-    const positions = positionsCache || FALLBACK_POSITION_AUTH_CONFIG
+    const positions = positionsCache || []
     return positions.filter(p => p.name !== 'administrator' && !p.displayName.toLowerCase().includes('administrator'))
   }
 }

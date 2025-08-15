@@ -80,7 +80,14 @@ export function UserDialog({ isOpen, onClose, user, positions, onSave }: UserDia
       handleClose()
     } catch (error) {
       console.error('Error saving user:', error)
-      toastError("Save Failed", "Failed to save user. Please try again.")
+      
+      // Extract error message from the response
+      let errorMessage = "Failed to save user. Please try again."
+      if (error instanceof Error) {
+        errorMessage = error.message
+      }
+      
+      toastError("Save Failed", errorMessage)
     } finally {
       setIsLoading(false)
     }
