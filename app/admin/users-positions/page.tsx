@@ -51,17 +51,17 @@ export default function UsersPositionsPage() {
       
       setIsLoadingData(true)
       try {
-        // Fetch positions
-        const positionsResponse = await fetch('/api/positions')
-        if (positionsResponse.ok) {
-          const positionsData = await positionsResponse.json()
+        // Fetch positions and users using authenticated API client
+        const [positionsData, usersData] = await Promise.all([
+          positionsApi.getAll(),
+          authenticatedGet('/api/user-profiles')
+        ])
+
+        if (positionsData) {
           setPositions(positionsData)
         }
 
-        // Fetch users
-        const usersResponse = await fetch('/api/user-profiles')
-        if (usersResponse.ok) {
-          const usersData = await usersResponse.json()
+        if (usersData) {
           setUsers(usersData)
         }
       } catch (error) {
@@ -79,7 +79,30 @@ export default function UsersPositionsPage() {
     return positions.find((p: Position) => p.id === positionId)?.name || "Unknown"
   }
 
-  // Helper function to safely format dates
+  // Helper function to safely format dates with time
+  const formatDateTime = (dateString: string | undefined | null) => {
+    if (!dateString) return "Unknown"
+    
+    try {
+      const date = new Date(dateString)
+      if (isNaN(date.getTime())) {
+        return "Invalid Date"
+      }
+      return date.toLocaleString("en-AU", {
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false
+      })
+    } catch (error) {
+      console.error("Error formatting date:", dateString, error)
+      return "Invalid Date"
+    }
+  }
+
+  // Helper function to safely format dates only (for backward compatibility)
   const formatDate = (dateString: string | undefined | null) => {
     if (!dateString) return "Unknown"
     
@@ -96,7 +119,7 @@ export default function UsersPositionsPage() {
   }
 
   // Backward compatibility
-  const formatCreatedDate = formatDate
+  const formatCreatedDate = formatDateTime
 
   // Count total admins for delete protection (both user profiles and position-based)
   const adminUserCount = users.filter((user: UserProfile) => user.role === "admin").length
@@ -187,8 +210,10 @@ export default function UsersPositionsPage() {
     return false
   }
 
-  const canAddAdmin = () => {
-    return isSuperAdmin
+  const canAddUser = () => {
+    // Both Super Admins and Regular Admins can add users
+    // The restriction on admin role creation is handled in the API and UserDialog
+    return isAdmin
   }
 
   // Check if current user can view password for a position
@@ -522,8 +547,8 @@ export default function UsersPositionsPage() {
                           )}
                         </div>
                       </TableCell>
-                      <TableCell>{formatDate(position.created_at)}</TableCell>
-                      <TableCell>{formatDate(position.updated_at)}</TableCell>
+                      <TableCell>{formatDateTime(position.created_at)}</TableCell>
+                      <TableCell>{formatDateTime(position.updated_at)}</TableCell>
                       <TableCell>
                         <div className="flex items-center space-x-2">
                           <Button 
@@ -577,8 +602,8 @@ export default function UsersPositionsPage() {
                 <Button 
                   className="bg-[var(--color-primary)] hover:bg-[var(--color-primary)]/90 text-white"
                   onClick={handleAddUser}
-                  disabled={!canAddAdmin()}
-                  title={!canAddAdmin() ? "Only Super Admins can add new admins" : "Add User"}
+                  disabled={!canAddUser()}
+                  title={!canAddUser() ? "Admin access required to add users" : "Add User"}
                 >
                   <Plus className="w-4 h-4 mr-2" />
                   Add User
@@ -603,7 +628,7 @@ export default function UsersPositionsPage() {
                       <TableCell>
                         <div className="font-medium">{userProfile.display_name || 'N/A'}</div>
                       </TableCell>
-                      <TableCell>{userProfile.id}</TableCell>
+                      <TableCell>{userProfile.email || userProfile.id}</TableCell>
                       <TableCell>{getPositionName(userProfile.position_id)}</TableCell>
                       <TableCell>
                         <Badge
@@ -617,7 +642,10 @@ export default function UsersPositionsPage() {
                         </Badge>
                       </TableCell>
                       <TableCell>
-                        {formatCreatedDate(userProfile.updated_at) !== "Unknown" ? formatCreatedDate(userProfile.updated_at) : "Never"}
+                        {userProfile.last_login 
+                          ? formatDateTime(userProfile.last_login)
+                          : (formatDateTime(userProfile.updated_at) !== "Unknown" ? formatDateTime(userProfile.updated_at) : "Never")
+                        }
                       </TableCell>
                       <TableCell>
                         <div className="flex items-center space-x-2">

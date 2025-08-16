@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
+import { usePositionAuth } from "@/lib/position-auth-context"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -19,36 +20,99 @@ interface UserDialogProps {
 }
 
 export function UserDialog({ isOpen, onClose, user, positions, onSave }: UserDialogProps) {
+  const { isSuperAdmin } = usePositionAuth()
   const [email, setEmail] = useState("")
   const [displayName, setDisplayName] = useState("")
   const [positionId, setPositionId] = useState("")
   const [role, setRole] = useState<"admin" | "viewer">("viewer")
-  const [password, setPassword] = useState("")
+
   const [isLoading, setIsLoading] = useState(false)
 
   const isEditing = Boolean(user)
   const title = isEditing ? "Edit User" : "Add User"
 
+  // Check if current user can assign admin role
+  const canAssignAdminRole = () => {
+    return isSuperAdmin
+  }
+
+  // Generate a secure temporary password
+  const generateTemporaryPassword = () => {
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*'
+    let password = ''
+    for (let i = 0; i < 12; i++) {
+      password += chars.charAt(Math.floor(Math.random() * chars.length))
+    }
+    return password
+  }
+
+  // Filter and consolidate positions for the dropdown
+  const getFilteredPositions = () => {
+    const nonAdminPositions = positions.filter(position => 
+      !position.password_hash || (
+        !position.name.toLowerCase().includes('administrator') && 
+        !position.name.toLowerCase().includes('admin')
+      )
+    )
+    
+    // Check if there are any admin positions
+    const hasAdminPositions = positions.some(position => 
+      position.password_hash && (
+        position.name.toLowerCase().includes('administrator') || 
+        position.name.toLowerCase().includes('admin')
+      )
+    )
+    
+    // Add a consolidated "Administrator" option if admin positions exist
+    const consolidatedPositions = [...nonAdminPositions]
+    if (hasAdminPositions) {
+      consolidatedPositions.push({
+        id: 'administrator-consolidated',
+        name: 'Administrator',
+        description: 'Administrative position',
+        password_hash: null,
+        is_super_admin: false,
+        created_at: '',
+        updated_at: ''
+      })
+    }
+    
+    return consolidatedPositions
+  }
+
   useEffect(() => {
     if (user) {
-      setEmail(user.id) // In this system, user ID is email
+      setEmail(user.email || user.id) // Use email field if available, fallback to ID
       setDisplayName(user.display_name || "")
-      setPositionId(user.position_id || "no-position")
-      setRole(user.role)
+      
+      // Handle position mapping for admin positions
+      let mappedPositionId = user.position_id || "no-position"
+      if (user.position_id) {
+        const userPosition = positions.find(p => p.id === user.position_id)
+        if (userPosition && userPosition.password_hash && (
+            userPosition.name.toLowerCase().includes('administrator') || 
+            userPosition.name.toLowerCase().includes('admin')
+          )) {
+          mappedPositionId = "administrator-consolidated"
+        }
+      }
+      setPositionId(mappedPositionId)
+      
+      // Regular admins cannot edit admin roles, so force to viewer if they can't assign admin role
+      setRole(user.role === "admin" && !canAssignAdminRole() ? "viewer" : user.role)
     } else {
       setEmail("")
       setDisplayName("")
       setPositionId("no-position")
       setRole("viewer")
     }
-    setPassword("") // Always reset password field
-  }, [user])
+  }, [user, isSuperAdmin, positions])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     
-    if (!email.trim() || (!isEditing && !password)) {
-      toastError("Validation Error", "Email and password are required")
+    if (!email.trim()) {
+      toastError("Validation Error", "Email is required")
       return
     }
 
@@ -60,13 +124,27 @@ export function UserDialog({ isOpen, onClose, user, positions, onSave }: UserDia
     setIsLoading(true)
 
     try {
+      // Handle position mapping for submission
+      let submissionPositionId = positionId === "no-position" ? null : positionId || null
+      if (positionId === "administrator-consolidated") {
+        submissionPositionId = null // Let the API handle admin position assignment
+      }
+      
       const data = {
         display_name: displayName.trim(),
-        position_id: positionId === "no-position" ? null : positionId || null,
+        position_id: submissionPositionId,
         role,
-        ...(password && { password }),
-        ...((!isEditing) && { id: email.trim() })
+        ...(isEditing && { email: email.trim() }), // Include email for updates
+        ...((!isEditing) && { 
+          id: email.trim(),
+          password: generateTemporaryPassword() // Generate temporary password for new users
+        })
       }
+
+      console.log('UserDialog - Submitting data:', {
+        ...data,
+        password: data.password ? '[GENERATED]' : undefined
+      })
 
       if (isEditing && user) {
         await authenticatedPut(`/api/user-profiles/${user.id}`, data)
@@ -98,7 +176,6 @@ export function UserDialog({ isOpen, onClose, user, positions, onSave }: UserDia
     setDisplayName("")
     setPositionId("no-position")
     setRole("viewer")
-    setPassword("")
     onClose()
   }
 
@@ -118,12 +195,8 @@ export function UserDialog({ isOpen, onClose, user, positions, onSave }: UserDia
               onChange={(e) => setEmail(e.target.value)}
               placeholder="user@example.com"
               className="bg-white dark:bg-white"
-              disabled={isEditing}
               required
             />
-            {isEditing && (
-              <p className="text-xs text-gray-600 mt-1">Email cannot be changed</p>
-            )}
           </div>
           
           <div className="space-y-2">
@@ -146,7 +219,7 @@ export function UserDialog({ isOpen, onClose, user, positions, onSave }: UserDia
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="no-position">No position assigned</SelectItem>
-                {positions.map((position) => (
+                {getFilteredPositions().map((position) => (
                   <SelectItem key={position.id} value={position.id}>
                     {position.name}
                   </SelectItem>
@@ -163,25 +236,19 @@ export function UserDialog({ isOpen, onClose, user, positions, onSave }: UserDia
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="viewer">Viewer</SelectItem>
-                <SelectItem value="admin">Admin</SelectItem>
+                <SelectItem value="admin" disabled={!canAssignAdminRole()}>
+                  Admin {!canAssignAdminRole() && "(Super Admin only)"}
+                </SelectItem>
               </SelectContent>
             </Select>
+            {!canAssignAdminRole() && (
+              <p className="text-xs text-amber-600 mt-1">
+                Only Super Admins can create or promote users to admin role
+              </p>
+            )}
           </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="password">
-              {isEditing ? "New Password (optional)" : "Password *"}
-            </Label>
-            <Input
-              id="password"
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder={isEditing ? "Leave blank to keep current password" : "Enter password"}
-              className="bg-white dark:bg-white"
-              required={!isEditing}
-            />
-          </div>
+
 
           <div className="flex justify-end space-x-2 pt-4">
             <Button

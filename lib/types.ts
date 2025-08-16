@@ -12,11 +12,13 @@ export interface User {
 
 export interface UserProfile {
   id: string
+  email?: string
   display_name?: string
   position_id?: string
   role: "admin" | "viewer"
   created_at: string
   updated_at: string
+  last_login?: string
   positions?: Position
 }
 

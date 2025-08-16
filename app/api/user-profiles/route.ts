@@ -18,7 +18,8 @@ export async function GET(request: NextRequest) {
     const searchParams = request.nextUrl.searchParams
     const userId = searchParams.get('user_id')
 
-    let query = supabase
+    // Use admin client to bypass RLS for fetching user profiles
+    let query = supabaseAdmin
       .from('user_profiles')
       .select(`
         *,
@@ -60,6 +61,8 @@ export async function POST(request: NextRequest) {
     console.log('User profiles POST - Admin authentication successful for:', user.email)
 
     const body = await request.json()
+    console.log('Received request body:', body)
+    
     const {
       id,
       display_name,
@@ -68,7 +71,10 @@ export async function POST(request: NextRequest) {
       password
     } = body
 
+    console.log('Extracted fields:', { id, display_name, position_id, role, passwordLength: password?.length })
+
     if (!id || !password || !role) {
+      console.log('Missing required fields check:', { hasId: !!id, hasPassword: !!password, hasRole: !!role })
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
     }
 
@@ -135,6 +141,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Create user in Supabase Auth
+    console.log('Creating Supabase Auth user with email:', id)
     const { data: authUser, error: authError } = await supabaseAdmin.auth.admin.createUser({
       email: id,
       password: password,
@@ -143,16 +150,52 @@ export async function POST(request: NextRequest) {
 
     if (authError) {
       console.error('Error creating auth user:', authError)
+      console.error('Auth error details:', {
+        code: authError.code,
+        message: authError.message,
+        status: authError.status
+      })
       return NextResponse.json({ 
-        error: authError.message || 'Failed to create user account' 
+        error: `Failed to create user account: ${authError.message}` 
       }, { status: 400 })
     }
 
+    console.log('Successfully created auth user:', authUser.user.id)
+
+    // Validate position_id if provided
+    if (position_id) {
+      const { data: positionExists, error: positionError } = await supabaseAdmin
+        .from('positions')
+        .select('id, name')
+        .eq('id', position_id)
+        .single()
+      
+      if (!positionExists) {
+        console.error('Invalid position_id provided:', position_id)
+        // Clean up the auth user
+        await supabaseAdmin.auth.admin.deleteUser(authUser.user.id)
+        return NextResponse.json({ 
+          error: 'Invalid position selected' 
+        }, { status: 400 })
+      }
+    }
+
     // Create user profile
-    const { data: profile, error } = await supabase
+    console.log('Creating user profile with data:', {
+      id: authUser.user.id,
+      display_name,
+      position_id,
+      role,
+      currentAdminId: user.id,
+      currentAdminEmail: user.email
+    })
+
+    // Use admin client to bypass RLS for user profile creation
+    const { data: profile, error } = await supabaseAdmin
       .from('user_profiles')
       .insert([{
         id: authUser.user.id,
+        email: id, // Store the email address
         display_name,
         position_id,
         role
@@ -169,9 +212,18 @@ export async function POST(request: NextRequest) {
 
     if (error) {
       console.error('Error creating user profile:', error)
+      console.error('Error details:', {
+        code: error.code,
+        message: error.message,
+        details: error.details,
+        hint: error.hint
+      })
       // If profile creation fails, clean up the auth user
       await supabaseAdmin.auth.admin.deleteUser(authUser.user.id)
-      return NextResponse.json({ error: 'Failed to create user profile' }, { status: 500 })
+      return NextResponse.json({ 
+        error: `Failed to create user profile: ${error.message}`,
+        details: error.details 
+      }, { status: 500 })
     }
 
     return NextResponse.json(profile, { status: 201 })
@@ -313,8 +365,8 @@ export async function PUT(request: NextRequest) {
       }
     }
 
-    // Update user profile
-    const { data: profile, error } = await supabase
+    // Update user profile using admin client
+    const { data: profile, error } = await supabaseAdmin
       .from('user_profiles')
       .update({
         display_name,
@@ -364,7 +416,7 @@ export async function DELETE(request: NextRequest) {
     }
 
     // Check if trying to delete an admin user
-    const { data: userToDelete, error: fetchError } = await supabase
+    const { data: userToDelete, error: fetchError } = await supabaseAdmin
       .from('user_profiles')
       .select('role')
       .eq('id', id)
@@ -377,14 +429,14 @@ export async function DELETE(request: NextRequest) {
 
     if (userToDelete.role === 'admin') {
       // Only super admins can delete admin users
-      const { data: currentUserProfile } = await supabase
+      const { data: currentUserProfile } = await supabaseAdmin
         .from('user_profiles')
         .select('position_id')
         .eq('id', user.id)
         .single()
       
       if (currentUserProfile?.position_id) {
-        const { data: currentUserPosition } = await supabase
+        const { data: currentUserPosition } = await supabaseAdmin
           .from('positions')
           .select('is_super_admin')
           .eq('id', currentUserProfile.position_id)
@@ -398,7 +450,7 @@ export async function DELETE(request: NextRequest) {
       }
 
       // Check if this would leave no admins
-      const { data: adminUsers, error: adminError } = await supabase
+      const { data: adminUsers, error: adminError } = await supabaseAdmin
         .from('user_profiles')
         .select('id')
         .eq('role', 'admin')
@@ -415,8 +467,8 @@ export async function DELETE(request: NextRequest) {
       }
     }
 
-    // Delete user profile
-    const { error: deleteError } = await supabase
+    // Delete user profile using admin client
+    const { error: deleteError } = await supabaseAdmin
       .from('user_profiles')
       .delete()
       .eq('id', id)

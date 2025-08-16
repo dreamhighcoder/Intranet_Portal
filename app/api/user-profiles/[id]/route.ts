@@ -20,15 +20,16 @@ export async function PUT(
     }
     
     const body = await request.json()
-    const { display_name, position_id, role, password } = body
+    const { display_name, position_id, role, password, email } = body
 
-    // Update user profile
-    const { data: profile, error: profileError } = await supabase
+    // Update user profile using admin client
+    const { data: profile, error: profileError } = await supabaseAdmin
       .from('user_profiles')
       .update({
         display_name,
         position_id,
-        role
+        role,
+        ...(email && { email: email.trim() }) // Update email if provided
       })
       .eq('id', params.id)
       .select(`
@@ -88,7 +89,7 @@ export async function DELETE(
     }
 
     // Check if this user is an admin and if it's the last admin
-    const { data: userToDelete, error: fetchError } = await supabase
+    const { data: userToDelete, error: fetchError } = await supabaseAdmin
       .from('user_profiles')
       .select('role')
       .eq('id', params.id)
@@ -101,7 +102,7 @@ export async function DELETE(
 
     // If trying to delete an admin, check that it's not the last one
     if (userToDelete.role === 'admin') {
-      const { data: adminUsers, error: adminError } = await supabase
+      const { data: adminUsers, error: adminError } = await supabaseAdmin
         .from('user_profiles')
         .select('id')
         .eq('role', 'admin')
@@ -118,8 +119,8 @@ export async function DELETE(
       }
     }
 
-    // Delete user profile first
-    const { error: profileError } = await supabase
+    // Delete user profile first using admin client
+    const { error: profileError } = await supabaseAdmin
       .from('user_profiles')
       .delete()
       .eq('id', params.id)
