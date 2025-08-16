@@ -210,8 +210,8 @@ export default function CalendarPage() {
         </div>
 
         {/* Filters */}
-        <Card className="card-surface mb-6">
-          <CardContent className="pt-6">
+        <Card className="card-surface mb-6 py-4">
+          <CardContent>
             <div className="flex items-center justify-between">
               <div className="flex items-center space-x-4">
                 <div>

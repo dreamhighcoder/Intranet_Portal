@@ -585,12 +585,8 @@ export default function AdminMasterTasksPage() {
           </div>
         </div>
 
-
-
-
-
         {/* Filters */}
-        <Card className="card-surface mb-6">
+        <Card className="card-surface mb-6 py-0">
           <CardContent className="pt-4 pb-4">
             {/* Mobile Filter Toggle */}
             <div className="lg:hidden mb-4">
@@ -609,7 +605,7 @@ export default function AdminMasterTasksPage() {
 
             {/* Filters - Hidden on mobile unless toggled */}
             <div className={`${showMobileFilters ? 'block' : 'hidden'} lg:block`}>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-7 gap-3">
                 {/* Search Field - Wider than others */}
                 <div className="relative lg:col-span-2">
                   <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
@@ -622,47 +618,56 @@ export default function AdminMasterTasksPage() {
                 </div>
                 
                 {/* Position Filter */}
-                <Select value={filterPosition} onValueChange={setFilterPosition}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="All Positions" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All Positions</SelectItem>
-                    {positions?.map(position => (
-                      <SelectItem key={position.id} value={position.id}>
-                        {position.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <div className="flex justify-start lg:justify-end w-full lg:w-auto">
+                  <Select value={filterPosition} onValueChange={setFilterPosition}>
+                    <SelectTrigger className="w-full lg:w-auto">
+                      <SelectValue placeholder="All Positions" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Positions</SelectItem>
+                      {positions?.map(position => position && (
+                        <SelectItem key={position.id} value={position.id}>
+                          {position.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
 
                 {/* Status Filter */}
-                <Select value={filterStatus} onValueChange={setFilterStatus}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="All Statuses" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All Statuses</SelectItem>
-                    <SelectItem value="active">Active</SelectItem>
-                    <SelectItem value="draft">Draft</SelectItem>
-                    <SelectItem value="inactive">Inactive</SelectItem>
-                  </SelectContent>
-                </Select>
+                <div className="flex justify-start lg:justify-end w-full lg:w-auto">
+                  <Select value={filterStatus} onValueChange={setFilterStatus}>
+                    <SelectTrigger className="w-full lg:w-auto">
+                      <SelectValue placeholder="All Statuses" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Statuses</SelectItem>
+                      <SelectItem value="active">Active</SelectItem>
+                      <SelectItem value="draft">Draft</SelectItem>
+                      <SelectItem value="inactive">Inactive</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
 
                 {/* Category Filter */}
-                <Select value={filterCategory} onValueChange={setFilterCategory}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="All Categories" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All Categories</SelectItem>
-                    {categories?.map(category => category && (
-                      <SelectItem key={category} value={category}>
-                        {category}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <div className="flex justify-start lg:justify-end w-full lg:w-auto">
+                  <Select value={filterCategory} onValueChange={setFilterCategory}>
+                    <SelectTrigger className="w-full lg:w-auto">
+                      <SelectValue placeholder="All Categories" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Categories</SelectItem>
+                      {categories?.map(category => category && (
+                        <SelectItem key={category} value={category}>
+                          {category}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="flex justify-end">
+                </div>
 
                 {/* Export and Import Buttons - Same width */}
                 <div className="grid grid-cols-2 gap-2">
