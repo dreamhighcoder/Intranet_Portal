@@ -42,7 +42,14 @@ export function TaskFilters({
       try {
         const data = await positionsApi.getAll()
         if (data) {
-          setPositions(data)
+          // Filter out administrator positions from the dropdown
+          const filteredPositions = data.filter(position => {
+            const isAdmin = position.role === 'admin' || 
+                           position.name.toLowerCase().includes('admin') || 
+                           position.displayName?.toLowerCase().includes('admin')
+            return !isAdmin
+          })
+          setPositions(filteredPositions)
         }
       } catch (error) {
         console.error('Error fetching positions:', error)

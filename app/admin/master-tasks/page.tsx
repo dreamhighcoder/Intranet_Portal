@@ -117,7 +117,15 @@ export default function AdminMasterTasksPage() {
       console.log('Loaded tasks:', tasksData.length)
       console.log('Loaded positions:', positionsData.length)
       setTasks(tasksData)
-      setPositions(positionsData)
+      
+      // Filter out administrator positions from the dropdown
+      const filteredPositions = positionsData.filter((position: any) => {
+        const isAdmin = position.role === 'admin' || 
+                       position.name.toLowerCase().includes('admin') || 
+                       position.displayName?.toLowerCase().includes('admin')
+        return !isAdmin
+      })
+      setPositions(filteredPositions)
     } catch (error) {
       console.error('Error loading data:', error)
       const errorMessage = error instanceof Error ? error.message : 'Unknown error'
