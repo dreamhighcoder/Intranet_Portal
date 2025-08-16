@@ -141,10 +141,7 @@ export function UserDialog({ isOpen, onClose, user, positions, onSave }: UserDia
         })
       }
 
-      console.log('UserDialog - Submitting data:', {
-        ...data,
-        password: data.password ? '[GENERATED]' : undefined
-      })
+
 
       if (isEditing && user) {
         await authenticatedPut(`/api/user-profiles/${user.id}`, data)

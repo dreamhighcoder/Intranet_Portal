@@ -454,10 +454,6 @@ export async function updateSpecificTaskStatus(
  * Status update job - call this from a cron job every 15-30 minutes
  */
 export async function runStatusUpdateJob(): Promise<StatusUpdateResult> {
-  console.log('Starting status update job...')
-  
   const result = await updateTaskStatuses()
-  
-  console.log('Status update completed:', result.message)
   return result
 }

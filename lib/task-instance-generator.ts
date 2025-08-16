@@ -83,8 +83,6 @@ export class TaskInstanceGenerator {
           totalGenerated += result.generated
           totalSkipped += result.skipped
           totalErrors += result.errors
-
-          console.log(`Generated ${result.generated} instances for task: ${masterTask.title}`)
         } catch (error) {
           console.error(`Error generating instances for task ${masterTask.title}:`, error)
           totalErrors++
@@ -356,14 +354,11 @@ export async function generateInstancesForTask(masterTaskId: string): Promise<Ge
  * Daily generation job - call this from a cron job or scheduled function
  */
 export async function runDailyGeneration(): Promise<GenerationResult> {
-  console.log('Starting daily task instance generation...')
-  
   const result = await generateTaskInstances({
     startDate: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000),  // Look back 7 days for any missed
     endDate: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000),  // Generate 1 year ahead
     forceRegenerate: false
   })
   
-  console.log('Daily generation completed:', result.message)
   return result
 }

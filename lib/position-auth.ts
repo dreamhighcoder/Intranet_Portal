@@ -33,13 +33,6 @@ async function fetchPositionsFromDatabase(): Promise<PositionAuth[]> {
 
     const positions: any[] = await response.json()
     
-    console.log('🔓 Raw positions from database:', positions.map(p => ({
-      id: p.id,
-      name: p.name,
-      hasPasswordHash: !!p.password_hash,
-      passwordHash: p.password_hash ? p.password_hash.substring(0, 10) + '...' : 'NONE'
-    })))
-    
     // Convert Position[] to PositionAuth[]
     const positionAuths: PositionAuth[] = positions
       .filter(pos => pos.password_hash) // Only include positions with passwords
@@ -47,13 +40,7 @@ async function fetchPositionsFromDatabase(): Promise<PositionAuth[]> {
         // Use btoa/atob for browser compatibility instead of Buffer
         const decodedPassword = atob(pos.password_hash!)
         
-        console.log(`🔓 Processing position "${pos.name}":`, {
-          hasPasswordHash: !!pos.password_hash,
-          passwordHash: pos.password_hash ? pos.password_hash.substring(0, 10) + '...' : 'NONE',
-          decodedPassword: decodedPassword,
-          isSuperAdmin: pos.is_super_admin || false
-        })
-        
+
         // Determine role based on position name
         let role: 'admin' | 'viewer' = 'viewer'
         const nameCheck = pos.name.toLowerCase()
@@ -109,11 +96,9 @@ export class PositionAuthService {
         try {
           const { data, timestamp } = JSON.parse(cached)
           if (now - timestamp < cacheExpiry) {
-            console.log('🔓 Using cached positions')
             return data
           }
         } catch (error) {
-          console.warn('🔓 Failed to parse cached positions, clearing cache')
           localStorage.removeItem(cacheKey)
         }
       }
