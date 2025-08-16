@@ -7,7 +7,7 @@ import { TASK_CATEGORIES } from "@/lib/constants"
 import { Position } from "@/lib/types"
 import { positionsApi } from "@/lib/api-client"
 import { toastError } from "@/hooks/use-toast"
-import { useAuth } from "@/lib/auth"
+import { usePositionAuth } from "@/lib/position-auth-context"
 
 interface TaskFiltersProps {
   selectedPosition: string
@@ -30,7 +30,7 @@ export function TaskFilters({
 }: TaskFiltersProps) {
   const [positions, setPositions] = useState<Position[]>([])
   const [isLoadingPositions, setIsLoadingPositions] = useState(true)
-  const { user, isLoading } = useAuth()
+  const { user, isLoading } = usePositionAuth()
 
   useEffect(() => {
     async function fetchPositions() {
