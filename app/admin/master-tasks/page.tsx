@@ -605,8 +605,8 @@ export default function AdminMasterTasksPage() {
 
             {/* Filters - Hidden on mobile unless toggled */}
             <div className={`${showMobileFilters ? 'block' : 'hidden'} lg:block`}>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-7 gap-3">
-                {/* Search Field - Wider than others */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3">
+                {/* Search Field - Takes 2 columns */}
                 <div className="relative lg:col-span-2">
                   <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
                   <Input
@@ -618,9 +618,9 @@ export default function AdminMasterTasksPage() {
                 </div>
                 
                 {/* Position Filter */}
-                <div className="flex justify-start lg:justify-end w-full lg:w-auto">
+                <div className="flex justify-start w-full">
                   <Select value={filterPosition} onValueChange={setFilterPosition}>
-                    <SelectTrigger className="w-full lg:w-auto">
+                    <SelectTrigger className="w-full">
                       <SelectValue placeholder="All Positions" />
                     </SelectTrigger>
                     <SelectContent>
@@ -635,9 +635,9 @@ export default function AdminMasterTasksPage() {
                 </div>
 
                 {/* Status Filter */}
-                <div className="flex justify-start lg:justify-end w-full lg:w-auto">
+                <div className="flex justify-start w-full">
                   <Select value={filterStatus} onValueChange={setFilterStatus}>
-                    <SelectTrigger className="w-full lg:w-auto">
+                    <SelectTrigger className="w-full">
                       <SelectValue placeholder="All Statuses" />
                     </SelectTrigger>
                     <SelectContent>
@@ -650,9 +650,9 @@ export default function AdminMasterTasksPage() {
                 </div>
 
                 {/* Category Filter */}
-                <div className="flex justify-start lg:justify-end w-full lg:w-auto">
+                <div className="flex justify-start w-full">
                   <Select value={filterCategory} onValueChange={setFilterCategory}>
-                    <SelectTrigger className="w-full lg:w-auto">
+                    <SelectTrigger className="w-full">
                       <SelectValue placeholder="All Categories" />
                     </SelectTrigger>
                     <SelectContent>
@@ -666,10 +666,7 @@ export default function AdminMasterTasksPage() {
                   </Select>
                 </div>
 
-                <div className="flex justify-end">
-                </div>
-
-                {/* Export and Import Buttons - Same width */}
+                {/* Export and Import Buttons */}
                 <div className="grid grid-cols-2 gap-2">
                   <Button variant="outline" size="sm" onClick={handleExport} className="w-full">
                     <Download className="w-4 h-4 mr-1" />
