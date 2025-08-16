@@ -2,7 +2,6 @@ import type React from "react"
 import type { Metadata } from "next"
 import { GeistSans } from "geist/font/sans"
 import { GeistMono } from "geist/font/mono"
-import { AuthProvider } from "@/lib/auth"
 import { PositionAuthProvider } from "@/lib/position-auth-context"
 import { ErrorBoundary } from "@/components/error-boundary"
 import { Toaster } from "@/components/ui/toaster"
@@ -36,12 +35,10 @@ html {
       </head>
       <body className="min-h-screen bg-[var(--color-background)] text-[var(--color-text-primary)] antialiased">
         <ErrorBoundary>
-          <AuthProvider>
-            <PositionAuthProvider>
-              {children}
-              <Toaster />
-            </PositionAuthProvider>
-          </AuthProvider>
+          <PositionAuthProvider>
+            {children}
+            <Toaster />
+          </PositionAuthProvider>
         </ErrorBoundary>
       </body>
     </html>

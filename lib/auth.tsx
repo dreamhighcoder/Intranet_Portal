@@ -3,6 +3,7 @@
 import React, { createContext, useContext, useEffect, useState } from 'react'
 import { User } from '@supabase/supabase-js'
 import { supabase, type UserProfile, type Position } from './supabase'
+import { useRouter } from 'next/navigation'
 
 
 interface AuthUser extends User {
@@ -24,6 +25,71 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined)
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null)
   const [isLoading, setIsLoading] = useState(true)
+  const router = useRouter()
+  const INACTIVITY_LIMIT_MS = 5 * 60 * 1000 // 5 minutes
+  const inactivityTimerRef = React.useRef<NodeJS.Timeout | null>(null)
+  const lastActivityRef = React.useRef<number>(Date.now())
+  const userRef = React.useRef<AuthUser | null>(null)
+
+  // Keep user ref in sync
+  React.useEffect(() => {
+    userRef.current = user
+  }, [user])
+
+  const performLogout = React.useCallback(async () => {
+    console.log('🚪 Auth: Performing inactivity logout')
+    
+    // Clear any existing timer
+    if (inactivityTimerRef.current) {
+      clearTimeout(inactivityTimerRef.current)
+      inactivityTimerRef.current = null
+    }
+    
+    try {
+      // Sign out from Supabase
+      await supabase.auth.signOut()
+      console.log('✅ Auth: Supabase signout complete')
+      
+      // Redirect to home page
+      router.push('/')
+      console.log('✅ Auth: Redirected to home page')
+    } catch (error) {
+      console.error('❌ Auth: Error during logout:', error)
+    }
+  }, [router])
+
+  const startInactivityTimer = React.useCallback(() => {
+    if (!userRef.current) {
+      console.log('👤 Auth: No user - skipping timer setup')
+      return
+    }
+    
+    console.log('⏰ Auth: Starting inactivity timer')
+    
+    // Clear existing timer
+    if (inactivityTimerRef.current) {
+      clearTimeout(inactivityTimerRef.current)
+    }
+    
+    // Set new timer
+    inactivityTimerRef.current = setTimeout(() => {
+      console.log('🚨 Auth: INACTIVITY TIMEOUT - Logging out user')
+      performLogout()
+    }, INACTIVITY_LIMIT_MS)
+    
+    console.log(`✅ Auth: Timer set for ${INACTIVITY_LIMIT_MS}ms`)
+  }, [INACTIVITY_LIMIT_MS, performLogout])
+
+  const handleUserActivity = React.useCallback(() => {
+    const now = Date.now()
+    lastActivityRef.current = now
+    
+    console.log('🎯 Auth: User activity detected at', new Date(now).toLocaleTimeString())
+    
+    if (userRef.current) {
+      startInactivityTimer()
+    }
+  }, [startInactivityTimer])
 
   const loadUserProfile = async (currentUser: AuthUser) => {
     try {
@@ -221,6 +287,58 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return () => subscription.unsubscribe()
   }, [])
 
+  // Inactivity monitoring setup
+  React.useEffect(() => {
+    if (!user) {
+      console.log('👤 Auth: No user - cleaning up inactivity monitoring')
+      
+      // Clear timer if user logged out
+      if (inactivityTimerRef.current) {
+        clearTimeout(inactivityTimerRef.current)
+        inactivityTimerRef.current = null
+      }
+      return
+    }
+
+    console.log('🔧 Auth: Setting up inactivity monitoring for:', user.email)
+
+    const events = ['mousemove', 'mousedown', 'keydown', 'scroll', 'touchstart', 'click', 'focus'] as const
+    
+    // Add all event listeners
+    events.forEach((eventType) => {
+      document.addEventListener(eventType, handleUserActivity, { passive: true })
+      console.log(`📡 Auth: Added ${eventType} listener`)
+    })
+
+    // Handle visibility changes
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        console.log('👁️ Auth: Tab became visible - resetting activity timer')
+        handleUserActivity()
+      }
+    }
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+
+    // Start the initial timer
+    console.log('🚀 Auth: Starting initial inactivity timer')
+    startInactivityTimer()
+
+    // Cleanup function
+    return () => {
+      console.log('🧹 Auth: Cleaning up inactivity monitoring')
+      
+      if (inactivityTimerRef.current) {
+        clearTimeout(inactivityTimerRef.current)
+        inactivityTimerRef.current = null
+      }
+      
+      events.forEach((eventType) => {
+        document.removeEventListener(eventType, handleUserActivity)
+      })
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+    }
+  }, [user, handleUserActivity, startInactivityTimer])
+
   const signIn = async (email: string, password: string) => {
     console.log('Auth context - Attempting sign in for:', email)
     const { data, error } = await supabase.auth.signInWithPassword({
@@ -235,15 +353,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       sessionExists: !!data?.session
     })
     
-
-    
     return { error }
   }
 
   const signOut = async () => {
-    console.log('Auth context - Signing out')
-    await supabase.auth.signOut()
+    console.log('🚪 Auth: Manual signout requested')
+    await performLogout()
   }
+
+
 
   const value: AuthContextType = {
     user,

@@ -15,6 +15,7 @@ import { positionsApi } from "@/lib/api-client"
 import { Check, X, Eye, LogOut, Settings } from "lucide-react"
 import Link from "next/link"
 import { toastError, toastSuccess } from "@/hooks/use-toast"
+import { AutoLogoutDebug } from "@/components/auto-logout-debug"
 
 export default function ChecklistPage() {
   const { user, isLoading, signOut, isAdmin } = usePositionAuth()
@@ -309,6 +310,7 @@ export default function ChecklistPage() {
 
   return (
     <div className="min-h-screen bg-[var(--color-background)]">
+      <AutoLogoutDebug />
       <Navigation />
 
       <main className="max-w-screen-2xl mx-auto px-4 sm:px-6 lg:px-8 py-8">

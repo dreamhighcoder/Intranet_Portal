@@ -11,6 +11,7 @@ import { Users, Stethoscope, Package, Building } from "lucide-react"
 import { PositionAuthService } from "@/lib/position-auth"
 import { useRouter } from "next/navigation"
 import { useEffect } from "react"
+import { AutoLogoutDebug } from "@/components/auto-logout-debug"
 
 export default function HomePage() {
   const { user, isLoading } = usePositionAuth()
@@ -157,6 +158,7 @@ export default function HomePage() {
 
   return (
     <div className="min-h-screen" style={{ backgroundColor: "var(--color-bg)" }}>
+      <AutoLogoutDebug />
       <PublicNavigation onLoginClick={handleLoginClick} />
 
       <main className="max-w-screen-2xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
