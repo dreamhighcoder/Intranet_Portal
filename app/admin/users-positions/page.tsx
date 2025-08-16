@@ -201,13 +201,18 @@ export default function UsersPositionsPage() {
       return true
     }
     
-    // Regular admins can only edit their own account
+    // Regular admins can edit their own account
     if (userProfile.id === user?.id) {
       return true
     }
     
-    // Regular admins cannot edit any other users (including non-admin users)
-    return false
+    // Regular admins cannot edit other admin users
+    if (userProfile.role === 'admin') {
+      return false
+    }
+    
+    // Regular admins can edit non-admin users
+    return true
   }
 
   const canAddUser = () => {
@@ -655,7 +660,7 @@ export default function UsersPositionsPage() {
                             onClick={() => handleEditUser(userProfile)}
                             disabled={!canEditUser(userProfile)}
                             className={!canEditUser(userProfile) ? "text-gray-400 hover:text-gray-400 bg-gray-50 cursor-not-allowed" : ""}
-                            title={!canEditUser(userProfile) ? "Cannot edit admin users" : "Edit user"}
+                            title={!canEditUser(userProfile) ? "Cannot edit other admin users" : "Edit user"}
                           >
                             <Edit className="w-4 h-4" />
                           </Button>
