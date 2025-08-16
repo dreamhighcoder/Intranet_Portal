@@ -9,6 +9,7 @@ interface PositionAuthContextType {
   signIn: (positionId: string, password: string) => Promise<{ success: boolean; error?: string }>
   signOut: () => void
   isAdmin: boolean
+  isSuperAdmin: boolean
 }
 
 const PositionAuthContext = createContext<PositionAuthContextType | undefined>(undefined)
@@ -60,7 +61,8 @@ export function PositionAuthProvider({ children }: { children: React.ReactNode }
     isLoading,
     signIn,
     signOut,
-    isAdmin: user?.role === 'admin'
+    isAdmin: user?.role === 'admin',
+    isSuperAdmin: user?.isSuperAdmin || false
   }
 
   // Debug logging
@@ -70,10 +72,12 @@ export function PositionAuthProvider({ children }: { children: React.ReactNode }
         id: user.id,
         role: user.role,
         displayName: user.displayName,
-        isAuthenticated: user.isAuthenticated
+        isAuthenticated: user.isAuthenticated,
+        isSuperAdmin: user.isSuperAdmin
       } : null,
       isLoading,
       isAdmin: user?.role === 'admin',
+      isSuperAdmin: user?.isSuperAdmin || false,
       userRole: user?.role
     })
   }, [user, isLoading])

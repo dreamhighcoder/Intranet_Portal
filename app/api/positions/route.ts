@@ -10,16 +10,9 @@ const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey)
 
 export async function GET(request: NextRequest) {
   try {
-    // Check if this is a position-based auth request (headers are case-insensitive, but normalize to lowercase)
-    const isPositionAuth = request.headers.get('x-position-auth') === 'true'
-    
-    if (isPositionAuth) {
-      console.log('Positions GET - Position-based auth request, allowing access to reference data')
-    } else {
-      // For Supabase auth, require authentication
-      const user = await requireAuth(request)
-      console.log('Positions GET - Supabase authentication successful for:', user.email)
-    }
+    // Positions should be publicly accessible for the login modal
+    // No authentication required for reading positions
+    console.log('Positions GET - Public access request for login modal')
 
     // Try to select all fields including password_hash, but fall back gracefully
     let selectFields = '*'
@@ -54,9 +47,6 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(positions)
   } catch (error) {
     console.error('Unexpected error:', error)
-    if (error instanceof Error && error.message.includes('Authentication')) {
-      return NextResponse.json({ error: error.message }, { status: 401 })
-    }
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }

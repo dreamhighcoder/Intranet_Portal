@@ -96,6 +96,54 @@ export async function DELETE(
       return NextResponse.json({ error: 'Admin access required' }, { status: 403 })
     }
 
+    // Check if this is an admin position
+    const { data: positionToDelete, error: fetchError } = await supabaseAdmin
+      .from('positions')
+      .select('name, password_hash, is_super_admin')
+      .eq('id', params.id)
+      .single()
+
+    if (fetchError) {
+      console.error('Error fetching position to delete:', fetchError)
+      return NextResponse.json({ error: 'Position not found' }, { status: 404 })
+    }
+
+    const isAdminPosition = positionToDelete.password_hash && (
+      positionToDelete.name.toLowerCase().includes('administrator') || 
+      positionToDelete.name.toLowerCase().includes('admin')
+    )
+
+    if (isAdminPosition) {
+      // Only super admins can delete admin positions
+      // Check if the current user is a super admin by checking their position
+      const { data: currentUserProfile } = await supabaseAdmin
+        .from('user_profiles')
+        .select('position_id')
+        .eq('id', user.id)
+        .single()
+      
+      if (currentUserProfile?.position_id) {
+        const { data: currentUserPositionData } = await supabaseAdmin
+          .from('positions')
+          .select('is_super_admin')
+          .eq('id', currentUserProfile.position_id)
+          .single()
+        
+        if (!currentUserPositionData?.is_super_admin) {
+          return NextResponse.json({ 
+            error: 'Only Super Admins can delete admin positions' 
+          }, { status: 403 })
+        }
+      }
+
+      // Prevent deletion of super admin position
+      if (positionToDelete.is_super_admin) {
+        return NextResponse.json({ 
+          error: 'Cannot delete the Super Admin position' 
+        }, { status: 400 })
+      }
+    }
+
     // Check if position is in use by users or tasks
     const { data: userProfiles } = await supabaseAdmin
       .from('user_profiles')

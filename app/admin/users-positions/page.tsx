@@ -18,7 +18,7 @@ import { ConfirmDeleteDialog } from "@/components/confirm-delete-dialog"
 import { toastSuccess, toastError } from "@/hooks/use-toast"
 
 export default function UsersPositionsPage() {
-  const { user, isLoading, isAdmin } = usePositionAuth()
+  const { user, isLoading, isAdmin, isSuperAdmin } = usePositionAuth()
   const router = useRouter()
   const [activeTab, setActiveTab] = useState<"positions" | "users">("positions")
   const [positions, setPositions] = useState<Position[]>([])
@@ -46,46 +46,34 @@ export default function UsersPositionsPage() {
     async function fetchData() {
       if (!isAdmin) return
       
+      setIsLoadingData(true)
       try {
-        const [positionsData, usersData] = await Promise.all([
-          positionsApi.getAll(),
-          authenticatedGet('/api/user-profiles')
-        ])
-
-        if (positionsData) {
+        // Fetch positions
+        const positionsResponse = await fetch('/api/positions')
+        if (positionsResponse.ok) {
+          const positionsData = await positionsResponse.json()
           setPositions(positionsData)
         }
 
-        if (usersData) {
+        // Fetch users
+        const usersResponse = await fetch('/api/user-profiles')
+        if (usersResponse.ok) {
+          const usersData = await usersResponse.json()
           setUsers(usersData)
         }
-        
-        console.log('🔍 Fetched data:', {
-          positions: positionsData?.length || 0,
-          users: usersData?.length || 0,
-          adminUsers: usersData?.filter(u => u.role === 'admin').length || 0,
-          adminPositions: positionsData?.filter(p => 
-            p.password_hash && (p.name.toLowerCase().includes('administrator') || p.name.toLowerCase().includes('admin'))
-          ).length || 0,
-          samplePosition: positionsData?.[0] ? {
-            id: positionsData[0].id,
-            name: positionsData[0].name,
-            created_at: positionsData[0].created_at,
-            created_at_type: typeof positionsData[0].created_at
-          } : null
-        })
       } catch (error) {
         console.error('Error fetching data:', error)
+        toastError("Error", "Failed to fetch data")
       } finally {
         setIsLoadingData(false)
       }
     }
 
     fetchData()
-  }, [user, isAdmin])
+  }, [isAdmin])
 
   const getPositionName = (positionId: string | undefined) => {
-    return positions.find((p) => p.id === positionId)?.name || "Unknown"
+    return positions.find((p: Position) => p.id === positionId)?.name || "Unknown"
   }
 
   // Helper function to safely format dates
@@ -108,8 +96,8 @@ export default function UsersPositionsPage() {
   const formatCreatedDate = formatDate
 
   // Count total admins for delete protection (both user profiles and position-based)
-  const adminUserCount = users.filter(user => user.role === "admin").length
-  const adminPositionCount = positions.filter(position => 
+  const adminUserCount = users.filter((user: UserProfile) => user.role === "admin").length
+  const adminPositionCount = positions.filter((position: Position) => 
     position.password_hash && 
     (position.name.toLowerCase().includes('administrator') || position.name.toLowerCase().includes('admin'))
   ).length
@@ -121,83 +109,83 @@ export default function UsersPositionsPage() {
     adminUserCount,
     adminPositionCount, 
     totalAdminCount,
-    adminUsers: users.filter(user => user.role === "admin").map(u => ({
+    adminUsers: users.filter((user: UserProfile) => user.role === "admin").map((u: UserProfile) => ({
       id: u.id,
       displayName: u.display_name,
       role: u.role
     })),
-    adminPositions: positions.filter(p => 
+    adminPositions: positions.filter((p: Position) => 
       p.password_hash && (p.name.toLowerCase().includes('administrator') || p.name.toLowerCase().includes('admin'))
-    ).map(p => ({
+    ).map((p: Position) => ({
       id: p.id,
       name: p.name,
       hasPassword: !!p.password_hash
     }))
   })
   
-  // Check if a user can be deleted (cannot delete last admin)
-  const canDeleteUser = (user: UserProfile) => {
-    // If data is still loading, disable delete for safety
-    if (isLoadingData || users.length === 0) {
-      console.log("Data still loading or empty, disabling delete")
-      return false
-    }
-    
-    // Non-admin users can always be deleted
-    if (user.role !== "admin") {
-      console.log("User is not admin, can delete:", user.display_name, user.role)
-      return true
-    }
-    
-    // Admin users can only be deleted if there are other admins available (users + positions)
-    // If we delete this admin user, we need at least 1 admin remaining (either user or position)
-    const remainingAdminCount = totalAdminCount - 1
-    const canDelete = remainingAdminCount > 0
-    
-    console.log("🔍 Admin delete check:", {
-      userToDelete: user.display_name,
-      totalAdminCount,
-      remainingAfterDelete: remainingAdminCount,
-      canDelete,
-      adminUserCount,
-      adminPositionCount
-    })
-    
-    return canDelete
+  // Permission check functions
+  const canManageAdmins = () => {
+    return isSuperAdmin
   }
 
-  // Check if a position can be deleted (cannot delete last admin position)
   const canDeletePosition = (position: Position) => {
-    // If data is still loading, disable delete for safety
-    if (isLoadingData || positions.length === 0) {
-      console.log("Data still loading or empty, disabling position delete")
-      return false
-    }
-    
-    // Non-admin positions can always be deleted
-    const isAdminPosition = position.password_hash && 
-      (position.name.toLowerCase().includes('administrator') || position.name.toLowerCase().includes('admin'))
-    
-    if (!isAdminPosition) {
-      console.log("Position is not admin, can delete:", position.name)
+    // Super admins can delete any position except their own
+    if (isSuperAdmin) {
+      // Check if this is the super admin's own position
+      if (position.password_hash) {
+        const decodedPassword = atob(position.password_hash)
+        // If this is the super admin position (admin123), prevent deletion
+        if (decodedPassword === 'admin123') {
+          return false
+        }
+      }
       return true
     }
     
-    // Admin positions can only be deleted if there are other admins available (users + positions)
-    // If we delete this admin position, we need at least 1 admin remaining (either user or position)
-    const remainingAdminCount = totalAdminCount - 1
-    const canDelete = remainingAdminCount > 0
+    // Regular admins cannot delete admin positions
+    if (position.password_hash && (
+        position.name.toLowerCase().includes('administrator') || 
+        position.name.toLowerCase().includes('admin')
+      )) {
+      return false
+    }
     
-    console.log("🔍 Admin position delete check:", {
-      positionToDelete: position.name,
-      totalAdminCount,
-      remainingAfterDelete: remainingAdminCount,
-      canDelete,
-      adminUserCount,
-      adminPositionCount
-    })
+    // Regular admins can delete non-admin positions
+    return true
+  }
+
+  const canDeleteUser = (userProfile: UserProfile) => {
+    // Super admins can delete any user except themselves
+    if (isSuperAdmin) {
+      return userProfile.id !== user?.id
+    }
     
-    return canDelete
+    // Regular admins cannot delete admin users
+    if (userProfile.role === 'admin') {
+      return false
+    }
+    
+    // Regular admins can delete non-admin users
+    return true
+  }
+
+  const canEditUser = (userProfile: UserProfile) => {
+    // Super admins can edit any user
+    if (isSuperAdmin) {
+      return true
+    }
+    
+    // Regular admins cannot edit admin users
+    if (userProfile.role === 'admin') {
+      return false
+    }
+    
+    // Regular admins can edit non-admin users
+    return true
+  }
+
+  const canAddAdmin = () => {
+    return isSuperAdmin
   }
 
   const refreshData = async () => {
@@ -372,9 +360,15 @@ export default function UsersPositionsPage() {
           <Card className="card-surface">
             <CardHeader>
               <div className="flex items-center justify-between">
-                <CardTitle>Positions</CardTitle>
+                <CardTitle>
+                  Positions {totalAdminCount > 0 && (
+                    <span className="text-sm font-normal text-gray-500 ml-2">
+                      ({adminUserCount} user admin{adminUserCount !== 1 ? 's' : ''}{adminPositionCount > 0 ? `, ${adminPositionCount} position admin${adminPositionCount !== 1 ? 's' : ''}` : ''})
+                    </span>
+                  )}
+                </CardTitle>
                 <Button 
-                  className="bg-[var(--color-primary)] hover:bg-[var(--color-primary)]/90 text-[var(--color-primary-on)]"
+                  className="bg-[var(--color-primary)] hover:bg-[var(--color-primary)]/90 text-white"
                   onClick={handleAddPosition}
                 >
                   <Plus className="w-4 h-4 mr-2" />
@@ -388,7 +382,7 @@ export default function UsersPositionsPage() {
                   <TableRow>
                     <TableHead>Name</TableHead>
                     <TableHead>Description</TableHead>
-                    <TableHead>Password</TableHead>
+                    <TableHead>Type</TableHead>
                     <TableHead>Created</TableHead>
                     <TableHead>Updated</TableHead>
                     <TableHead>Actions</TableHead>
@@ -400,13 +394,26 @@ export default function UsersPositionsPage() {
                       <TableCell>
                         <div className="font-medium">{position.name}</div>
                       </TableCell>
+                      <TableCell>{position.description || 'N/A'}</TableCell>
                       <TableCell>
-                        <div className="text-[var(--color-text-secondary)]">{position.description}</div>
-                      </TableCell>
-                      <TableCell>
-                        <div className="font-mono text-sm text-[var(--color-text-muted)]">
-                          {position.password_hash ? atob(position.password_hash) : 'Not set'}
-                        </div>
+                        <Badge
+                          className={
+                            position.password_hash && (
+                              position.name.toLowerCase().includes('administrator') || 
+                              position.name.toLowerCase().includes('admin')
+                            )
+                              ? "bg-purple-100 text-purple-800 border-purple-200"
+                              : "bg-blue-100 text-blue-800 border-blue-200"
+                          }
+                        >
+                          {position.password_hash && (
+                            position.name.toLowerCase().includes('administrator') || 
+                            position.name.toLowerCase().includes('admin')
+                          )
+                            ? (position.is_super_admin ? "Super Admin" : "Admin")
+                            : "Position"
+                          }
+                        </Badge>
                       </TableCell>
                       <TableCell>{formatDate(position.created_at)}</TableCell>
                       <TableCell>{formatDate(position.updated_at)}</TableCell>
@@ -428,7 +435,10 @@ export default function UsersPositionsPage() {
                               : "text-red-600 hover:text-red-700 bg-transparent"
                             }`}
                             disabled={!canDeletePosition(position)}
-                            title={!canDeletePosition(position) ? "Cannot delete the last administrator position" : "Delete position"}
+                            title={!canDeletePosition(position) ? 
+                              (position.is_super_admin ? "Cannot delete Super Admin position" : "Cannot delete admin position") 
+                              : "Delete position"
+                            }
                           >
                             <Trash2 className="w-4 h-4" />
                           </Button>
@@ -457,6 +467,8 @@ export default function UsersPositionsPage() {
                 <Button 
                   className="bg-[var(--color-primary)] hover:bg-[var(--color-primary)]/90 text-white"
                   onClick={handleAddUser}
+                  disabled={!canAddAdmin()}
+                  title={!canAddAdmin() ? "Only Super Admins can add new admins" : "Add User"}
                 >
                   <Plus className="w-4 h-4 mr-2" />
                   Add User
@@ -503,6 +515,9 @@ export default function UsersPositionsPage() {
                             size="sm" 
                             variant="outline"
                             onClick={() => handleEditUser(userProfile)}
+                            disabled={!canEditUser(userProfile)}
+                            className={!canEditUser(userProfile) ? "text-gray-400 hover:text-gray-400 bg-gray-50 cursor-not-allowed" : ""}
+                            title={!canEditUser(userProfile) ? "Cannot edit admin users" : "Edit user"}
                           >
                             <Edit className="w-4 h-4" />
                           </Button>
@@ -515,7 +530,10 @@ export default function UsersPositionsPage() {
                               : "text-red-600 hover:text-red-700 bg-transparent"
                             }`}
                             disabled={!canDeleteUser(userProfile)}
-                            title={!canDeleteUser(userProfile) ? "Cannot delete the last administrator" : "Delete user"}
+                            title={!canDeleteUser(userProfile) ? 
+                              (userProfile.role === 'admin' ? "Cannot delete admin users" : "Cannot delete the last administrator") 
+                              : "Delete user"
+                            }
                           >
                             <Trash2 className="w-4 h-4" />
                           </Button>
