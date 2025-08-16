@@ -1,11 +1,13 @@
 "use client"
 
 import { useState, useEffect } from "react"
+import { usePositionAuth } from "@/lib/position-auth-context"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
+import { Lock } from "lucide-react"
 import { Position } from "@/lib/types"
 import { authenticatedPost, authenticatedPut } from "@/lib/api-client"
 import { PositionAuthService } from "@/lib/position-auth"
@@ -19,6 +21,7 @@ interface PositionDialogProps {
 }
 
 export function PositionDialog({ isOpen, onClose, position, onSave }: PositionDialogProps) {
+  const { user, isSuperAdmin } = usePositionAuth()
   const [name, setName] = useState("")
   const [description, setDescription] = useState("")
   const [password, setPassword] = useState("")
@@ -26,6 +29,34 @@ export function PositionDialog({ isOpen, onClose, position, onSave }: PositionDi
 
   const isEditing = Boolean(position)
   const title = isEditing ? "Edit Position" : "Add Position"
+
+  // Check if current user can edit password for this position
+  const canEditPassword = (pos: Position | null) => {
+    if (!pos) return true // New positions can always have passwords set
+    
+    // Super admins can edit all passwords
+    if (isSuperAdmin) {
+      return true
+    }
+    
+    // Regular admins cannot edit other admin passwords
+    if (pos.password_hash && (
+        pos.name.toLowerCase().includes('administrator') || 
+        pos.name.toLowerCase().includes('admin')
+      )) {
+      // Check if this is their own position by comparing the password
+      if (user?.position?.password && pos.password_hash) {
+        const decodedPassword = atob(pos.password_hash)
+        return user.position.password === decodedPassword
+      }
+      return false
+    }
+    
+    // Regular admins can edit non-admin position passwords
+    return true
+  }
+
+  const canEditThisPassword = canEditPassword(position)
 
   useEffect(() => {
     if (position) {
@@ -52,7 +83,7 @@ export function PositionDialog({ isOpen, onClose, position, onSave }: PositionDi
       const data = {
         name: name.trim(),
         description: description.trim(),
-        ...(password && { password })
+        ...(password && canEditThisPassword && { password })
       }
 
       if (isEditing && position) {
@@ -136,20 +167,33 @@ export function PositionDialog({ isOpen, onClose, position, onSave }: PositionDi
             <Label htmlFor="password">
               {isEditing ? "New Password (optional)" : "Password"}
             </Label>
-            <Input
-              id="password"
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder={isEditing ? "Leave blank to keep current password" : "Enter password for this position"}
-              className="bg-white dark:bg-white"
-            />
+            {canEditThisPassword ? (
+              <Input
+                id="password"
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder={isEditing ? "Leave blank to keep current password" : "Enter password for this position"}
+                className="bg-white dark:bg-white"
+              />
+            ) : (
+              <div className="flex items-center space-x-2 p-2 bg-gray-50 border rounded-md">
+                <Lock className="w-4 h-4 text-gray-500" />
+                <span className="text-sm text-gray-600">Password protected - cannot be changed</span>
+              </div>
+            )}
             <p className="text-xs text-gray-600 mt-1">
-              This password will be used for position-based authentication
-              {(name.toLowerCase().includes('admin') || name.toLowerCase().includes('administrator')) && (
-                <span className="block text-amber-600 mt-1 font-medium">
-                  ⚠️ Admin positions must have unique passwords. Each admin position requires a different password for security.
-                </span>
+              {canEditThisPassword ? (
+                <>
+                  This password will be used for position-based authentication
+                  {(name.toLowerCase().includes('admin') || name.toLowerCase().includes('administrator')) && (
+                    <span className="block text-amber-600 mt-1 font-medium">
+                      ⚠️ Admin positions must have unique passwords. Each admin position requires a different password for security.
+                    </span>
+                  )}
+                </>
+              ) : (
+                "Only Super Admins can change passwords for other admin positions"
               )}
             </p>
           </div>

@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Edit, Trash2, Plus, Users, Briefcase } from "lucide-react"
+import { Edit, Trash2, Plus, Users, Briefcase, Lock, Eye, EyeOff } from "lucide-react"
 import { useRouter } from "next/navigation"
 import { Position, UserProfile } from "@/lib/types"
 import { positionsApi, authenticatedGet, authenticatedDelete } from "@/lib/api-client"
@@ -35,6 +35,9 @@ export default function UsersPositionsPage() {
   const [selectedUser, setSelectedUser] = useState<UserProfile | null>(null)
   const [itemToDelete, setItemToDelete] = useState<{ type: 'position' | 'user'; id: string; name: string } | null>(null)
   const [isDeleting, setIsDeleting] = useState(false)
+  
+  // Password visibility state for each position
+  const [passwordVisibility, setPasswordVisibility] = useState<Record<string, boolean>>({})
 
   useEffect(() => {
     if (!isLoading && (!user || user.role !== "admin")) {
@@ -175,17 +178,89 @@ export default function UsersPositionsPage() {
       return true
     }
     
-    // Regular admins cannot edit admin users
-    if (userProfile.role === 'admin') {
-      return false
+    // Regular admins can only edit their own account
+    if (userProfile.id === user?.id) {
+      return true
     }
     
-    // Regular admins can edit non-admin users
-    return true
+    // Regular admins cannot edit any other users (including non-admin users)
+    return false
   }
 
   const canAddAdmin = () => {
     return isSuperAdmin
+  }
+
+  // Check if current user can view password for a position
+  const canViewPassword = (position: Position) => {
+    // Super admins can view all passwords
+    if (isSuperAdmin) {
+      return true
+    }
+    
+    // Regular admins cannot view other admin passwords
+    if (position.password_hash && (
+        position.name.toLowerCase().includes('administrator') || 
+        position.name.toLowerCase().includes('admin')
+      )) {
+      // Check if this is their own position by comparing the password
+      if (user?.position?.password && position.password_hash) {
+        const decodedPassword = atob(position.password_hash)
+        return user.position.password === decodedPassword
+      }
+      return false
+    }
+    
+    // Regular admins can view non-admin position passwords
+    return true
+  }
+
+  // Check if current user can edit a position
+  const canEditPosition = (position: Position) => {
+    // Super admins can edit all positions
+    if (isSuperAdmin) {
+      return true
+    }
+    
+    // Regular admins cannot edit other admin positions
+    if (position.password_hash && (
+        position.name.toLowerCase().includes('administrator') || 
+        position.name.toLowerCase().includes('admin')
+      )) {
+      // Check if this is their own position by comparing the password
+      if (user?.position?.password && position.password_hash) {
+        const decodedPassword = atob(position.password_hash)
+        return user.position.password === decodedPassword
+      }
+      return false
+    }
+    
+    // Regular admins can edit non-admin positions
+    return true
+  }
+
+  // Toggle password visibility for a specific position
+  const togglePasswordVisibility = (positionId: string) => {
+    setPasswordVisibility(prev => ({
+      ...prev,
+      [positionId]: !prev[positionId]
+    }))
+  }
+
+  // Get display password for a position
+  const getDisplayPassword = (position: Position) => {
+    if (!position.password_hash) {
+      return "No password set"
+    }
+    
+    if (!canViewPassword(position)) {
+      return "••••••••"
+    }
+    
+    const decodedPassword = atob(position.password_hash)
+    const isVisible = passwordVisibility[position.id]
+    
+    return isVisible ? decodedPassword : "••••••••"
   }
 
   const refreshData = async () => {
@@ -383,6 +458,7 @@ export default function UsersPositionsPage() {
                     <TableHead>Name</TableHead>
                     <TableHead>Description</TableHead>
                     <TableHead>Type</TableHead>
+                    <TableHead>Password</TableHead>
                     <TableHead>Created</TableHead>
                     <TableHead>Updated</TableHead>
                     <TableHead>Actions</TableHead>
@@ -415,6 +491,37 @@ export default function UsersPositionsPage() {
                           }
                         </Badge>
                       </TableCell>
+                      <TableCell>
+                        <div className="flex items-center space-x-2">
+                          {!canViewPassword(position) ? (
+                            <div className="flex items-center space-x-2 text-gray-500">
+                              <Lock className="w-4 h-4" />
+                              <span className="text-sm">Protected</span>
+                            </div>
+                          ) : (
+                            <>
+                              <span className="font-mono text-sm">
+                                {getDisplayPassword(position)}
+                              </span>
+                              {position.password_hash && (
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  onClick={() => togglePasswordVisibility(position.id)}
+                                  className="h-6 w-6 p-0 hover:bg-gray-100"
+                                  title={passwordVisibility[position.id] ? "Hide password" : "Show password"}
+                                >
+                                  {passwordVisibility[position.id] ? (
+                                    <EyeOff className="w-3 h-3" />
+                                  ) : (
+                                    <Eye className="w-3 h-3" />
+                                  )}
+                                </Button>
+                              )}
+                            </>
+                          )}
+                        </div>
+                      </TableCell>
                       <TableCell>{formatDate(position.created_at)}</TableCell>
                       <TableCell>{formatDate(position.updated_at)}</TableCell>
                       <TableCell>
@@ -423,6 +530,9 @@ export default function UsersPositionsPage() {
                             size="sm" 
                             variant="outline"
                             onClick={() => handleEditPosition(position)}
+                            disabled={!canEditPosition(position)}
+                            className={!canEditPosition(position) ? "text-gray-400 hover:text-gray-400 bg-gray-50 cursor-not-allowed" : ""}
+                            title={!canEditPosition(position) ? "Cannot edit other admin positions" : "Edit position"}
                           >
                             <Edit className="w-4 h-4" />
                           </Button>

@@ -25,6 +25,7 @@ export interface Position {
   name: string
   description: string
   password_hash?: string
+  is_super_admin?: boolean
   created_at: string
   updated_at: string
 }
