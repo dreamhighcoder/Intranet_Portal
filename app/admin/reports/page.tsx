@@ -528,18 +528,21 @@ export default function ReportsPage() {
                 <Button
                   variant={activeReportType === "overview" ? "default" : "outline"}
                   onClick={() => setActiveReportType("overview")}
+                  className={activeReportType === "overview" ? "text-white" : ""}
                 >
                   Overview
                 </Button>
                 <Button
                   variant={activeReportType === "completion-rate" ? "default" : "outline"}
                   onClick={() => setActiveReportType("completion-rate")}
+                  className={activeReportType === "completion-rate" ? "text-white" : ""}
                 >
                   Completion Rate
                 </Button>
                 <Button
                   variant={activeReportType === "missed-tasks" ? "default" : "outline"}
                   onClick={() => setActiveReportType("missed-tasks")}
+                  className={activeReportType === "missed-tasks" ? "text-white" : ""}
                 >
                   Missed Tasks
                 </Button>
