@@ -65,38 +65,67 @@ export async function PUT(
       title,
       description,
       position_id,
+      responsibility = [],
+      categories = [],
+      frequency_rules,
+      timing,
+      due_time,
+      due_date,
+      publish_status,
+      publish_delay,
+      start_date,
+      end_date,
+      sticky_once_off,
+      allow_edit_when_locked,
+      // Legacy fields for backward compatibility
       frequency,
       weekdays = [],
       months = [],
-      timing,
       default_due_time,
       category,
-      publish_status,
-      publish_delay_date,
-      sticky_once_off,
-      allow_edit_when_locked
+      publish_delay_date
     } = body
 
-    console.log('Master task [id] PUT - Updating with data:', { title, position_id, frequency })
+    console.log('Master task [id] PUT - Updating with data:', { 
+      title, 
+      position_id, 
+      frequency_rules: frequency_rules || { type: frequency },
+      responsibility,
+      categories
+    })
+
+    // Prepare data for update - support both new and legacy formats
+    const updateData: any = {
+      title,
+      description,
+      position_id,
+      timing,
+      publish_status,
+      sticky_once_off,
+      allow_edit_when_locked,
+      start_date,
+      end_date,
+      updated_at: new Date().toISOString()
+    }
+
+    // Handle new format
+    if (frequency_rules) {
+      // For now, convert to legacy format until migration is applied
+      updateData.frequency = frequency || 'every_day'
+      updateData.default_due_time = due_time
+      updateData.category = categories && categories.length > 0 ? categories[0] : 'General'
+    } else {
+      // Handle legacy format
+      updateData.frequency = frequency
+      updateData.weekdays = weekdays
+      updateData.months = months
+      updateData.default_due_time = default_due_time
+      updateData.category = category
+    }
 
     const { data: masterTask, error } = await supabase
       .from('master_tasks')
-      .update({
-        title,
-        description,
-        position_id,
-        frequency,
-        weekdays,
-        months,
-        timing,
-        default_due_time,
-        category,
-        publish_status,
-        publish_delay_date,
-        sticky_once_off,
-        allow_edit_when_locked,
-        updated_at: new Date().toISOString()
-      })
+      .update(updateData)
       .eq('id', params.id)
       .select(`
         *,

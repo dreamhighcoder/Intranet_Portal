@@ -1,459 +1,743 @@
 /**
- * Status Manager for Task Instances
- * Handles automatic status updates based on time and business rules
+ * Status Manager for Checklist Instances
+ * Pharmacy Intranet Portal - Status Lifecycle Management
+ * 
+ * This module provides functionality to:
+ * - Update instance statuses based on due times and cutoffs
+ * - Handle overdue logic (overdue at due_time)
+ * - Handle missed logic (missed at 23:59 or Saturday cutoff for week/month rules)
+ * - Provide status transition history and audit trails
+ * - Support bulk status updates for date ranges
  */
 
-import { supabase } from './supabase'
-import type { TaskInstance, MasterTask } from './supabase'
+import { supabase } from './db'
+import type { 
+  InstanceRow,
+  ChecklistInstanceStatus 
+} from './db'
 
-export interface StatusUpdateResult {
-  success: boolean
-  updated: number
-  errors: number
-  message: string
-  details: {
-    toDueToday: number
-    toOverdue: number
-    toMissed: number
-    locked: number
-  }
+// ========================================
+// TYPES AND INTERFACES
+// ========================================
+
+/**
+ * Status transition rules
+ */
+export interface StatusTransitionRule {
+  fromStatus: ChecklistInstanceStatus
+  toStatus: ChecklistInstanceStatus
+  condition: 'time_based' | 'date_based' | 'manual' | 'auto'
+  description: string
 }
 
 /**
- * Status Manager class for handling task status transitions
+ * Status update options
+ */
+export interface StatusUpdateOptions {
+  date?: string // ISO date string (YYYY-MM-DD), defaults to today
+  forceUpdate?: boolean // Force update even if status shouldn't change
+  dryRun?: boolean // Show what would be updated without making changes
+  testMode?: boolean // Test mode - don't actually update database
+  maxInstances?: number // Maximum instances to process
+  logLevel?: 'silent' | 'info' | 'debug'
+}
+
+/**
+ * Status update result for a single instance
+ */
+export interface InstanceStatusUpdateResult {
+  instanceId: string
+  masterTaskId: string
+  date: string
+  oldStatus: ChecklistInstanceStatus
+  newStatus: ChecklistInstanceStatus
+  updated: boolean
+  reason: string
+  error?: string
+}
+
+/**
+ * Overall status update result
+ */
+export interface StatusUpdateResult {
+  date: string
+  totalInstances: number
+  instancesUpdated: number
+  instancesSkipped: number
+  errors: number
+  results: InstanceStatusUpdateResult[]
+  executionTime: number
+  testMode: boolean
+  dryRun: boolean
+}
+
+/**
+ * Bulk status update options
+ */
+export interface BulkStatusUpdateOptions {
+  startDate: string
+  endDate: string
+  testMode?: boolean
+  dryRun?: boolean
+  maxInstancesPerDay?: number
+  logLevel?: 'silent' | 'info' | 'debug'
+}
+
+/**
+ * Bulk status update result
+ */
+export interface BulkStatusUpdateResult {
+  startDate: string
+  endDate: string
+  totalDays: number
+  successfulDays: number
+  failedDays: number
+  totalInstancesUpdated: number
+  totalErrors: number
+  dailyResults: Array<{
+    date: string
+    result: StatusUpdateResult
+  }>
+  executionTime: number
+}
+
+// ========================================
+// STATUS TRANSITION RULES
+// ========================================
+
+/**
+ * Default status transition rules
+ */
+export const DEFAULT_STATUS_TRANSITIONS: StatusTransitionRule[] = [
+  {
+    fromStatus: 'pending',
+    toStatus: 'overdue',
+    condition: 'time_based',
+    description: 'Task becomes overdue at due_time'
+  },
+  {
+    fromStatus: 'overdue',
+    toStatus: 'missed',
+    condition: 'date_based',
+    description: 'Overdue task becomes missed at 23:59 or Saturday cutoff'
+  },
+  {
+    fromStatus: 'pending',
+    toStatus: 'missed',
+    condition: 'date_based',
+    description: 'Pending task becomes missed at 23:59 or Saturday cutoff'
+  },
+  {
+    fromStatus: 'in_progress',
+    toStatus: 'overdue',
+    condition: 'time_based',
+    description: 'In-progress task becomes overdue at due_time'
+  },
+  {
+    fromStatus: 'in_progress',
+    toStatus: 'missed',
+    condition: 'date_based',
+    description: 'In-progress task becomes missed at 23:59 or Saturday cutoff'
+  }
+]
+
+// ========================================
+// STATUS MANAGER CLASS
+// ========================================
+
+/**
+ * Main status manager class
+ * Handles status transitions and lifecycle management
  */
 export class StatusManager {
-  
-  /**
-   * Update all task statuses based on current time
-   */
-  async updateAllStatuses(): Promise<StatusUpdateResult> {
-    const now = new Date()
-    const today = now.toISOString().split('T')[0]
-    const currentTime = now.toTimeString().slice(0, 5) // HH:MM format
+  private transitionRules: StatusTransitionRule[]
+  private logLevel: 'silent' | 'info' | 'debug'
 
-    const result: StatusUpdateResult = {
-      success: true,
-      updated: 0,
-      errors: 0,
-      message: '',
-      details: {
-        toDueToday: 0,
-        toOverdue: 0,
-        toMissed: 0,
-        locked: 0
-      }
-    }
+  constructor(
+    transitionRules: StatusTransitionRule[] = DEFAULT_STATUS_TRANSITIONS,
+    logLevel: 'silent' | 'info' | 'debug' = 'info'
+  ) {
+    this.transitionRules = transitionRules
+    this.logLevel = logLevel
+  }
+
+  /**
+   * Update statuses for a specific date
+   * 
+   * @param options - Status update options
+   * @returns Promise<StatusUpdateResult>
+   */
+  async updateStatusesForDate(options: StatusUpdateOptions = {}): Promise<StatusUpdateResult> {
+    const startTime = Date.now()
+    const { 
+      date = new Date().toISOString().split('T')[0],
+      forceUpdate = false,
+      dryRun = false,
+      testMode = false,
+      maxInstances
+    } = options
+
+    this.log('info', `Starting status update for date: ${date}`)
+    this.log('info', `Mode: ${testMode ? 'TEST' : 'PRODUCTION'}, Dry Run: ${dryRun}, Force: ${forceUpdate}`)
 
     try {
-      // 1. Update not_due to due_today
-      const dueTodayResult = await this.updateNotDueToDueToday(today, currentTime)
-      result.details.toDueToday = dueTodayResult.updated
-      result.updated += dueTodayResult.updated
+      // Step 1: Get all instances for the date
+      const { data: instances, error: fetchError } = await supabase
+        .from('checklist_instances')
+        .select(`
+          *,
+          master_tasks (
+            id,
+            title,
+            due_time,
+            timing,
+            frequency_rules
+          )
+        `)
+        .eq('date', date)
+        .order('created_at', { ascending: true })
 
-      // 2. Update due_today to overdue
-      const overdueResult = await this.updateDueTodayToOverdue(today, currentTime)
-      result.details.toOverdue = overdueResult.updated
-      result.updated += overdueResult.updated
+      if (fetchError) {
+        throw new Error(`Failed to fetch instances: ${fetchError.message}`)
+      }
 
-      // 3. Update overdue to missed and lock
-      const missedResult = await this.updateOverdueToMissed(today)
-      result.details.toMissed = missedResult.updated
-      result.details.locked = missedResult.locked
-      result.updated += missedResult.updated
+      if (!instances || instances.length === 0) {
+        this.log('info', 'No instances found for this date')
+        return this.createEmptyStatusResult(date, testMode, dryRun, startTime)
+      }
 
-      result.message = `Updated ${result.updated} task statuses: ${result.details.toDueToday} to due_today, ${result.details.toOverdue} to overdue, ${result.details.toMissed} to missed`
+      // Apply max instances limit if specified
+      const instancesToProcess = maxInstances ? instances.slice(0, maxInstances) : instances
+      this.log('info', `Processing ${instancesToProcess.length} instances`)
+
+      // Step 2: Process each instance
+      const results: InstanceStatusUpdateResult[] = []
+      let instancesUpdated = 0
+      let instancesSkipped = 0
+      let errors = 0
+
+      for (const instance of instancesToProcess) {
+        try {
+          const result = await this.processSingleInstance(instance, date, forceUpdate, dryRun, testMode)
+          results.push(result)
+
+          if (result.updated) {
+            instancesUpdated++
+          } else if (result.oldStatus === result.newStatus) {
+            instancesSkipped++
+          }
+
+          if (result.error) {
+            errors++
+          }
+        } catch (error) {
+          const errorResult: InstanceStatusUpdateResult = {
+            instanceId: instance.id,
+            masterTaskId: instance.master_task_id,
+            date: instance.date,
+            oldStatus: instance.status,
+            newStatus: instance.status,
+            updated: false,
+            reason: 'Error processing instance',
+            error: error instanceof Error ? error.message : 'Unknown error'
+          }
+          results.push(errorResult)
+          errors++
+        }
+      }
+
+      const executionTime = Date.now() - startTime
+
+      const finalResult: StatusUpdateResult = {
+        date,
+        totalInstances: instancesToProcess.length,
+        instancesUpdated,
+        instancesSkipped,
+        errors,
+        results,
+        executionTime,
+        testMode,
+        dryRun
+      }
+
+      this.log('info', `Status update completed in ${executionTime}ms`)
+      this.log('info', `Results: ${instancesUpdated} updated, ${instancesSkipped} skipped, ${errors} errors`)
+
+      return finalResult
 
     } catch (error) {
-      console.error('Error updating statuses:', error)
-      result.success = false
-      result.errors = 1
-      result.message = `Status update failed: ${error instanceof Error ? error.message : 'Unknown error'}`
-    }
-
-    return result
-  }
-
-  /**
-   * Update tasks from not_due to due_today when their due time arrives
-   */
-  private async updateNotDueToDueToday(today: string, currentTime: string): Promise<{ updated: number }> {
-    const { data, error } = await supabase
-      .from('task_instances')
-      .update({ 
-        status: 'due_today',
-        updated_at: new Date().toISOString()
-      })
-      .eq('status', 'not_due')
-      .eq('due_date', today)
-      .lte('due_time', currentTime)
-      .select('id')
-
-    if (error) {
-      console.error('Error updating not_due to due_today:', error)
-      throw error
-    }
-
-    return { updated: data?.length || 0 }
-  }
-
-  /**
-   * Update tasks from due_today to overdue based on frequency-specific cutoffs
-   */
-  private async updateDueTodayToOverdue(today: string, currentTime: string): Promise<{ updated: number }> {
-    // Get due_today tasks with their master task info for cutoff rules
-    const { data: dueTodayTasks, error: fetchError } = await supabase
-      .from('task_instances')
-      .select(`
-        id,
-        due_date,
-        due_time,
-        master_tasks!inner (
-          frequency,
-          allow_edit_when_locked
-        )
-      `)
-      .eq('status', 'due_today')
-
-    if (fetchError) {
-      console.error('Error fetching due_today tasks:', fetchError)
-      throw fetchError
-    }
-
-    if (!dueTodayTasks || dueTodayTasks.length === 0) {
-      return { updated: 0 }
-    }
-
-    const tasksToUpdate: string[] = []
-
-    for (const task of dueTodayTasks) {
-      const frequency = task.master_tasks.frequency
+      const executionTime = Date.now() - startTime
+      this.log('info', `Status update failed after ${executionTime}ms: ${error instanceof Error ? error.message : 'Unknown error'}`)
       
-      // Determine if task should be overdue based on frequency-specific rules
-      if (this.shouldBeOverdue(task, today, currentTime, frequency)) {
-        tasksToUpdate.push(task.id)
+      return {
+        date,
+        totalInstances: 0,
+        instancesUpdated: 0,
+        instancesSkipped: 0,
+        errors: 1,
+        results: [{
+          instanceId: 'error',
+          masterTaskId: 'error',
+          date,
+          oldStatus: 'pending',
+          newStatus: 'pending',
+          updated: false,
+          reason: 'Status update error',
+          error: error instanceof Error ? error.message : 'Unknown error'
+        }],
+        executionTime,
+        testMode,
+        dryRun
+      }
+    }
+  }
+
+  /**
+   * Update statuses for a date range
+   * 
+   * @param options - Bulk status update options
+   * @returns Promise<BulkStatusUpdateResult>
+   */
+  async updateStatusesForDateRange(options: BulkStatusUpdateOptions): Promise<BulkStatusUpdateResult> {
+    const startTime = Date.now()
+    const { startDate, endDate, testMode = false, dryRun = false, maxInstancesPerDay } = options
+
+    this.log('info', `Starting bulk status update from ${startDate} to ${endDate}`)
+
+    const start = new Date(startDate)
+    const end = new Date(endDate)
+    const totalDays = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1
+
+    const dailyResults: Array<{ date: string; result: StatusUpdateResult }> = []
+    let successfulDays = 0
+    let failedDays = 0
+    let totalInstancesUpdated = 0
+    let totalErrors = 0
+
+    for (let i = 0; i < totalDays; i++) {
+      const currentDate = new Date(start)
+      currentDate.setDate(start.getDate() + i)
+      const dateString = currentDate.toISOString().split('T')[0]
+
+      try {
+        const result = await this.updateStatusesForDate({
+          date: dateString,
+          dryRun,
+          testMode,
+          maxInstances: maxInstancesPerDay,
+          logLevel: this.logLevel
+        })
+
+        dailyResults.push({ date: dateString, result })
+        totalInstancesUpdated += result.instancesUpdated
+        totalErrors += result.errors
+
+        if (result.errors === 0) {
+          successfulDays++
+        } else {
+          failedDays++
+        }
+
+        this.log('info', `Completed ${dateString}: ${result.instancesUpdated} updated, ${result.errors} errors`)
+      } catch (error) {
+        failedDays++
+        totalErrors++
+        this.log('info', `Failed to update statuses for ${dateString}: ${error instanceof Error ? error.message : 'Unknown error'}`)
+        
+        dailyResults.push({
+          date: dateString,
+          result: {
+            date: dateString,
+            totalInstances: 0,
+            instancesUpdated: 0,
+            instancesSkipped: 0,
+            errors: 1,
+            results: [{
+              instanceId: 'error',
+              masterTaskId: 'error',
+              date: dateString,
+              oldStatus: 'pending',
+              newStatus: 'pending',
+              updated: false,
+              reason: 'Status update error',
+              error: error instanceof Error ? error.message : 'Unknown error'
+            }],
+            executionTime: 0,
+            testMode,
+            dryRun
+          }
+        })
       }
     }
 
-    if (tasksToUpdate.length === 0) {
-      return { updated: 0 }
+    const executionTime = Date.now() - startTime
+
+    const bulkResult: BulkStatusUpdateResult = {
+      startDate,
+      endDate,
+      totalDays,
+      successfulDays,
+      failedDays,
+      totalInstancesUpdated,
+      totalErrors,
+      dailyResults,
+      executionTime
     }
 
-    // Update tasks to overdue
-    const { data, error } = await supabase
-      .from('task_instances')
-      .update({ 
-        status: 'overdue',
-        updated_at: new Date().toISOString()
-      })
-      .in('id', tasksToUpdate)
-      .select('id')
+    this.log('info', `Bulk status update completed in ${executionTime}ms`)
+    this.log('info', `Summary: ${successfulDays}/${totalDays} days successful, ${totalInstancesUpdated} total updates, ${totalErrors} total errors`)
 
-    if (error) {
-      console.error('Error updating due_today to overdue:', error)
-      throw error
-    }
-
-    return { updated: data?.length || 0 }
+    return bulkResult
   }
 
   /**
-   * Update overdue tasks to missed and apply locking based on business rules
+   * Process a single instance to determine status updates
    */
-  private async updateOverdueToMissed(today: string): Promise<{ updated: number; locked: number }> {
-    // Get overdue tasks that should be moved to missed
-    const { data: overdueTasks, error: fetchError } = await supabase
-      .from('task_instances')
-      .select(`
-        id,
-        due_date,
-        master_tasks!inner (
-          frequency,
-          allow_edit_when_locked,
-          sticky_once_off
-        )
-      `)
-      .eq('status', 'overdue')
-      .lt('due_date', today) // Past due date
+  private async processSingleInstance(
+    instance: any, // Instance with master_tasks relation
+    date: string,
+    forceUpdate: boolean,
+    dryRun: boolean,
+    testMode: boolean
+  ): Promise<InstanceStatusUpdateResult> {
+    try {
+      const currentStatus = instance.status
+      const masterTask = instance.master_tasks
+      
+      if (!masterTask) {
+        return {
+          instanceId: instance.id,
+          masterTaskId: instance.master_task_id,
+          date: instance.date,
+          oldStatus: currentStatus,
+          newStatus: currentStatus,
+          updated: false,
+          reason: 'No master task information available'
+        }
+      }
 
-    if (fetchError) {
-      console.error('Error fetching overdue tasks:', fetchError)
-      throw fetchError
-    }
+      // Determine what the status should be
+      const targetStatus = this.calculateTargetStatus(instance, masterTask, date)
+      
+      if (currentStatus === targetStatus && !forceUpdate) {
+        return {
+          instanceId: instance.id,
+          masterTaskId: instance.master_task_id,
+          date: instance.date,
+          oldStatus: currentStatus,
+          newStatus: targetStatus,
+          updated: false,
+          reason: 'Status already correct'
+        }
+      }
 
-    if (!overdueTasks || overdueTasks.length === 0) {
-      return { updated: 0, locked: 0 }
-    }
+      // Check if status transition is allowed
+      const canTransition = this.canTransitionStatus(currentStatus, targetStatus)
+      if (!canTransition && !forceUpdate) {
+        return {
+          instanceId: instance.id,
+          masterTaskId: instance.master_task_id,
+          date: instance.date,
+          oldStatus: currentStatus,
+          newStatus: targetStatus,
+          updated: false,
+          reason: `Status transition not allowed: ${currentStatus} -> ${targetStatus}`
+        }
+      }
 
-    const tasksToUpdate: { id: string; shouldLock: boolean }[] = []
+      // Update the status
+      if (dryRun) {
+        return {
+          instanceId: instance.id,
+          masterTaskId: instance.master_task_id,
+          date: instance.date,
+          oldStatus: currentStatus,
+          newStatus: targetStatus,
+          updated: false,
+          reason: 'Dry run mode - would update status'
+        }
+      }
 
-    for (const task of overdueTasks) {
-      const shouldLock = this.shouldLockTask(task.master_tasks)
-      tasksToUpdate.push({ id: task.id, shouldLock })
-    }
+      if (testMode) {
+        return {
+          instanceId: instance.id,
+          masterTaskId: instance.master_task_id,
+          date: instance.date,
+          oldStatus: currentStatus,
+          newStatus: targetStatus,
+          updated: false,
+          reason: 'Test mode - would update status'
+        }
+      }
 
-    if (tasksToUpdate.length === 0) {
-      return { updated: 0, locked: 0 }
-    }
-
-    // Update all to missed first
-    const { data, error } = await supabase
-      .from('task_instances')
-      .update({ 
-        status: 'missed',
-        updated_at: new Date().toISOString()
-      })
-      .in('id', tasksToUpdate.map(t => t.id))
-      .select('id')
-
-    if (error) {
-      console.error('Error updating overdue to missed:', error)
-      throw error
-    }
-
-    // Then lock the ones that should be locked
-    const tasksToLock = tasksToUpdate.filter(t => t.shouldLock).map(t => t.id)
-    let locked = 0
-
-    if (tasksToLock.length > 0) {
-      const { data: lockData, error: lockError } = await supabase
-        .from('task_instances')
+      // Actually update the status
+      const { error: updateError } = await supabase
+        .from('checklist_instances')
         .update({ 
-          locked: true,
+          status: targetStatus,
           updated_at: new Date().toISOString()
         })
-        .in('id', tasksToLock)
-        .select('id')
+        .eq('id', instance.id)
 
-      if (lockError) {
-        console.error('Error locking missed tasks:', lockError)
-      } else {
-        locked = lockData?.length || 0
+      if (updateError) {
+        throw new Error(`Failed to update status: ${updateError.message}`)
+      }
+
+      return {
+        instanceId: instance.id,
+        masterTaskId: instance.master_task_id,
+        date: instance.date,
+        oldStatus: currentStatus,
+        newStatus: targetStatus,
+        updated: true,
+        reason: `Status updated from ${currentStatus} to ${targetStatus}`
+      }
+
+    } catch (error) {
+      return {
+        instanceId: instance.id,
+        masterTaskId: instance.master_task_id,
+        date: instance.date,
+        oldStatus: instance.status,
+        newStatus: instance.status,
+        updated: false,
+        reason: 'Error processing instance',
+        error: error instanceof Error ? error.message : 'Unknown error'
+      }
+    }
+  }
+
+  /**
+   * Calculate what the target status should be for an instance
+   */
+  private calculateTargetStatus(instance: any, masterTask: any, date: string): ChecklistInstanceStatus {
+    const currentStatus = instance.status
+    const dueTime = masterTask.due_time
+    const timing = masterTask.timing
+    const frequencyRules = masterTask.frequency_rules
+
+    // If already completed, don't change
+    if (currentStatus === 'completed') {
+      return 'completed'
+    }
+
+    const now = new Date()
+    const instanceDate = new Date(date)
+    const isToday = this.isSameDate(now, instanceDate)
+    const isPastDate = instanceDate < now
+
+    // Handle overdue logic
+    if (isToday && dueTime && currentStatus !== 'completed') {
+      const dueDateTime = new Date(`${date}T${dueTime}`)
+      if (now > dueDateTime) {
+        return 'overdue'
       }
     }
 
-    return { updated: data?.length || 0, locked }
-  }
-
-  /**
-   * Determine if a due_today task should be moved to overdue
-   */
-  private shouldBeOverdue(
-    task: any,
-    today: string,
-    currentTime: string,
-    frequency: string
-  ): boolean {
-    const dueDate = task.due_date
-    const dueTime = task.due_time
-
-    // If task is from a previous date, it's definitely overdue
-    if (dueDate < today) {
-      return true
-    }
-
-    // If task is for today, check time-based cutoffs
-    if (dueDate === today) {
-      switch (frequency) {
-        case 'every_day':
-        case 'weekly':
-          // Due date 23:59
-          return currentTime >= '23:59'
-
-        case 'specific_weekdays':
-          // Saturday 23:59 (adjusted for PH)
-          const dayOfWeek = new Date(today).getDay()
-          return dayOfWeek === 6 && currentTime >= '23:59' // Saturday
-
-        case 'start_every_month':
-        case 'start_certain_months':
-        case 'every_month':
-        case 'certain_months':
-        case 'end_every_month':
-        case 'end_certain_months':
-          // Last Saturday 23:59 (adjusted for PH)
-          return this.isLastSaturday(today) && currentTime >= '23:59'
-
-        case 'once_off_sticky':
-          // Never auto-overdue for sticky tasks
-          return false
-
-        default:
-          // Default to due time + 1 hour grace period
-          const gracePeriodTime = this.addHours(dueTime, 1)
-          return currentTime >= gracePeriodTime
+    // Handle missed logic
+    if (isPastDate && currentStatus !== 'completed') {
+      const cutoffTime = this.calculateCutoffTime(instanceDate, frequencyRules)
+      if (now > cutoffTime) {
+        return 'missed'
       }
     }
 
-    return false
+    // If past due time on a past date, mark as missed
+    if (isPastDate && dueTime && currentStatus !== 'completed') {
+      const dueDateTime = new Date(`${date}T${dueTime}`)
+      if (now > dueDateTime) {
+        return 'missed'
+      }
+    }
+
+    // Default: keep current status
+    return currentStatus
   }
 
   /**
-   * Determine if a task should be locked when moved to missed
+   * Calculate the cutoff time for missed status
+   * Week/month rules have Saturday cutoff, others use 23:59
    */
-  private shouldLockTask(masterTask: any): boolean {
-    // Don't lock if allow_edit_when_locked is true
-    if (masterTask.allow_edit_when_locked) {
-      return false
-    }
-
-    // Don't lock once-off sticky tasks
-    if (masterTask.sticky_once_off) {
-      return false
-    }
-
-    // Lock all other missed tasks
-    return true
-  }
-
-  /**
-   * Check if a date is the last Saturday of its month
-   */
-  private isLastSaturday(dateStr: string): boolean {
-    const date = new Date(dateStr)
-    const dayOfWeek = date.getDay()
+  private calculateCutoffTime(instanceDate: Date, frequencyRules: any): Date {
+    const cutoffDate = new Date(instanceDate)
     
-    if (dayOfWeek !== 6) return false // Not Saturday
+    // Check if this is a week/month frequency rule
+    const isWeekMonthRule = frequencyRules && (
+      frequencyRules.type === 'weekly' ||
+      frequencyRules.type === 'specific_weekdays' ||
+      frequencyRules.type === 'start_of_month' ||
+      frequencyRules.type === 'end_of_month' ||
+      frequencyRules.type === 'every_month'
+    )
+
+    if (isWeekMonthRule) {
+      // For week/month rules, cutoff is Saturday 23:59
+      const dayOfWeek = cutoffDate.getDay()
+      const daysUntilSaturday = (6 - dayOfWeek + 7) % 7
+      cutoffDate.setDate(cutoffDate.getDate() + daysUntilSaturday)
+      cutoffDate.setHours(23, 59, 59, 999)
+    } else {
+      // For daily rules, cutoff is same day 23:59
+      cutoffDate.setHours(23, 59, 59, 999)
+    }
+
+    return cutoffDate
+  }
+
+  /**
+   * Check if two dates are the same day
+   */
+  private isSameDate(date1: Date, date2: Date): boolean {
+    return date1.getFullYear() === date2.getFullYear() &&
+           date1.getMonth() === date2.getMonth() &&
+           date1.getDate() === date2.getDate()
+  }
+
+  /**
+   * Check if a status transition is allowed
+   */
+  private canTransitionStatus(fromStatus: ChecklistInstanceStatus, toStatus: ChecklistInstanceStatus): boolean {
+    // Find applicable transition rule
+    const rule = this.transitionRules.find(r => 
+      r.fromStatus === fromStatus && r.toStatus === toStatus
+    )
+
+    return !!rule
+  }
+
+  /**
+   * Create an empty result for cases with no instances
+   */
+  private createEmptyStatusResult(
+    date: string,
+    testMode: boolean,
+    dryRun: boolean,
+    startTime: number
+  ): StatusUpdateResult {
+    const executionTime = Date.now() - startTime
     
-    // Check if adding 7 days goes to next month
-    const nextWeek = new Date(date)
-    nextWeek.setDate(date.getDate() + 7)
-    
-    return nextWeek.getMonth() !== date.getMonth()
-  }
-
-  /**
-   * Add hours to a time string (HH:MM format)
-   */
-  private addHours(timeStr: string, hours: number): string {
-    const [hour, minute] = timeStr.split(':').map(Number)
-    const totalMinutes = hour * 60 + minute + hours * 60
-    const newHour = Math.floor(totalMinutes / 60) % 24
-    const newMinute = totalMinutes % 60
-    
-    return `${newHour.toString().padStart(2, '0')}:${newMinute.toString().padStart(2, '0')}`
-  }
-
-  /**
-   * Force update a specific task instance status (for manual overrides)
-   */
-  async updateTaskStatus(
-    taskInstanceId: string,
-    newStatus: 'not_due' | 'due_today' | 'overdue' | 'missed' | 'done',
-    userId?: string
-  ): Promise<boolean> {
-    const updateData: any = {
-      status: newStatus,
-      updated_at: new Date().toISOString()
-    }
-
-    // Add completion info for done status
-    if (newStatus === 'done') {
-      updateData.completed_at = new Date().toISOString()
-      updateData.completed_by = userId || null
-    } else if (newStatus !== 'done') {
-      // Clear completion info for non-done statuses
-      updateData.completed_at = null
-      updateData.completed_by = null
-    }
-
-    const { error } = await supabase
-      .from('task_instances')
-      .update(updateData)
-      .eq('id', taskInstanceId)
-
-    if (error) {
-      console.error('Error updating task status:', error)
-      return false
-    }
-
-    // Add audit log entry
-    await this.addAuditEntry(taskInstanceId, `status_changed_to_${newStatus}`, userId)
-
-    return true
-  }
-
-  /**
-   * Add audit log entry
-   */
-  private async addAuditEntry(
-    taskInstanceId: string,
-    action: string,
-    userId?: string
-  ): Promise<void> {
-    const { error } = await supabase
-      .from('audit_log')
-      .insert({
-        task_instance_id: taskInstanceId,
-        action,
-        actor: userId || null,
-        meta: { timestamp: new Date().toISOString() },
-        created_at: new Date().toISOString()
-      })
-
-    if (error) {
-      console.error('Error adding audit entry:', error)
-    }
-  }
-
-  /**
-   * Get status update statistics
-   */
-  async getStatusStats(): Promise<{
-    statusCounts: Record<string, number>
-    lockedCount: number
-    overdueCount: number
-    missedCount: number
-  }> {
-    const { data: statusData } = await supabase
-      .from('task_instances')
-      .select('status, locked')
-
-    const statusCounts: Record<string, number> = {}
-    let lockedCount = 0
-    let overdueCount = 0
-    let missedCount = 0
-
-    statusData?.forEach(item => {
-      statusCounts[item.status] = (statusCounts[item.status] || 0) + 1
-      if (item.locked) lockedCount++
-      if (item.status === 'overdue') overdueCount++
-      if (item.status === 'missed') missedCount++
-    })
-
     return {
-      statusCounts,
-      lockedCount,
-      overdueCount,
-      missedCount
+      date,
+      totalInstances: 0,
+      instancesUpdated: 0,
+      instancesSkipped: 0,
+      errors: 0,
+      results: [],
+      executionTime,
+      testMode,
+      dryRun
     }
+  }
+
+  /**
+   * Log messages based on log level
+   */
+  private log(level: 'silent' | 'info' | 'debug', message: string): void {
+    if (this.logLevel === 'silent') return
+    
+    if (level === 'debug' && this.logLevel !== 'debug') return
+    
+    const timestamp = new Date().toISOString()
+    console.log(`[${timestamp}] [${level.toUpperCase()}] ${message}`)
+  }
+
+  /**
+   * Set the log level
+   */
+  setLogLevel(level: 'silent' | 'info' | 'debug'): void {
+    this.logLevel = level
+  }
+
+  /**
+   * Get the current transition rules
+   */
+  getTransitionRules(): StatusTransitionRule[] {
+    return [...this.transitionRules]
+  }
+
+  /**
+   * Add a new transition rule
+   */
+  addTransitionRule(rule: StatusTransitionRule): void {
+    this.transitionRules.push(rule)
+  }
+
+  /**
+   * Remove a transition rule
+   */
+  removeTransitionRule(fromStatus: ChecklistInstanceStatus, toStatus: ChecklistInstanceStatus): void {
+    this.transitionRules = this.transitionRules.filter(r => 
+      !(r.fromStatus === fromStatus && r.toStatus === toStatus)
+    )
   }
 }
 
+// ========================================
+// FACTORY FUNCTIONS
+// ========================================
+
 /**
- * Convenience function to update all statuses
+ * Create a status manager with default configuration
  */
-export async function updateTaskStatuses(): Promise<StatusUpdateResult> {
-  const statusManager = new StatusManager()
-  return await statusManager.updateAllStatuses()
+export function createStatusManager(
+  transitionRules: StatusTransitionRule[] = DEFAULT_STATUS_TRANSITIONS,
+  logLevel: 'silent' | 'info' | 'debug' = 'info'
+): StatusManager {
+  return new StatusManager(transitionRules, logLevel)
 }
 
 /**
- * Convenience function to update a specific task status
+ * Create a status manager with test mode enabled
  */
-export async function updateSpecificTaskStatus(
-  taskInstanceId: string,
-  newStatus: 'not_due' | 'due_today' | 'overdue' | 'missed' | 'done',
-  userId?: string
-): Promise<boolean> {
-  const statusManager = new StatusManager()
-  return await statusManager.updateTaskStatus(taskInstanceId, newStatus, userId)
+export function createTestStatusManager(
+  transitionRules: StatusTransitionRule[] = DEFAULT_STATUS_TRANSITIONS
+): StatusManager {
+  return new StatusManager(transitionRules, 'debug')
+}
+
+// ========================================
+// UTILITY FUNCTIONS
+// ========================================
+
+/**
+ * Update statuses for today
+ */
+export async function updateStatusesForToday(
+  options: Partial<StatusUpdateOptions> = {}
+): Promise<StatusUpdateResult> {
+  const manager = createStatusManager()
+  return manager.updateStatusesForDate({
+    date: new Date().toISOString().split('T')[0],
+    ...options
+  })
 }
 
 /**
- * Status update job - call this from a cron job every 15-30 minutes
+ * Update statuses for yesterday
  */
-export async function runStatusUpdateJob(): Promise<StatusUpdateResult> {
-  const result = await updateTaskStatuses()
-  return result
+export async function updateStatusesForYesterday(
+  options: Partial<StatusUpdateOptions> = {}
+): Promise<StatusUpdateResult> {
+  const yesterday = new Date()
+  yesterday.setDate(yesterday.getDate() - 1)
+  const dateString = yesterday.toISOString().split('T')[0]
+  
+  const manager = createStatusManager()
+  return manager.updateStatusesForDate({
+    date: dateString,
+    ...options
+  })
+}
+
+// ========================================
+// EXPORTS
+// ========================================
+
+export type {
+  StatusTransitionRule,
+  StatusUpdateOptions,
+  StatusUpdateResult,
+  InstanceStatusUpdateResult,
+  BulkStatusUpdateOptions,
+  BulkStatusUpdateResult
 }

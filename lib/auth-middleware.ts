@@ -203,23 +203,37 @@ export function canEditTask(user: AuthUser, taskPositionId?: string): boolean {
 }
 
 export async function logAuditAction(
-  taskInstanceId: string,
-  userId: string,
+  tableName: string,
+  recordId: string,
+  userId: string | null,
   action: string,
   oldValues?: Record<string, any>,
   newValues?: Record<string, any>,
-  metadata?: Record<string, any>
+  metadata?: Record<string, any>,
+  taskInstanceId?: string,
+  positionId?: string,
+  ipAddress?: string,
+  userAgent?: string,
+  sessionId?: string,
+  authType: 'supabase' | 'position' = 'supabase'
 ) {
   try {
     const { error } = await supabase
       .from('audit_log')
       .insert([{
-        task_instance_id: taskInstanceId,
+        table_name: tableName,
+        record_id: recordId,
         user_id: userId,
         action,
         old_values: oldValues,
         new_values: newValues,
-        metadata
+        metadata,
+        task_instance_id: taskInstanceId,
+        position_id: positionId,
+        ip_address: ipAddress,
+        user_agent: userAgent,
+        session_id: sessionId,
+        auth_type: authType
       }])
 
     if (error) {
@@ -228,6 +242,36 @@ export async function logAuditAction(
   } catch (error) {
     console.error('Unexpected error logging audit action:', error)
   }
+}
+
+/**
+ * Enhanced audit logging for position-based authentication
+ */
+export async function logPositionAuditAction(
+  tableName: string,
+  recordId: string,
+  positionId: string,
+  action: string,
+  oldValues?: Record<string, any>,
+  newValues?: Record<string, any>,
+  metadata?: Record<string, any>,
+  taskInstanceId?: string
+) {
+  return logAuditAction(
+    tableName,
+    recordId,
+    null, // user_id is null for position-based auth
+    action,
+    oldValues,
+    newValues,
+    metadata,
+    taskInstanceId,
+    positionId,
+    undefined, // ip_address
+    undefined, // user_agent
+    undefined, // session_id
+    'position' // auth_type
+  )
 }
 
 export function createAuthResponse(error: string, status: number = 401) {
@@ -264,3 +308,81 @@ export const POSITION_TYPES = {
 } as const
 
 export type PositionType = keyof typeof POSITION_TYPES
+
+/**
+ * Extract client information from request for audit logging
+ */
+export function getClientInfo(request: any): {
+  ipAddress?: string
+  userAgent?: string
+  sessionId?: string
+} {
+  try {
+    const ipAddress = request.headers?.get('X-Forwarded-For') || 
+                     request.headers?.get('X-Real-IP') || 
+                     request.headers?.get('CF-Connecting-IP') ||
+                     'unknown'
+    
+    const userAgent = request.headers?.get('User-Agent') || 'unknown'
+    const sessionId = request.headers?.get('X-Session-Id') || undefined
+    
+    return {
+      ipAddress: ipAddress === 'unknown' ? undefined : ipAddress,
+      userAgent: userAgent === 'unknown' ? undefined : userAgent,
+      sessionId
+    }
+  } catch (error) {
+    console.error('Error extracting client info from request:', error)
+    return {}
+  }
+}
+
+/**
+ * Enhanced authentication check that supports both Supabase and position-based auth
+ */
+export async function requireAuthEnhanced(request: NextRequest): Promise<AuthUser | PositionAuthUser> {
+  try {
+    // First try Supabase authentication
+    try {
+      const supabaseUser = await requireAuth(request)
+      return supabaseUser
+    } catch (error) {
+      // If Supabase auth fails, try position-based auth
+      const positionUserId = request.headers.get('X-Position-User-Id')
+      const positionUserRole = request.headers.get('X-Position-User-Role')
+      const positionDisplayName = request.headers.get('X-Position-Display-Name')
+      
+      if (positionUserId && positionUserRole && positionDisplayName) {
+        // This is a position-based authenticated request
+        const positionUser: PositionAuthUser = {
+          id: positionUserId,
+          position: {
+            id: positionUserId,
+            name: positionUserRole,
+            displayName: positionDisplayName,
+            password: '', // Not needed for validation
+            role: positionUserRole as 'admin' | 'viewer',
+            is_super_admin: positionUserRole === 'admin'
+          },
+          role: positionUserRole as 'admin' | 'viewer',
+          displayName: positionDisplayName,
+          isAuthenticated: true,
+          loginTime: new Date(),
+          isSuperAdmin: positionUserRole === 'admin',
+          sessionId: request.headers.get('X-Session-Id') || 'unknown',
+          ipAddress: request.headers.get('X-Forwarded-For'),
+          userAgent: request.headers.get('User-Agent'),
+          lastActivity: new Date()
+        }
+        
+        return positionUser
+      }
+      
+      // Neither authentication method worked
+      throw new Error('Authentication required')
+    }
+  } catch (error) {
+    console.error('Enhanced authentication failed:', error)
+    throw error
+  }
+}

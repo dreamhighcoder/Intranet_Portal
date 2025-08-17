@@ -1,482 +1,619 @@
 /**
- * Recurrence Engine for Pharmacy Intranet Portal
- * Implements all complex recurrence rules and public holiday logic
+ * Recurrence Engine for Master Checklist System
+ * Pharmacy Intranet Portal - Task Scheduling Engine
+ * 
+ * This module provides functionality to:
+ * - Check if a task is due on a specific date
+ * - Calculate the next occurrence of a task
+ * - Generate all occurrences between two dates
+ * - Handle public holiday shifting and business-day logic
+ * - Support all frequency rule types from the specification
  */
 
-import { supabase } from './supabase'
-import type { MasterTask, PublicHoliday } from './supabase'
+import { 
+  FrequencyType
+} from '@/types/checklist'
 
-export interface RecurrenceOptions {
-  masterTask: MasterTask
-  startDate: Date
-  endDate: Date
-  publicHolidays: PublicHoliday[]
-}
+import type { 
+  FrequencyRule,
+  DailyFrequencyRule,
+  WeeklyFrequencyRule,
+  SpecificWeekdaysFrequencyRule,
+  StartOfMonthFrequencyRule,
+  StartCertainMonthsFrequencyRule,
+  EveryMonthFrequencyRule,
+  CertainMonthsFrequencyRule,
+  EndOfMonthFrequencyRule,
+  EndCertainMonthsFrequencyRule,
+  OnceOffFrequencyRule,
+  OnceOffStickyFrequencyRule
+} from '@/types/checklist'
 
-export interface TaskInstanceData {
-  master_task_id: string
-  instance_date: string
-  due_date: string
-  due_time: string
-  status: 'not_due' | 'due_today' | 'overdue' | 'missed' | 'done'
+import type { HolidayChecker } from './public-holidays'
+
+// ========================================
+// TYPES AND INTERFACES
+// ========================================
+
+/**
+ * Task interface for recurrence calculations
+ */
+export interface Task {
+  id: string
+  frequency_rules: FrequencyRule
+  due_date?: string // For once-off tasks
+  start_date?: string // When task becomes active
+  end_date?: string // When task expires
 }
 
 /**
- * Main recurrence engine - generates task instances for a master task
+ * Occurrence result
+ */
+export interface TaskOccurrence {
+  date: Date
+  isBusinessDay: boolean
+  shiftedFrom?: Date // Original date if shifted due to holidays
+}
+
+/**
+ * Configuration for the recurrence engine
+ */
+export interface RecurrenceConfig {
+  maxOccurrences: number // Maximum occurrences to generate
+  maxYears: number // Maximum years to look ahead
+  defaultShiftDirection: 'forward' | 'backward' // Default holiday shift direction
+}
+
+// ========================================
+// DEFAULT CONFIGURATION
+// ========================================
+
+/**
+ * Default configuration for the recurrence engine
+ */
+export const DEFAULT_RECURRENCE_CONFIG: RecurrenceConfig = {
+  maxOccurrences: 1000,
+  maxYears: 10,
+  defaultShiftDirection: 'forward'
+}
+
+// ========================================
+// RECURRENCE ENGINE CLASS
+// ========================================
+
+/**
+ * Main recurrence engine class
+ * Handles all frequency rule types with holiday shifting
  */
 export class RecurrenceEngine {
-  private publicHolidays: Set<string>
+  private holidayChecker: HolidayChecker
+  private config: RecurrenceConfig
 
-  constructor(holidays: PublicHoliday[]) {
-    this.publicHolidays = new Set(holidays.map(h => h.date))
+  constructor(holidayChecker: HolidayChecker, config: Partial<RecurrenceConfig> = {}) {
+    this.holidayChecker = holidayChecker
+    this.config = { ...DEFAULT_RECURRENCE_CONFIG, ...config }
   }
 
   /**
-   * Generate all task instances for a master task within date range
+   * Check if a task is due on a specific date
+   * 
+   * @param task - Task to check
+   * @param date - Date to check
+   * @returns true if the task is due on the specified date
    */
-  generateInstances(options: RecurrenceOptions): TaskInstanceData[] {
-    const { masterTask, startDate, endDate } = options
-    const instances: TaskInstanceData[] = []
-
-    switch (masterTask.frequency) {
-      case 'once_off_sticky':
-        instances.push(...this.generateOnceOffSticky(masterTask, startDate))
-        break
-
-      case 'every_day':
-        instances.push(...this.generateEveryDay(masterTask, startDate, endDate))
-        break
-
-      case 'weekly':
-        instances.push(...this.generateWeekly(masterTask, startDate, endDate))
-        break
-
-      case 'specific_weekdays':
-        instances.push(...this.generateSpecificWeekdays(masterTask, startDate, endDate))
-        break
-
-      case 'start_every_month':
-        instances.push(...this.generateStartEveryMonth(masterTask, startDate, endDate))
-        break
-
-      case 'start_certain_months':
-        instances.push(...this.generateStartCertainMonths(masterTask, startDate, endDate))
-        break
-
-      case 'every_month':
-        instances.push(...this.generateEveryMonth(masterTask, startDate, endDate))
-        break
-
-      case 'certain_months':
-        instances.push(...this.generateCertainMonths(masterTask, startDate, endDate))
-        break
-
-      case 'end_every_month':
-        instances.push(...this.generateEndEveryMonth(masterTask, startDate, endDate))
-        break
-
-      case 'end_certain_months':
-        instances.push(...this.generateEndCertainMonths(masterTask, startDate, endDate))
-        break
-
-      default:
-        console.warn(`Unknown frequency: ${masterTask.frequency}`)
-    }
-
-    return instances
-  }
-
-  /**
-   * Once-off sticky: Creates one instance that persists until done
-   */
-  private generateOnceOffSticky(masterTask: MasterTask, startDate: Date): TaskInstanceData[] {
-    const instanceDate = this.formatDate(startDate)
-    return [{
-      master_task_id: masterTask.id,
-      instance_date: instanceDate,
-      due_date: instanceDate,
-      due_time: masterTask.default_due_time || '17:00',
-      status: 'not_due'
-    }]
-  }
-
-  /**
-   * Every Day: Mon-Sat, skip public holidays, no substitution
-   */
-  private generateEveryDay(masterTask: MasterTask, startDate: Date, endDate: Date): TaskInstanceData[] {
-    const instances: TaskInstanceData[] = []
-    const current = new Date(startDate)
-
-    while (current <= endDate) {
-      const dayOfWeek = current.getDay() // 0=Sunday, 1=Monday, ..., 6=Saturday
-      const dateStr = this.formatDate(current)
-
-      // Mon-Sat only (1-6), skip Sundays and public holidays
-      if (dayOfWeek >= 1 && dayOfWeek <= 6 && !this.isPublicHoliday(dateStr)) {
-        instances.push({
-          master_task_id: masterTask.id,
-          instance_date: dateStr,
-          due_date: dateStr,
-          due_time: masterTask.default_due_time || '17:00',
-          status: 'not_due'
-        })
+  isDueOnDate(task: Task, date: Date): boolean {
+    try {
+      // Check if task is within active period
+      if (task.start_date && date < new Date(task.start_date)) {
+        return false
+      }
+      
+      if (task.end_date && date > new Date(task.end_date)) {
+        return false
       }
 
-      current.setDate(current.getDate() + 1)
+      const frequencyRules = task.frequency_rules
+      
+      switch (frequencyRules.type) {
+        case FrequencyType.ONCE_OFF:
+          return this.isOnceOffDue(task as Task & { frequency_rules: OnceOffFrequencyRule }, date)
+        
+        case FrequencyType.ONCE_OFF_STICKY:
+          return this.isOnceOffStickyDue(task as Task & { frequency_rules: OnceOffStickyFrequencyRule }, date)
+        
+        case FrequencyType.DAILY:
+          return this.isDailyDue(task as Task & { frequency_rules: DailyFrequencyRule }, date)
+        
+        case FrequencyType.WEEKLY:
+          return this.isWeeklyDue(task as Task & { frequency_rules: WeeklyFrequencyRule }, date)
+        
+        case FrequencyType.SPECIFIC_WEEKDAYS:
+          return this.isSpecificWeekdaysDue(task as Task & { frequency_rules: SpecificWeekdaysFrequencyRule }, date)
+        
+        case FrequencyType.START_OF_MONTH:
+          return this.isStartOfMonthDue(task as Task & { frequency_rules: StartOfMonthFrequencyRule }, date)
+        
+        case FrequencyType.START_CERTAIN_MONTHS:
+          return this.isStartCertainMonthsDue(task as Task & { frequency_rules: StartCertainMonthsFrequencyRule }, date)
+        
+        case FrequencyType.EVERY_MONTH:
+          return this.isEveryMonthDue(task as Task & { frequency_rules: EveryMonthFrequencyRule }, date)
+        
+        case FrequencyType.CERTAIN_MONTHS:
+          return this.isCertainMonthsDue(task as Task & { frequency_rules: CertainMonthsFrequencyRule }, date)
+        
+        case FrequencyType.END_OF_MONTH:
+          return this.isEndOfMonthDue(task as Task & { frequency_rules: EndOfMonthFrequencyRule }, date)
+        
+        case FrequencyType.END_CERTAIN_MONTHS:
+          return this.isEndCertainMonthsDue(task as Task & { frequency_rules: EndCertainMonthsFrequencyRule }, date)
+        
+        default:
+          console.warn(`Unknown frequency type: ${frequencyRules.type}`)
+          return false
+      }
+    } catch (error) {
+      console.error('Error checking if task is due:', error)
+      return false
     }
-
-    return instances
   }
 
   /**
-   * Weekly (Monday): If Monday is PH, push forward (Mon→Tue→Wed)
+   * Get the next occurrence of a task from a given date
+   * 
+   * @param task - Task to find next occurrence for
+   * @param fromDate - Date to start searching from
+   * @returns Next occurrence date or null if no more occurrences
    */
-  private generateWeekly(masterTask: MasterTask, startDate: Date, endDate: Date): TaskInstanceData[] {
-    const instances: TaskInstanceData[] = []
-    
-    // Find first Monday on or after startDate
-    let current = new Date(startDate)
-    while (current.getDay() !== 1) { // 1 = Monday
-      current.setDate(current.getDate() + 1)
-    }
-
-    while (current <= endDate) {
-      const mondayDate = this.formatDate(current)
-      let instanceDate = new Date(current)
-
-      // If Monday is a public holiday, push forward
-      while (this.isPublicHoliday(this.formatDate(instanceDate)) && instanceDate.getDay() <= 3) {
-        instanceDate.setDate(instanceDate.getDate() + 1)
+  nextOccurrence(task: Task, fromDate: Date): Date | null {
+    try {
+      let currentDate = new Date(fromDate)
+      currentDate.setDate(currentDate.getDate() + 1) // Start from next day
+      
+      const maxDate = new Date(fromDate)
+      maxDate.setFullYear(maxDate.getFullYear() + this.config.maxYears)
+      
+      let attempts = 0
+      
+      while (currentDate <= maxDate && attempts < this.config.maxOccurrences) {
+        if (this.isDueOnDate(task, currentDate)) {
+          return currentDate
+        }
+        
+        currentDate.setDate(currentDate.getDate() + 1)
+        attempts++
       }
-
-      // Only create instance if we haven't pushed past Wednesday
-      if (instanceDate.getDay() <= 3) {
-        instances.push({
-          master_task_id: masterTask.id,
-          instance_date: this.formatDate(instanceDate),
-          due_date: this.formatDate(instanceDate),
-          due_time: masterTask.default_due_time || '17:00',
-          status: 'not_due'
-        })
-      }
-
-      // Move to next Monday
-      current.setDate(current.getDate() + 7)
+      
+      return null // No more occurrences found
+    } catch (error) {
+      console.error('Error finding next occurrence:', error)
+      return null
     }
-
-    return instances
   }
 
   /**
-   * Specific Weekdays: Tue-Sat shift earlier if possible, Mon always pushes forward
+   * Get all occurrences of a task between two dates
+   * 
+   * @param task - Task to get occurrences for
+   * @param startDate - Start date (inclusive)
+   * @param endDate - End date (inclusive)
+   * @returns Array of task occurrences
    */
-  private generateSpecificWeekdays(masterTask: MasterTask, startDate: Date, endDate: Date): TaskInstanceData[] {
-    const instances: TaskInstanceData[] = []
-    const targetWeekdays = masterTask.weekdays || []
-    const current = new Date(startDate)
-
-    while (current <= endDate) {
-      const dayOfWeek = current.getDay() // 0=Sunday, 1=Monday, ..., 6=Saturday
-      const dateStr = this.formatDate(current)
-
-      if (targetWeekdays.includes(dayOfWeek)) {
-        let instanceDate = new Date(current)
-
-        if (this.isPublicHoliday(dateStr)) {
-          if (dayOfWeek === 1) {
-            // Monday: push forward
-            while (this.isPublicHoliday(this.formatDate(instanceDate)) && instanceDate.getDay() <= 6) {
-              instanceDate.setDate(instanceDate.getDate() + 1)
-            }
+  occurrencesBetween(task: Task, startDate: Date, endDate: Date): TaskOccurrence[] {
+    try {
+      const occurrences: TaskOccurrence[] = []
+      let currentDate = new Date(startDate)
+      
+      while (currentDate <= endDate) {
+        if (this.isDueOnDate(task, currentDate)) {
+          const isBusinessDay = this.holidayChecker.isBusinessDay(currentDate)
+          
+          if (isBusinessDay) {
+            occurrences.push({
+              date: new Date(currentDate),
+              isBusinessDay: true
+            })
           } else {
-            // Tue-Sat: shift earlier in week if possible
-            let shifted = false
-            for (let i = dayOfWeek - 1; i >= 1; i--) {
-              const testDate = new Date(current)
-              testDate.setDate(testDate.getDate() - (dayOfWeek - i))
-              if (!this.isPublicHoliday(this.formatDate(testDate))) {
-                instanceDate = testDate
-                shifted = true
-                break
-              }
-            }
+            // Shift to business day if configured
+            const shiftedDate = this.holidayChecker.shiftToBusinessDay(
+              currentDate, 
+              this.config.defaultShiftDirection
+            )
             
-            // If couldn't shift earlier, push forward
-            if (!shifted) {
-              while (this.isPublicHoliday(this.formatDate(instanceDate)) && instanceDate.getDay() <= 6) {
-                instanceDate.setDate(instanceDate.getDate() + 1)
-              }
-            }
+            occurrences.push({
+              date: shiftedDate,
+              isBusinessDay: true,
+              shiftedFrom: new Date(currentDate)
+            })
           }
         }
-
-        // Only create if still in a workday
-        if (instanceDate.getDay() >= 1 && instanceDate.getDay() <= 6) {
-          instances.push({
-            master_task_id: masterTask.id,
-            instance_date: this.formatDate(instanceDate),
-            due_date: this.formatDate(instanceDate),
-            due_time: masterTask.default_due_time || '17:00',
-            status: 'not_due'
-          })
-        }
+        
+        currentDate.setDate(currentDate.getDate() + 1)
       }
-
-      current.setDate(current.getDate() + 1)
-    }
-
-    return instances
-  }
-
-  /**
-   * Start of Every Month: Due = +5 full workdays (exclude weekends/PHs)
-   */
-  private generateStartEveryMonth(masterTask: MasterTask, startDate: Date, endDate: Date): TaskInstanceData[] {
-    const instances: TaskInstanceData[] = []
-    const current = new Date(startDate.getFullYear(), startDate.getMonth(), 1)
-
-    while (current <= endDate) {
-      const instanceDate = this.formatDate(current)
-      const dueDate = this.addWorkdays(current, 5)
-
-      instances.push({
-        master_task_id: masterTask.id,
-        instance_date: instanceDate,
-        due_date: this.formatDate(dueDate),
-        due_time: masterTask.default_due_time || '17:00',
-        status: 'not_due'
-      })
-
-      // Move to first day of next month
-      current.setMonth(current.getMonth() + 1)
-      current.setDate(1)
-    }
-
-    return instances
-  }
-
-  /**
-   * Start of Certain Months: Same as start of every month but filtered by months array
-   */
-  private generateStartCertainMonths(masterTask: MasterTask, startDate: Date, endDate: Date): TaskInstanceData[] {
-    const instances: TaskInstanceData[] = []
-    const targetMonths = masterTask.months || []
-    const current = new Date(startDate.getFullYear(), startDate.getMonth(), 1)
-
-    while (current <= endDate) {
-      if (targetMonths.includes(current.getMonth() + 1)) { // months are 1-indexed in DB
-        const instanceDate = this.formatDate(current)
-        const dueDate = this.addWorkdays(current, 5)
-
-        instances.push({
-          master_task_id: masterTask.id,
-          instance_date: instanceDate,
-          due_date: this.formatDate(dueDate),
-          due_time: masterTask.default_due_time || '17:00',
-          status: 'not_due'
-        })
-      }
-
-      // Move to first day of next month
-      current.setMonth(current.getMonth() + 1)
-      current.setDate(1)
-    }
-
-    return instances
-  }
-
-  /**
-   * Every Month: Due = last Saturday of month (move earlier if Saturday is PH)
-   */
-  private generateEveryMonth(masterTask: MasterTask, startDate: Date, endDate: Date): TaskInstanceData[] {
-    const instances: TaskInstanceData[] = []
-    const current = new Date(startDate.getFullYear(), startDate.getMonth(), 1)
-
-    while (current <= endDate) {
-      const instanceDate = this.formatDate(current)
-      const lastSaturday = this.getLastSaturday(current)
-      let dueDate = lastSaturday
-
-      // If last Saturday is PH, move to previous Saturday
-      while (this.isPublicHoliday(this.formatDate(dueDate))) {
-        dueDate.setDate(dueDate.getDate() - 7)
-      }
-
-      instances.push({
-        master_task_id: masterTask.id,
-        instance_date: instanceDate,
-        due_date: this.formatDate(dueDate),
-        due_time: masterTask.default_due_time || '17:00',
-        status: 'not_due'
-      })
-
-      // Move to first day of next month
-      current.setMonth(current.getMonth() + 1)
-      current.setDate(1)
-    }
-
-    return instances
-  }
-
-  /**
-   * Certain Months: Same as every month but filtered by months array
-   */
-  private generateCertainMonths(masterTask: MasterTask, startDate: Date, endDate: Date): TaskInstanceData[] {
-    const instances: TaskInstanceData[] = []
-    const targetMonths = masterTask.months || []
-    const current = new Date(startDate.getFullYear(), startDate.getMonth(), 1)
-
-    while (current <= endDate) {
-      if (targetMonths.includes(current.getMonth() + 1)) {
-        const instanceDate = this.formatDate(current)
-        const lastSaturday = this.getLastSaturday(current)
-        let dueDate = lastSaturday
-
-        // If last Saturday is PH, move to previous Saturday
-        while (this.isPublicHoliday(this.formatDate(dueDate))) {
-          dueDate.setDate(dueDate.getDate() - 7)
-        }
-
-        instances.push({
-          master_task_id: masterTask.id,
-          instance_date: instanceDate,
-          due_date: this.formatDate(dueDate),
-          due_time: masterTask.default_due_time || '17:00',
-          status: 'not_due'
-        })
-      }
-
-      // Move to first day of next month
-      current.setMonth(current.getMonth() + 1)
-      current.setDate(1)
-    }
-
-    return instances
-  }
-
-  /**
-   * End of Every Month: Last or second-last Monday depending on workdays
-   */
-  private generateEndEveryMonth(masterTask: MasterTask, startDate: Date, endDate: Date): TaskInstanceData[] {
-    const instances: TaskInstanceData[] = []
-    const current = new Date(startDate.getFullYear(), startDate.getMonth(), 1)
-
-    while (current <= endDate) {
-      const lastMonday = this.getLastMonday(current)
-      let instanceDate = lastMonday
-
-      // Adjust for public holidays - move to previous Monday if needed
-      while (this.isPublicHoliday(this.formatDate(instanceDate))) {
-        instanceDate.setDate(instanceDate.getDate() - 7)
-      }
-
-      instances.push({
-        master_task_id: masterTask.id,
-        instance_date: this.formatDate(instanceDate),
-        due_date: this.formatDate(instanceDate),
-        due_time: masterTask.default_due_time || '17:00',
-        status: 'not_due'
-      })
-
-      // Move to first day of next month
-      current.setMonth(current.getMonth() + 1)
-      current.setDate(1)
-    }
-
-    return instances
-  }
-
-  /**
-   * End of Certain Months: Same as end of every month but filtered
-   */
-  private generateEndCertainMonths(masterTask: MasterTask, startDate: Date, endDate: Date): TaskInstanceData[] {
-    const instances: TaskInstanceData[] = []
-    const targetMonths = masterTask.months || []
-    const current = new Date(startDate.getFullYear(), startDate.getMonth(), 1)
-
-    while (current <= endDate) {
-      if (targetMonths.includes(current.getMonth() + 1)) {
-        const lastMonday = this.getLastMonday(current)
-        let instanceDate = lastMonday
-
-        // Adjust for public holidays
-        while (this.isPublicHoliday(this.formatDate(instanceDate))) {
-          instanceDate.setDate(instanceDate.getDate() - 7)
-        }
-
-        instances.push({
-          master_task_id: masterTask.id,
-          instance_date: instanceDate,
-          due_date: this.formatDate(instanceDate),
-          due_time: masterTask.default_due_time || '17:00',
-          status: 'not_due'
-        })
-      }
-
-      // Move to first day of next month
-      current.setMonth(current.getMonth() + 1)
-      current.setDate(1)
-    }
-
-    return instances
-  }
-
-  // Utility methods
-
-  private formatDate(date: Date): string {
-    return date.toISOString().split('T')[0]
-  }
-
-  private isPublicHoliday(dateStr: string): boolean {
-    return this.publicHolidays.has(dateStr)
-  }
-
-  private addWorkdays(startDate: Date, workdays: number): Date {
-    const result = new Date(startDate)
-    let added = 0
-
-    while (added < workdays) {
-      result.setDate(result.getDate() + 1)
-      const dayOfWeek = result.getDay()
       
-      // Skip weekends and public holidays
-      if (dayOfWeek >= 1 && dayOfWeek <= 6 && !this.isPublicHoliday(this.formatDate(result))) {
-        added++
+      return occurrences
+    } catch (error) {
+      console.error('Error getting occurrences between dates:', error)
+      return []
+    }
+  }
+
+  /**
+   * Generate all occurrences for a task within a date range
+   * This is useful for bulk task generation
+   * 
+   * @param task - Task to generate occurrences for
+   * @param startDate - Start date
+   * @param endDate - End date
+   * @returns Array of occurrence dates
+   */
+  generateOccurrences(task: Task, startDate: Date, endDate: Date): Date[] {
+    const occurrences = this.occurrencesBetween(task, startDate, endDate)
+    return occurrences.map(occ => occ.date)
+  }
+
+  // ========================================
+  // FREQUENCY TYPE IMPLEMENTATIONS
+  // ========================================
+
+  /**
+   * Check if once-off task is due
+   */
+  private isOnceOffDue(task: Task & { frequency_rules: OnceOffFrequencyRule }, date: Date): boolean {
+    if (!task.frequency_rules.due_date) {
+      return false
+    }
+    
+    const dueDate = new Date(task.frequency_rules.due_date)
+    return this.isSameDate(date, dueDate)
+  }
+
+  /**
+   * Check if once-off sticky task is due
+   * Sticky tasks persist until completed
+   */
+  private isOnceOffStickyDue(task: Task & { frequency_rules: OnceOffStickyFrequencyRule }, date: Date): boolean {
+    if (task.frequency_rules.due_date) {
+      const dueDate = new Date(task.frequency_rules.due_date)
+      return date >= dueDate
+    }
+    
+    // If no due date, task is always due
+    return true
+  }
+
+  /**
+   * Check if daily task is due
+   */
+  private isDailyDue(task: Task & { frequency_rules: DailyFrequencyRule }, date: Date): boolean {
+    const { every_n_days, business_days_only } = task.frequency_rules
+    
+    if (business_days_only && !this.holidayChecker.isBusinessDay(date)) {
+      return false
+    }
+    
+    // For every N days, calculate if this date should have a task
+    const startDate = task.start_date ? new Date(task.start_date) : new Date(0)
+    const daysSinceStart = Math.floor((date.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24))
+    
+    return daysSinceStart >= 0 && daysSinceStart % every_n_days === 0
+  }
+
+  /**
+   * Check if weekly task is due
+   */
+  private isWeeklyDue(task: Task & { frequency_rules: WeeklyFrequencyRule }, date: Date): boolean {
+    const { every_n_weeks, start_day, business_days_only } = task.frequency_rules
+    
+    if (business_days_only && !this.holidayChecker.isBusinessDay(date)) {
+      return false
+    }
+    
+    const startDate = task.start_date ? new Date(task.start_date) : new Date(0)
+    const weeksSinceStart = Math.floor((date.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24 * 7))
+    
+    // Check if it's the right week
+    if (weeksSinceStart < 0 || weeksSinceStart % every_n_weeks !== 0) {
+      return false
+    }
+    
+    // Check if it's the right day of week
+    if (start_day) {
+      const dayOfWeek = date.getDay() || 7 // Convert Sunday (0) to 7
+      return dayOfWeek === start_day
+    }
+    
+    return true
+  }
+
+  /**
+   * Check if specific weekdays task is due
+   */
+  private isSpecificWeekdaysDue(task: Task & { frequency_rules: SpecificWeekdaysFrequencyRule }, date: Date): boolean {
+    const { weekdays, every_n_weeks, business_days_only } = task.frequency_rules
+    
+    if (business_days_only && !this.holidayChecker.isBusinessDay(date)) {
+      return false
+    }
+    
+    const dayOfWeek = date.getDay() || 7 // Convert Sunday (0) to 7
+    
+    // Check if it's one of the specified weekdays
+    if (!weekdays.includes(dayOfWeek)) {
+      return false
+    }
+    
+    // Check every N weeks if specified
+    if (every_n_weeks && every_n_weeks > 1) {
+      const startDate = task.start_date ? new Date(task.start_date) : new Date(0)
+      const weeksSinceStart = Math.floor((date.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24 * 7))
+      
+      if (weeksSinceStart < 0 || weeksSinceStart % every_n_weeks !== 0) {
+        return false
       }
     }
-
-    return result
+    
+    return true
   }
 
-  private getLastSaturday(month: Date): Date {
-    const lastDay = new Date(month.getFullYear(), month.getMonth() + 1, 0)
-    const dayOfWeek = lastDay.getDay()
-    const daysToSubtract = dayOfWeek === 6 ? 0 : (dayOfWeek + 1) % 7
-    lastDay.setDate(lastDay.getDate() - daysToSubtract)
-    return lastDay
+  /**
+   * Check if start of month task is due
+   */
+  private isStartOfMonthDue(task: Task & { frequency_rules: StartOfMonthFrequencyRule }, date: Date): boolean {
+    const { every_n_months, months, day_offset, business_days_only } = task.frequency_rules
+    
+    // Check if it's the right month
+    if (months && months.length > 0) {
+      if (!months.includes(date.getMonth() + 1)) {
+        return false
+      }
+    }
+    
+    // Check if it's the right month interval
+    if (every_n_months && every_n_months > 1) {
+      const startDate = task.start_date ? new Date(task.start_date) : new Date(0)
+      const monthsSinceStart = (date.getFullYear() - startDate.getFullYear()) * 12 + 
+                              (date.getMonth() - startDate.getMonth())
+      
+      if (monthsSinceStart < 0 || monthsSinceStart % every_n_months !== 0) {
+        return false
+      }
+    }
+    
+    // Check if it's the right day offset from start of month
+    const targetDay = 1 + (day_offset || 0)
+    const actualDay = date.getDate()
+    
+    if (actualDay !== targetDay) {
+      return false
+    }
+    
+    // Apply business day logic if configured
+    if (business_days_only) {
+      return this.holidayChecker.isBusinessDay(date)
+    }
+    
+    return true
   }
 
-  private getLastMonday(month: Date): Date {
-    const lastDay = new Date(month.getFullYear(), month.getMonth() + 1, 0)
-    const dayOfWeek = lastDay.getDay()
-    const daysToSubtract = dayOfWeek === 1 ? 0 : (dayOfWeek + 6) % 7
-    lastDay.setDate(lastDay.getDate() - daysToSubtract)
-    return lastDay
+  /**
+   * Check if start certain months task is due
+   */
+  private isStartCertainMonthsDue(task: Task & { frequency_rules: StartCertainMonthsFrequencyRule }, date: Date): boolean {
+    const { months, day_offset, business_days_only } = task.frequency_rules
+    
+    // Check if it's one of the specified months
+    if (!months.includes(date.getMonth() + 1)) {
+      return false
+    }
+    
+    // Check if it's the right day offset from start of month
+    const targetDay = 1 + (day_offset || 0)
+    const actualDay = date.getDate()
+    
+    if (actualDay !== targetDay) {
+      return false
+    }
+    
+    // Apply business day logic if configured
+    if (business_days_only) {
+      return this.holidayChecker.isBusinessDay(date)
+    }
+    
+    return true
+  }
+
+  /**
+   * Check if every month task is due
+   */
+  private isEveryMonthDue(task: Task & { frequency_rules: EveryMonthFrequencyRule }, date: Date): boolean {
+    const { every_n_months, day_offset, business_days_only } = task.frequency_rules
+    
+    // Check if it's the right month interval
+    if (every_n_months && every_n_months > 1) {
+      const startDate = task.start_date ? new Date(task.start_date) : new Date(0)
+      const monthsSinceStart = (date.getFullYear() - startDate.getFullYear()) * 12 + 
+                              (date.getMonth() - startDate.getMonth())
+      
+      if (monthsSinceStart < 0 || monthsSinceStart % every_n_months !== 0) {
+        return false
+      }
+    }
+    
+    // Check if it's the right day offset from start of month
+    const targetDay = 1 + (day_offset || 0)
+    const actualDay = date.getDate()
+    
+    if (actualDay !== targetDay) {
+      return false
+    }
+    
+    // Apply business day logic if configured
+    if (business_days_only) {
+      return this.holidayChecker.isBusinessDay(date)
+    }
+    
+    return true
+  }
+
+  /**
+   * Check if certain months task is due
+   */
+  private isCertainMonthsDue(task: Task & { frequency_rules: CertainMonthsFrequencyRule }, date: Date): boolean {
+    const { months, day_offset, business_days_only } = task.frequency_rules
+    
+    // Check if it's one of the specified months
+    if (!months.includes(date.getMonth() + 1)) {
+      return false
+    }
+    
+    // Check if it's the right day offset from start of month
+    const targetDay = 1 + (day_offset || 0)
+    const actualDay = date.getDate()
+    
+    if (actualDay !== targetDay) {
+      return false
+    }
+    
+    // Apply business day logic if configured
+    if (business_days_only) {
+      return this.holidayChecker.isBusinessDay(date)
+    }
+    
+    return true
+  }
+
+  /**
+   * Check if end of month task is due
+   */
+  private isEndOfMonthDue(task: Task & { frequency_rules: EndOfMonthFrequencyRule }, date: Date): boolean {
+    const { every_n_months, days_from_end, business_days_only } = task.frequency_rules
+    
+    // Check if it's the right month interval
+    if (every_n_months && every_n_months > 1) {
+      const startDate = task.start_date ? new Date(task.start_date) : new Date(0)
+      const monthsSinceStart = (date.getFullYear() - startDate.getFullYear()) * 12 + 
+                              (date.getMonth() - startDate.getMonth())
+      
+      if (monthsSinceStart < 0 || monthsSinceStart % every_n_months !== 0) {
+        return false
+      }
+    }
+    
+    // Check if it's the right day from end of month
+    const lastDayOfMonth = new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate()
+    const targetDay = lastDayOfMonth - (days_from_end || 0)
+    const actualDay = date.getDate()
+    
+    if (actualDay !== targetDay) {
+      return false
+    }
+    
+    // Apply business day logic if configured
+    if (business_days_only) {
+      return this.holidayChecker.isBusinessDay(date)
+    }
+    
+    return true
+  }
+
+  /**
+   * Check if end certain months task is due
+   */
+  private isEndCertainMonthsDue(task: Task & { frequency_rules: EndCertainMonthsFrequencyRule }, date: Date): boolean {
+    const { months, days_from_end, business_days_only } = task.frequency_rules
+    
+    // Check if it's one of the specified months
+    if (!months.includes(date.getMonth() + 1)) {
+      return false
+    }
+    
+    // Check if it's the right day from end of month
+    const lastDayOfMonth = new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate()
+    const targetDay = lastDayOfMonth - (days_from_end || 0)
+    const actualDay = date.getDate()
+    
+    if (actualDay !== targetDay) {
+      return false
+    }
+    
+    // Apply business day logic if configured
+    if (business_days_only) {
+      return this.holidayChecker.isBusinessDay(date)
+    }
+    
+    return true
+  }
+
+  // ========================================
+  // UTILITY METHODS
+  // ========================================
+
+  /**
+   * Check if two dates are the same day
+   */
+  private isSameDate(date1: Date, date2: Date): boolean {
+    return date1.getFullYear() === date2.getFullYear() &&
+           date1.getMonth() === date2.getMonth() &&
+           date1.getDate() === date2.getDate()
+  }
+
+  /**
+   * Get the current configuration
+   */
+  getConfig(): RecurrenceConfig {
+    return { ...this.config }
+  }
+
+  /**
+   * Update the configuration
+   */
+  updateConfig(newConfig: Partial<RecurrenceConfig>): void {
+    this.config = { ...this.config, ...newConfig }
+  }
+
+  /**
+   * Get the holiday checker instance
+   */
+  getHolidayChecker(): HolidayChecker {
+    return this.holidayChecker
+  }
+
+  /**
+   * Set a new holiday checker
+   */
+  setHolidayChecker(holidayChecker: HolidayChecker): void {
+    this.holidayChecker = holidayChecker
   }
 }
 
+// ========================================
+// FACTORY FUNCTIONS
+// ========================================
+
 /**
- * Factory function to create recurrence engine with current public holidays
+ * Create a recurrence engine with default configuration
  */
-export async function createRecurrenceEngine(): Promise<RecurrenceEngine> {
-  const { data: holidays, error } = await supabase
-    .from('public_holidays')
-    .select('*')
+export function createRecurrenceEngine(holidayChecker: HolidayChecker): RecurrenceEngine {
+  return new RecurrenceEngine(holidayChecker)
+}
 
-  if (error) {
-    console.error('Error fetching public holidays:', error)
-    return new RecurrenceEngine([])
-  }
+/**
+ * Create a recurrence engine with custom configuration
+ */
+export function createRecurrenceEngineWithConfig(
+  holidayChecker: HolidayChecker,
+  config: Partial<RecurrenceConfig>
+): RecurrenceEngine {
+  return new RecurrenceEngine(holidayChecker, config)
+}
 
-  return new RecurrenceEngine(holidays || [])
+// ========================================
+// EXPORTS
+// ========================================
+
+export type {
+  Task,
+  TaskOccurrence,
+  RecurrenceConfig
 }

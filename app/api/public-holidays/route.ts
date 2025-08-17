@@ -63,6 +63,34 @@ export async function POST(request: Request) {
   }
 }
 
+export async function PATCH(request: Request) {
+  try {
+    const body = await request.json()
+    const { date, name, region, source } = body
+
+    if (!date || !name) {
+      return NextResponse.json({ error: 'Date and name are required' }, { status: 400 })
+    }
+
+    const { data: holiday, error } = await supabase
+      .from('public_holidays')
+      .update({ name, region, source })
+      .eq('date', date)
+      .select()
+      .single()
+
+    if (error) {
+      console.error('Error updating public holiday:', error)
+      return NextResponse.json({ error: 'Failed to update public holiday' }, { status: 500 })
+    }
+
+    return NextResponse.json(holiday)
+  } catch (error) {
+    console.error('Unexpected error:', error)
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+  }
+}
+
 export async function DELETE(request: Request) {
   try {
     const body = await request.json()
@@ -86,5 +114,5 @@ export async function DELETE(request: Request) {
   } catch (error) {
     console.error('Unexpected error:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
-  }
+    }
 }

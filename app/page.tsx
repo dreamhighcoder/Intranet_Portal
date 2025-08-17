@@ -7,6 +7,7 @@ import { PublicNavigation } from "@/components/public-navigation"
 import { PositionLoginModal } from "@/components/position-login-modal"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import ChecklistCard from "@/components/ui/ChecklistCard"
 import { Users, Stethoscope, Package, Building } from "lucide-react"
 import { PositionAuthService } from "@/lib/position-auth"
 import { useRouter } from "next/navigation"
@@ -179,32 +180,14 @@ export default function HomePage() {
             {staffChecklists.map((checklist) => {
               const IconComponent = checklist.icon
               return (
-                <Card key={checklist.title} className="card-surface hover:shadow-lg transition-all duration-200 group flex flex-col h-full">
-                  <CardHeader className="pb-3">
-                    <div className="flex items-center space-x-3">
-                      <div
-                        className="p-2 rounded-lg text-white group-hover:scale-110 transition-transform"
-                        style={{ backgroundColor: checklist.iconBg }}
-                      >
-                        <IconComponent className="h-5 w-5" />
-                      </div>
-                      <CardTitle className="text-lg leading-tight" style={{ color: "var(--color-text)" }}>
-                        {checklist.title}
-                      </CardTitle>
-                    </div>
-                  </CardHeader>
-                  <CardContent className="pt-0 flex-1 flex flex-col">
-                    <p className="mb-4 text-sm leading-relaxed flex-1" style={{ color: "var(--color-text-muted)" }}>
-                      {checklist.description}
-                    </p>
-                    <Button
-                      onClick={() => handleChecklistClick(checklist)}
-                      className="w-full bg-[var(--color-primary)] hover:bg-[var(--color-primary)]/90 text-[var(--color-primary-on)] border-0 mt-auto"
-                    >
-                      Open Checklist
-                    </Button>
-                  </CardContent>
-                </Card>
+                <ChecklistCard
+                  key={checklist.title}
+                  role={checklist.positionId}
+                  roleDisplayName={checklist.title.replace("Checklist – ", "")}
+                  positionId={checklist.positionId}
+                  icon={IconComponent}
+                  iconBg={checklist.iconBg}
+                />
               )
             })}
           </div>

@@ -127,45 +127,144 @@ export async function POST(request: NextRequest) {
     const supabase = createClient(supabaseUrl, supabaseServiceKey)
 
     const body = await request.json()
+    
     const {
       title,
       description,
       position_id,
+      responsibility = [],
+      categories = [],
+      frequency_rules,
+      timing,
+      due_time,
+      due_date,
+      publish_status = 'draft',
+      publish_delay,
+      start_date,
+      end_date,
+      sticky_once_off = false,
+      allow_edit_when_locked = false,
+      // Legacy fields for backward compatibility
       frequency,
       weekdays = [],
       months = [],
-      timing,
       default_due_time,
       category,
-      publish_status = 'draft',
-      publish_delay_date,
-      sticky_once_off = false,
-      allow_edit_when_locked = false
+      publish_delay_date
     } = body
 
-    if (!title || !frequency) {
-      return NextResponse.json({ error: 'Title and frequency are required' }, { status: 400 })
+    // Check for required fields - support both new and legacy formats
+    if (!title) {
+      return NextResponse.json({ error: 'Title is required' }, { status: 400 })
     }
 
-    console.log('Master task POST - Creating task with data:', { title, position_id, frequency })
+    // For now, convert new format to legacy format until migration is run
+    let legacyFrequency = frequency
+    if (frequency_rules && !frequency) {
+      // Convert frequency_rules to legacy frequency
+      switch (frequency_rules.type) {
+        case 'once_off':
+          legacyFrequency = 'once_off_sticky'
+          break
+        case 'daily':
+          legacyFrequency = 'every_day'
+          break
+        case 'weekly':
+          legacyFrequency = 'weekly'
+          break
+        case 'specific_weekdays':
+          legacyFrequency = 'specific_weekdays'
+          break
+        case 'start_of_month':
+          legacyFrequency = 'start_every_month'
+          break
+        case 'end_of_month':
+          legacyFrequency = 'end_every_month'
+          break
+        case 'every_month':
+          legacyFrequency = 'every_month'
+          break
+        case 'certain_months':
+          legacyFrequency = 'certain_months'
+          break
+        default:
+          legacyFrequency = 'every_day'
+      }
+    }
+
+    if (!legacyFrequency) {
+      return NextResponse.json({ error: 'Frequency is required' }, { status: 400 })
+    }
+
+    // Map responsibility to position_id for backward compatibility
+    const responsibilityToPositionMap: { [key: string]: string } = {
+      'pharmacist-primary': '550e8400-e29b-41d4-a716-446655440001',
+      'pharmacist-supporting': '550e8400-e29b-41d4-a716-446655440002',
+      'pharmacy-assistants': '550e8400-e29b-41d4-a716-446655440003',
+      'dispensary-technicians': '550e8400-e29b-41d4-a716-446655440004',
+      'daa-packers': '550e8400-e29b-41d4-a716-446655440005',
+      'operational-managerial': '550e8400-e29b-41d4-a716-446655440006',
+      'shared-exc-pharmacist': '550e8400-e29b-41d4-a716-446655440003', // Default to pharmacy assistants
+      'shared-inc-pharmacist': '550e8400-e29b-41d4-a716-446655440001'  // Default to primary pharmacist
+    }
+
+    // Get position_id from responsibility or use provided position_id
+    let mappedPositionId = position_id
+    if (!mappedPositionId && responsibility && responsibility.length > 0) {
+      mappedPositionId = responsibilityToPositionMap[responsibility[0]]
+    }
+    // Default to primary pharmacist if no mapping found
+    if (!mappedPositionId) {
+      mappedPositionId = '550e8400-e29b-41d4-a716-446655440001'
+    }
+
+    // Map timing values from TaskForm to database values
+    const timingMap: { [key: string]: string } = {
+      'opening': 'Morning',
+      'anytime': 'Any Time',
+      'before-cutoff': 'Before Close',
+      'closing': 'Before Close'
+    }
+    
+    const mappedTiming = timing ? (timingMap[timing] || timing) : 'Any Time'
+
+    console.log('Master task POST - Creating task:', title, 'for position:', mappedPositionId)
+    
+    // Prepare data for insertion using current database schema
+    const insertData: any = {
+      title,
+      description,
+      position_id: mappedPositionId,
+      frequency: legacyFrequency,
+      timing: mappedTiming,
+      default_due_time: due_time || default_due_time || '09:00:00',
+      category: categories && categories.length > 0 ? categories[0] : (category || 'General'),
+      publish_status: publish_status || 'draft',
+      sticky_once_off: sticky_once_off || false,
+      allow_edit_when_locked: allow_edit_when_locked || false
+    }
+
+    // Handle weekdays from frequency_rules or legacy
+    if (frequency_rules && frequency_rules.weekdays) {
+      insertData.weekdays = frequency_rules.weekdays
+    } else if (weekdays && weekdays.length > 0) {
+      insertData.weekdays = weekdays
+    } else if (legacyFrequency === 'specific_weekdays') {
+      insertData.weekdays = [1, 2, 3, 4, 5] // Default to weekdays
+    }
+
+    // Handle months from frequency_rules or legacy
+    if (frequency_rules && frequency_rules.months) {
+      insertData.months = frequency_rules.months
+    } else if (months && months.length > 0) {
+      insertData.months = months
+    }
+
+    console.log('Master task POST - Inserting with frequency:', legacyFrequency, 'timing:', mappedTiming)
 
     const { data: masterTask, error } = await supabase
       .from('master_tasks')
-      .insert([{
-        title,
-        description,
-        position_id,
-        frequency,
-        weekdays,
-        months,
-        timing,
-        default_due_time,
-        category,
-        publish_status,
-        publish_delay_date,
-        sticky_once_off,
-        allow_edit_when_locked
-      }])
+      .insert([insertData])
       .select(`
         *,
         positions (
@@ -176,8 +275,20 @@ export async function POST(request: NextRequest) {
       .single()
 
     if (error) {
-      console.error('Error creating master task:', error)
-      return NextResponse.json({ error: 'Failed to create master task' }, { status: 500 })
+      console.error('Master task POST - Database error:', error)
+      console.error('Master task POST - Error details:', {
+        message: error.message,
+        details: error.details,
+        hint: error.hint,
+        code: error.code
+      })
+      console.error('Master task POST - Insert data that failed:', JSON.stringify(insertData, null, 2))
+      return NextResponse.json({ 
+        error: `Database error: ${error.message}`,
+        details: error.details,
+        hint: error.hint,
+        code: error.code
+      }, { status: 500 })
     }
 
     // After successfully creating the master task, generate task instances

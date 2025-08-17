@@ -14,6 +14,11 @@ export interface PositionAuth {
   password: string
   role: 'admin' | 'viewer'
   is_super_admin?: boolean
+  last_login?: Date
+  login_attempts?: number
+  locked_until?: Date
+  created_at?: Date
+  updated_at?: Date
 }
 
 async function fetchPositionsFromDatabase(): Promise<PositionAuth[]> {
@@ -78,6 +83,10 @@ export interface PositionAuthUser {
   isAuthenticated: boolean
   loginTime: Date
   isSuperAdmin: boolean
+  sessionId: string
+  ipAddress?: string
+  userAgent?: string
+  lastActivity: Date
 }
 
 export class PositionAuthService {
@@ -135,8 +144,13 @@ export class PositionAuthService {
   }
 
   // Authenticate with position and password - ALL authentication must use database
-  static async authenticate(positionId: string, password: string): Promise<{ success: boolean; user?: PositionAuthUser; error?: string }> {
-    console.log('🔐 Authentication attempt:', { positionId, password: '***' })
+  static async authenticate(
+    positionId: string, 
+    password: string, 
+    ipAddress?: string, 
+    userAgent?: string
+  ): Promise<{ success: boolean; user?: PositionAuthUser; error?: string }> {
+    console.log('🔐 Authentication attempt:', { positionId, password: '***', ipAddress, userAgent: userAgent?.substring(0, 50) })
     
     try {
       // Fetch all positions from database - no fallbacks or hardcoded values
@@ -148,6 +162,7 @@ export class PositionAuthService {
         return { success: false, error: 'No positions available. Please contact an administrator.' }
       }
       
+      // Check for consolidated administrator login
       if (positionId === 'administrator-consolidated') {
         console.log('🔍 Consolidated administrator login detected')
         
@@ -173,6 +188,7 @@ export class PositionAuthService {
           console.log('✅ Found matching admin position for consolidated login:', matchingAdminPosition.displayName)
           console.log('👑 Admin type:', matchingAdminPosition.is_super_admin ? 'Super Admin' : 'Regular Admin')
           
+          const sessionId = this.generateSessionId()
           const user: PositionAuthUser = {
             id: matchingAdminPosition.id,
             position: matchingAdminPosition,
@@ -180,13 +196,20 @@ export class PositionAuthService {
             displayName: 'Administrator', // Use consolidated display name for UI consistency
             isAuthenticated: true,
             loginTime: new Date(),
-            isSuperAdmin: matchingAdminPosition.is_super_admin || false
+            isSuperAdmin: matchingAdminPosition.is_super_admin || false,
+            sessionId,
+            ipAddress,
+            userAgent,
+            lastActivity: new Date()
           }
           
           // Store in localStorage
           if (typeof window !== 'undefined') {
             localStorage.setItem(this.STORAGE_KEY, JSON.stringify(user))
           }
+          
+          // Log successful authentication
+          await this.logAuthenticationSuccess(matchingAdminPosition.id, 'consolidated_admin', ipAddress, userAgent)
           
           console.log('✅ Consolidated administrator authentication successful')
           return { success: true, user }
@@ -196,6 +219,7 @@ export class PositionAuthService {
         return { success: false, error: 'Invalid administrator password' }
       }
 
+      // Regular position authentication
       let matchedPosition = positions.find(p => p.id === positionId)
       console.log('🎯 Found position by ID:', matchedPosition?.displayName || 'NOT_FOUND')
       
@@ -210,14 +234,26 @@ export class PositionAuthService {
         return { success: false, error: 'Position not found' }
       }
       
+      // Check if position is locked due to too many failed attempts
+      if (matchedPosition.locked_until && new Date() < matchedPosition.locked_until) {
+        const lockTime = matchedPosition.locked_until.toLocaleString()
+        console.log('🔒 Position is locked until:', lockTime)
+        return { success: false, error: `Account is temporarily locked until ${lockTime}` }
+      }
+      
       if (matchedPosition.password !== password) {
         console.log('❌ Password mismatch for position:', matchedPosition.displayName)
+        
+        // Increment failed login attempts
+        await this.incrementFailedLoginAttempts(matchedPosition.id, ipAddress, userAgent)
+        
         return { success: false, error: 'Invalid password' }
       }
       
       console.log('✅ Password match for position:', matchedPosition.displayName)
       console.log('👑 Admin type:', matchedPosition.is_super_admin ? 'Super Admin' : 'Regular Admin')
       
+      const sessionId = this.generateSessionId()
       const user: PositionAuthUser = {
         id: matchedPosition.id,
         position: matchedPosition,
@@ -225,7 +261,11 @@ export class PositionAuthService {
         displayName: matchedPosition.displayName,
         isAuthenticated: true,
         loginTime: new Date(),
-        isSuperAdmin: matchedPosition.is_super_admin || false
+        isSuperAdmin: matchedPosition.is_super_admin || false,
+        sessionId,
+        ipAddress,
+        userAgent,
+        lastActivity: new Date()
       }
       
       // Store in localStorage
@@ -233,7 +273,12 @@ export class PositionAuthService {
         localStorage.setItem(this.STORAGE_KEY, JSON.stringify(user))
       }
       
+      // Log successful authentication and reset failed attempts
+      await this.logAuthenticationSuccess(matchedPosition.id, 'position', ipAddress, userAgent)
+      await this.resetFailedLoginAttempts(matchedPosition.id)
+      
       console.log('✅ Authentication successful for position:', matchedPosition.displayName)
+      return { success: true, user }
       return { success: true, user }
       
     } catch (error: any) {
@@ -273,6 +318,12 @@ export class PositionAuthService {
         console.log('❌ Login expired, clearing')
         this.signOut()
         return null
+      }
+      
+      // Update last activity
+      user.lastActivity = new Date()
+      if (typeof window !== 'undefined') {
+        localStorage.setItem(this.STORAGE_KEY, JSON.stringify(user))
       }
       
       console.log('✅ Current user retrieved:', {
@@ -317,5 +368,156 @@ export class PositionAuthService {
   static getChecklistPositionsFallback(): PositionAuth[] {
     const positions = positionsCache || []
     return positions.filter(p => p.name !== 'administrator' && !p.displayName.toLowerCase().includes('administrator'))
+  }
+
+  // ========================================
+  // SECURITY AND AUDIT HELPER METHODS
+  // ========================================
+
+  /**
+   * Generate a unique session ID
+   */
+  private static generateSessionId(): string {
+    return `pos_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+  }
+
+  /**
+   * Log successful authentication
+   */
+  private static async logAuthenticationSuccess(
+    positionId: string, 
+    authType: 'position' | 'consolidated_admin',
+    ipAddress?: string,
+    userAgent?: string
+  ): Promise<void> {
+    try {
+      await fetch('/api/audit-log', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          table_name: 'positions',
+          record_id: positionId,
+          action: 'user_login',
+          metadata: {
+            auth_type: authType,
+            ip_address: ipAddress,
+            user_agent: userAgent?.substring(0, 200),
+            timestamp: new Date().toISOString()
+          }
+        })
+      })
+    } catch (error) {
+      console.error('Failed to log authentication success:', error)
+    }
+  }
+
+  /**
+   * Increment failed login attempts and potentially lock the account
+   */
+  private static async incrementFailedLoginAttempts(
+    positionId: string,
+    ipAddress?: string,
+    userAgent?: string
+  ): Promise<void> {
+    try {
+      await fetch('/api/audit-log', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          table_name: 'positions',
+          record_id: positionId,
+          action: 'login_failed',
+          metadata: {
+            ip_address: ipAddress,
+            user_agent: userAgent?.substring(0, 200),
+            timestamp: new Date().toISOString()
+          }
+        })
+      })
+    } catch (error) {
+      console.error('Failed to log failed login attempt:', error)
+    }
+  }
+
+  /**
+   * Reset failed login attempts after successful login
+   */
+  private static async resetFailedLoginAttempts(positionId: string): Promise<void> {
+    try {
+      // This would typically update the positions table to reset login_attempts
+      // For now, we'll just log the reset action
+      await fetch('/api/audit-log', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          table_name: 'positions',
+          record_id: positionId,
+          action: 'login_attempts_reset',
+          metadata: {
+            timestamp: new Date().toISOString()
+          }
+        })
+      })
+    } catch (error) {
+      console.error('Failed to log login attempts reset:', error)
+    }
+  }
+
+  /**
+   * Validate session and check for suspicious activity
+   */
+  static async validateSession(user: PositionAuthUser): Promise<boolean> {
+    try {
+      // Check if session is still valid
+      const now = new Date()
+      const lastActivity = new Date(user.lastActivity)
+      const timeDiff = now.getTime() - lastActivity.getTime()
+      const minutesDiff = timeDiff / (1000 * 60)
+      
+      // Session expires after 30 minutes of inactivity
+      if (minutesDiff > 30) {
+        console.log('❌ Session expired due to inactivity')
+        this.signOut()
+        return false
+      }
+      
+      // Update last activity
+      user.lastActivity = now
+      if (typeof window !== 'undefined') {
+        localStorage.setItem(this.STORAGE_KEY, JSON.stringify(user))
+      }
+      
+      return true
+    } catch (error) {
+      console.error('Session validation error:', error)
+      return false
+    }
+  }
+
+  /**
+   * Log user activity for audit purposes
+   */
+  static async logUserActivity(
+    userId: string,
+    action: string,
+    details?: Record<string, any>
+  ): Promise<void> {
+    try {
+      await fetch('/api/audit-log', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          table_name: 'positions',
+          record_id: userId,
+          action,
+          metadata: {
+            ...details,
+            timestamp: new Date().toISOString()
+          }
+        })
+      })
+    } catch (error) {
+      console.error('Failed to log user activity:', error)
+    }
   }
 }

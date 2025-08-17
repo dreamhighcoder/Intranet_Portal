@@ -1,249 +1,485 @@
 /**
- * Task Instance Generator
- * Generates task instances from master tasks using the recurrence engine
+ * Task Instance Generator for Master Checklist System
+ * Pharmacy Intranet Portal - Daily Task Generation
+ * 
+ * This module provides functionality to:
+ * - Generate checklist instances for a specific date
+ * - Query active master tasks from the database
+ * - Use recurrence engine to determine which tasks are due
+ * - Insert checklist instances with idempotent behavior
+ * - Handle bulk generation for date ranges
  */
 
-import { supabase } from './supabase'
-import { RecurrenceEngine, createRecurrenceEngine, type TaskInstanceData } from './recurrence-engine'
-import type { MasterTask, TaskInstance } from './supabase'
+import { supabase } from './db'
+import { createRecurrenceEngine } from './recurrence-engine'
+import { createHolidayHelper } from './public-holidays'
+import type { 
+  TaskRow, 
+  InstanceRow,
+  CreateChecklistInstanceRequest 
+} from './db'
+import type { Task } from './recurrence-engine'
+import type { PublicHoliday } from './public-holidays'
 
+// ========================================
+// TYPES AND INTERFACES
+// ========================================
+
+/**
+ * Generation options for task instances
+ */
 export interface GenerationOptions {
-  startDate?: Date
-  endDate?: Date
-  masterTaskId?: string
-  forceRegenerate?: boolean
-}
-
-export interface GenerationResult {
-  success: boolean
-  generated: number
-  skipped: number
-  errors: number
-  message: string
+  date: string // ISO date string (YYYY-MM-DD)
+  testMode?: boolean // If true, don't actually insert records
+  dryRun?: boolean // If true, return what would be generated without inserting
+  forceRegenerate?: boolean // If true, delete existing instances before generating
+  maxTasks?: number // Maximum number of tasks to process
+  logLevel?: 'silent' | 'info' | 'debug'
 }
 
 /**
- * Main Task Instance Generator class
+ * Generation result for a single task
+ */
+export interface TaskGenerationResult {
+  taskId: string
+  taskTitle: string
+  isDue: boolean
+  instanceCreated: boolean
+  instanceId?: string
+  error?: string
+  skipped?: boolean
+  reason?: string
+}
+
+/**
+ * Overall generation result
+ */
+export interface GenerationResult {
+  date: string
+  totalTasks: number
+  dueTasks: number
+  instancesCreated: number
+  instancesSkipped: number
+  errors: number
+  results: TaskGenerationResult[]
+  executionTime: number
+  testMode: boolean
+  dryRun: boolean
+}
+
+/**
+ * Bulk generation options
+ */
+export interface BulkGenerationOptions {
+  startDate: string
+  endDate: string
+  testMode?: boolean
+  dryRun?: boolean
+  maxTasksPerDay?: number
+  logLevel?: 'silent' | 'info' | 'debug'
+}
+
+/**
+ * Bulk generation result
+ */
+export interface BulkGenerationResult {
+  startDate: string
+  endDate: string
+  totalDays: number
+  successfulDays: number
+  failedDays: number
+  totalInstancesCreated: number
+  totalErrors: number
+  dailyResults: Array<{
+    date: string
+    result: GenerationResult
+  }>
+  executionTime: number
+}
+
+// ========================================
+// TASK INSTANCE GENERATOR CLASS
+// ========================================
+
+/**
+ * Main task instance generator class
+ * Handles daily generation of checklist instances
  */
 export class TaskInstanceGenerator {
-  private recurrenceEngine: RecurrenceEngine | null = null
+  private recurrenceEngine: ReturnType<typeof createRecurrenceEngine>
+  private logLevel: 'silent' | 'info' | 'debug'
 
-  constructor() {}
-
-  /**
-   * Initialize the generator with current public holidays
-   */
-  async initialize(): Promise<void> {
-    this.recurrenceEngine = await createRecurrenceEngine()
+  constructor(publicHolidays: PublicHoliday[] = [], logLevel: 'silent' | 'info' | 'debug' = 'info') {
+    const holidayHelper = createHolidayHelper(publicHolidays)
+    this.recurrenceEngine = createRecurrenceEngine(holidayHelper)
+    this.logLevel = logLevel
   }
 
   /**
-   * Generate task instances for all active master tasks or a specific master task
+   * Generate checklist instances for a specific date
+   * 
+   * @param options - Generation options
+   * @returns Promise<GenerationResult>
    */
-  async generateInstances(options: GenerationOptions = {}): Promise<GenerationResult> {
-    if (!this.recurrenceEngine) {
-      await this.initialize()
-    }
+  async generateForDate(options: GenerationOptions): Promise<GenerationResult> {
+    const startTime = Date.now()
+    const { date, testMode = false, dryRun = false, forceRegenerate = false, maxTasks } = options
 
-    const {
-      startDate = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000), // -30 days
-      endDate = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000),  // +365 days
-      masterTaskId,
-      forceRegenerate = false
-    } = options
+    this.log('info', `Starting task instance generation for date: ${date}`)
+    this.log('info', `Mode: ${testMode ? 'TEST' : 'PRODUCTION'}, Dry Run: ${dryRun}, Force: ${forceRegenerate}`)
 
     try {
-      // Get master tasks to process
-      const masterTasks = await this.getMasterTasks(masterTaskId)
-      
-      if (masterTasks.length === 0) {
-        return {
-          success: false,
-          generated: 0,
-          skipped: 0,
-          errors: 0,
-          message: 'No active master tasks found'
+      // Step 1: Get all active master tasks
+      const { data: masterTasks, error: tasksError } = await supabase
+        .from('master_tasks')
+        .select('*')
+        .eq('publish_status', 'active')
+        .order('created_at', { ascending: true })
+
+      if (tasksError) {
+        throw new Error(`Failed to fetch master tasks: ${tasksError.message}`)
+      }
+
+      if (!masterTasks || masterTasks.length === 0) {
+        this.log('info', 'No active master tasks found')
+        return this.createEmptyResult(date, testMode, dryRun, startTime)
+      }
+
+      // Apply max tasks limit if specified
+      const tasksToProcess = maxTasks ? masterTasks.slice(0, maxTasks) : masterTasks
+      this.log('info', `Processing ${tasksToProcess.length} master tasks`)
+
+      // Step 2: Check if instances already exist for this date
+      if (!forceRegenerate && !dryRun) {
+        const existingInstances = await this.checkExistingInstances(date)
+        if (existingInstances.length > 0) {
+          this.log('info', `Found ${existingInstances.length} existing instances for ${date}`)
+          
+          if (!testMode) {
+            // Check if we should skip generation (all tasks have instances)
+            const tasksWithInstances = new Set(existingInstances.map(inst => inst.master_task_id))
+            const allTasksHaveInstances = tasksToProcess.every(task => tasksWithInstances.has(task.id))
+            
+            if (allTasksHaveInstances) {
+              this.log('info', 'All tasks already have instances for this date, skipping generation')
+              return this.createEmptyResult(date, testMode, dryRun, startTime, tasksToProcess.length)
+            }
+          }
         }
       }
 
-      let totalGenerated = 0
-      let totalSkipped = 0
-      let totalErrors = 0
+      // Step 3: Force delete existing instances if requested
+      if (forceRegenerate && !dryRun && !testMode) {
+        const deletedCount = await this.deleteExistingInstances(date)
+        this.log('info', `Deleted ${deletedCount} existing instances for regeneration`)
+      }
 
-      // Process each master task
-      for (const masterTask of masterTasks) {
+      // Step 4: Process each task and generate instances
+      const results: TaskGenerationResult[] = []
+      let instancesCreated = 0
+      let instancesSkipped = 0
+      let errors = 0
+
+      for (const masterTask of tasksToProcess) {
         try {
-          const result = await this.generateInstancesForMasterTask(
-            masterTask,
-            startDate,
-            endDate,
-            forceRegenerate
-          )
-          
-          totalGenerated += result.generated
-          totalSkipped += result.skipped
-          totalErrors += result.errors
+          const result = await this.processSingleTask(masterTask, date, testMode, dryRun)
+          results.push(result)
+
+          if (result.instanceCreated) {
+            instancesCreated++
+          } else if (result.skipped) {
+            instancesSkipped++
+          }
+
+          if (result.error) {
+            errors++
+          }
         } catch (error) {
-          console.error(`Error generating instances for task ${masterTask.title}:`, error)
-          totalErrors++
+          const errorResult: TaskGenerationResult = {
+            taskId: masterTask.id,
+            taskTitle: masterTask.title || 'Unknown',
+            isDue: false,
+            instanceCreated: false,
+            error: error instanceof Error ? error.message : 'Unknown error',
+            skipped: false
+          }
+          results.push(errorResult)
+          errors++
         }
+      }
+
+      const executionTime = Date.now() - startTime
+      const dueTasks = results.filter(r => r.isDue).length
+
+      const finalResult: GenerationResult = {
+        date,
+        totalTasks: tasksToProcess.length,
+        dueTasks,
+        instancesCreated,
+        instancesSkipped,
+        errors,
+        results,
+        executionTime,
+        testMode,
+        dryRun
+      }
+
+      this.log('info', `Generation completed in ${executionTime}ms`)
+      this.log('info', `Results: ${dueTasks} due, ${instancesCreated} created, ${instancesSkipped} skipped, ${errors} errors`)
+
+      return finalResult
+
+    } catch (error) {
+      const executionTime = Date.now() - startTime
+      this.log('info', `Generation failed after ${executionTime}ms: ${error instanceof Error ? error.message : 'Unknown error'}`)
+      
+      return {
+        date,
+        totalTasks: 0,
+        dueTasks: 0,
+        instancesCreated: 0,
+        instancesSkipped: 0,
+        errors: 1,
+        results: [{
+          taskId: 'error',
+          taskTitle: 'Generation Error',
+          isDue: false,
+          instanceCreated: false,
+          error: error instanceof Error ? error.message : 'Unknown error',
+          skipped: false
+        }],
+        executionTime,
+        testMode,
+        dryRun
+      }
+    }
+  }
+
+  /**
+   * Generate instances for a date range
+   * 
+   * @param options - Bulk generation options
+   * @returns Promise<BulkGenerationResult>
+   */
+  async generateForDateRange(options: BulkGenerationOptions): Promise<BulkGenerationResult> {
+    const startTime = Date.now()
+    const { startDate, endDate, testMode = false, dryRun = false, maxTasksPerDay } = options
+
+    this.log('info', `Starting bulk generation from ${startDate} to ${endDate}`)
+
+    const start = new Date(startDate)
+    const end = new Date(endDate)
+    const totalDays = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1
+
+    const dailyResults: Array<{ date: string; result: GenerationResult }> = []
+    let successfulDays = 0
+    let failedDays = 0
+    let totalInstancesCreated = 0
+    let totalErrors = 0
+
+    for (let i = 0; i < totalDays; i++) {
+      const currentDate = new Date(start)
+      currentDate.setDate(start.getDate() + i)
+      const dateString = currentDate.toISOString().split('T')[0]
+
+      try {
+        const result = await this.generateForDate({
+          date: dateString,
+          testMode,
+          dryRun,
+          maxTasks: maxTasksPerDay,
+          logLevel: this.logLevel
+        })
+
+        dailyResults.push({ date: dateString, result })
+        totalInstancesCreated += result.instancesCreated
+        totalErrors += result.errors
+
+        if (result.errors === 0) {
+          successfulDays++
+        } else {
+          failedDays++
+        }
+
+        this.log('info', `Completed ${dateString}: ${result.instancesCreated} instances, ${result.errors} errors`)
+      } catch (error) {
+        failedDays++
+        totalErrors++
+        this.log('info', `Failed to generate for ${dateString}: ${error instanceof Error ? error.message : 'Unknown error'}`)
+        
+        dailyResults.push({
+          date: dateString,
+          result: {
+            date: dateString,
+            totalTasks: 0,
+            dueTasks: 0,
+            instancesCreated: 0,
+            instancesSkipped: 0,
+            errors: 1,
+            results: [{
+              taskId: 'error',
+              taskTitle: 'Generation Error',
+              isDue: false,
+              instanceCreated: false,
+              error: error instanceof Error ? error.message : 'Unknown error',
+              skipped: false
+            }],
+            executionTime: 0,
+            testMode,
+            dryRun
+          }
+        })
+      }
+    }
+
+    const executionTime = Date.now() - startTime
+
+    const bulkResult: BulkGenerationResult = {
+      startDate,
+      endDate,
+      totalDays,
+      successfulDays,
+      failedDays,
+      totalInstancesCreated,
+      totalErrors,
+      dailyResults,
+      executionTime
+    }
+
+    this.log('info', `Bulk generation completed in ${executionTime}ms`)
+    this.log('info', `Summary: ${successfulDays}/${totalDays} days successful, ${totalInstancesCreated} total instances, ${totalErrors} total errors`)
+
+    return bulkResult
+  }
+
+  /**
+   * Process a single master task to determine if it's due and create instance
+   */
+  private async processSingleTask(
+    masterTask: TaskRow,
+    date: string,
+    testMode: boolean,
+    dryRun: boolean
+  ): Promise<TaskGenerationResult> {
+    try {
+      // Convert database row to recurrence engine task format
+      const task: Task = {
+        id: masterTask.id,
+        frequency_rules: masterTask.frequency_rules,
+        start_date: masterTask.created_at,
+        end_date: undefined // No end date for now
+      }
+
+      // Check if task is due on this date
+      const checkDate = new Date(date)
+      const isDue = this.recurrenceEngine.isDueOnDate(task, checkDate)
+
+      if (!isDue) {
+        return {
+          taskId: masterTask.id,
+          taskTitle: masterTask.title || 'Unknown',
+          isDue: false,
+          instanceCreated: false,
+          skipped: true,
+          reason: 'Task not due on this date'
+        }
+      }
+
+      // Check if instance already exists
+      if (!dryRun && !testMode) {
+        const existingInstance = await this.checkInstanceExists(masterTask.id, date)
+        if (existingInstance) {
+          return {
+            taskId: masterTask.id,
+            taskTitle: masterTask.title || 'Unknown',
+            isDue: true,
+            instanceCreated: false,
+            skipped: true,
+            reason: 'Instance already exists'
+          }
+        }
+      }
+
+      // Create checklist instance
+      if (dryRun) {
+        return {
+          taskId: masterTask.id,
+          taskTitle: masterTask.title || 'Unknown',
+          isDue: true,
+          instanceCreated: false,
+          skipped: false,
+          reason: 'Dry run mode - would create instance'
+        }
+      }
+
+      if (testMode) {
+        return {
+          taskId: masterTask.id,
+          taskTitle: masterTask.title || 'Unknown',
+          isDue: true,
+          instanceCreated: false,
+          skipped: false,
+          reason: 'Test mode - would create instance'
+        }
+      }
+
+      // Actually create the instance
+      const instanceData: CreateChecklistInstanceRequest = {
+        master_task_id: masterTask.id,
+        date: date,
+        role: masterTask.responsibility?.[0] || 'default', // Use first responsibility as default role
+        status: 'pending',
+        payload: {
+          task_title: masterTask.title,
+          task_description: masterTask.description,
+          timing: masterTask.timing,
+          due_time: masterTask.due_time,
+          categories: masterTask.categories
+        },
+        notes: `Auto-generated instance for ${masterTask.title}`
+      }
+
+      const { data: instance, error: insertError } = await supabase
+        .from('checklist_instances')
+        .insert(instanceData)
+        .select()
+        .single()
+
+      if (insertError) {
+        throw new Error(`Failed to create instance: ${insertError.message}`)
       }
 
       return {
-        success: totalErrors === 0,
-        generated: totalGenerated,
-        skipped: totalSkipped,
-        errors: totalErrors,
-        message: `Generated ${totalGenerated} task instances, skipped ${totalSkipped}, ${totalErrors} errors`
+        taskId: masterTask.id,
+        taskTitle: masterTask.title || 'Unknown',
+        isDue: true,
+        instanceCreated: true,
+        instanceId: instance.id
       }
 
     } catch (error) {
-      console.error('Error in generateInstances:', error)
       return {
-        success: false,
-        generated: 0,
-        skipped: 0,
-        errors: 1,
-        message: `Generation failed: ${error instanceof Error ? error.message : 'Unknown error'}`
+        taskId: masterTask.id,
+        taskTitle: masterTask.title || 'Unknown',
+        isDue: false,
+        instanceCreated: false,
+        error: error instanceof Error ? error.message : 'Unknown error',
+        skipped: false
       }
     }
   }
 
   /**
-   * Generate instances for a specific master task
+   * Check if instances already exist for a date
    */
-  private async generateInstancesForMasterTask(
-    masterTask: MasterTask,
-    startDate: Date,
-    endDate: Date,
-    forceRegenerate: boolean
-  ): Promise<{ generated: number; skipped: number; errors: number }> {
-    if (!this.recurrenceEngine) {
-      throw new Error('Recurrence engine not initialized')
-    }
-
-    // Get public holidays for the recurrence engine
-    const { data: publicHolidays = [] } = await supabase
-      .from('public_holidays')
-      .select('*')
-
-    // Generate potential instances using recurrence engine
-    const potentialInstances = this.recurrenceEngine.generateInstances({
-      masterTask,
-      startDate,
-      endDate,
-      publicHolidays
-    })
-
-    if (potentialInstances.length === 0) {
-      return { generated: 0, skipped: 0, errors: 0 }
-    }
-
-    // Check which instances already exist
-    const existingInstances = await this.getExistingInstances(
-      masterTask.id,
-      potentialInstances.map(i => i.instance_date)
-    )
-
-    const existingDates = new Set(existingInstances.map(i => i.instance_date))
-    
-    // Filter out existing instances unless forcing regeneration
-    const instancesToCreate = forceRegenerate
-      ? potentialInstances
-      : potentialInstances.filter(i => !existingDates.has(i.instance_date))
-
-    if (instancesToCreate.length === 0) {
-      return { 
-        generated: 0, 
-        skipped: potentialInstances.length, 
-        errors: 0 
-      }
-    }
-
-    // If force regenerating, delete existing instances first
-    if (forceRegenerate && existingInstances.length > 0) {
-      await this.deleteExistingInstances(masterTask.id, potentialInstances.map(i => i.instance_date))
-    }
-
-    // Insert new instances in batches
-    const batchSize = 100
-    let generated = 0
-    let errors = 0
-
-    for (let i = 0; i < instancesToCreate.length; i += batchSize) {
-      const batch = instancesToCreate.slice(i, i + batchSize)
-      
-      try {
-        const { error } = await supabase
-          .from('task_instances')
-          .insert(batch)
-
-        if (error) {
-          console.error('Batch insert error:', error)
-          errors += batch.length
-        } else {
-          generated += batch.length
-        }
-      } catch (error) {
-        console.error('Batch insert exception:', error)
-        errors += batch.length
-      }
-    }
-
-    return {
-      generated,
-      skipped: potentialInstances.length - instancesToCreate.length,
-      errors
-    }
-  }
-
-  /**
-   * Get master tasks to process
-   */
-  private async getMasterTasks(masterTaskId?: string): Promise<MasterTask[]> {
-    let query = supabase
-      .from('master_tasks')
-      .select('*')
-      .eq('publish_status', 'active')
-
-    if (masterTaskId) {
-      query = query.eq('id', masterTaskId)
-    }
-
-    const { data, error } = await query
-
-    if (error) {
-      console.error('Error fetching master tasks:', error)
-      return []
-    }
-
-    // Filter by publish_delay_date if set
-    const now = new Date()
-    const filteredTasks = (data || []).filter(task => {
-      if (!task.publish_delay_date) return true
-      return new Date(task.publish_delay_date) <= now
-    })
-
-    return filteredTasks
-  }
-
-  /**
-   * Get existing task instances for a master task and date range
-   */
-  private async getExistingInstances(
-    masterTaskId: string,
-    dates: string[]
-  ): Promise<TaskInstance[]> {
-    if (dates.length === 0) return []
-
+  private async checkExistingInstances(date: string): Promise<InstanceRow[]> {
     const { data, error } = await supabase
-      .from('task_instances')
+      .from('checklist_instances')
       .select('*')
-      .eq('master_task_id', masterTaskId)
-      .in('instance_date', dates)
+      .eq('date', date)
 
     if (error) {
-      console.error('Error fetching existing instances:', error)
+      this.log('debug', `Error checking existing instances: ${error.message}`)
       return []
     }
 
@@ -251,41 +487,36 @@ export class TaskInstanceGenerator {
   }
 
   /**
-   * Delete existing instances for regeneration
+   * Check if a specific instance exists
    */
-  private async deleteExistingInstances(
-    masterTaskId: string,
-    dates: string[]
-  ): Promise<void> {
-    if (dates.length === 0) return
-
-    const { error } = await supabase
-      .from('task_instances')
-      .delete()
+  private async checkInstanceExists(masterTaskId: string, date: string): Promise<boolean> {
+    const { data, error } = await supabase
+      .from('checklist_instances')
+      .select('id')
       .eq('master_task_id', masterTaskId)
-      .in('instance_date', dates)
-      .eq('status', 'not_due') // Only delete instances that haven't been worked on
+      .eq('date', date)
+      .single()
 
-    if (error) {
-      console.error('Error deleting existing instances:', error)
-      throw error
+    if (error && error.code !== 'PGRST116') { // PGRST116 = no rows returned
+      this.log('debug', `Error checking instance existence: ${error.message}`)
+      return false
     }
+
+    return !!data
   }
 
   /**
-   * Clean up old instances beyond the date range
+   * Delete existing instances for a date
    */
-  async cleanupOldInstances(cutoffDate: Date): Promise<number> {
-    const cutoffDateStr = cutoffDate.toISOString().split('T')[0]
-
+  private async deleteExistingInstances(date: string): Promise<number> {
     const { data, error } = await supabase
-      .from('task_instances')
+      .from('checklist_instances')
       .delete()
-      .lt('instance_date', cutoffDateStr)
-      .eq('status', 'not_due') // Only delete unworked instances
+      .eq('date', date)
+      .select('id')
 
     if (error) {
-      console.error('Error cleaning up old instances:', error)
+      this.log('debug', `Error deleting existing instances: ${error.message}`)
       return 0
     }
 
@@ -293,72 +524,128 @@ export class TaskInstanceGenerator {
   }
 
   /**
-   * Get generation statistics
+   * Create an empty result for cases with no tasks
    */
-  async getGenerationStats(): Promise<{
-    totalInstances: number
-    instancesByStatus: Record<string, number>
-    oldestInstance: string | null
-    newestInstance: string | null
-  }> {
-    const { data: totalData } = await supabase
-      .from('task_instances')
-      .select('id', { count: 'exact' })
-
-    const { data: statusData } = await supabase
-      .from('task_instances')
-      .select('status')
-
-    const { data: dateRangeData } = await supabase
-      .from('task_instances')
-      .select('instance_date')
-      .order('instance_date', { ascending: true })
-      .limit(1)
-
-    const { data: dateRangeDataMax } = await supabase
-      .from('task_instances')
-      .select('instance_date')
-      .order('instance_date', { ascending: false })
-      .limit(1)
-
-    const instancesByStatus: Record<string, number> = {}
-    statusData?.forEach(item => {
-      instancesByStatus[item.status] = (instancesByStatus[item.status] || 0) + 1
-    })
-
+  private createEmptyResult(
+    date: string,
+    testMode: boolean,
+    dryRun: boolean,
+    startTime: number,
+    totalTasks: number = 0
+  ): GenerationResult {
+    const executionTime = Date.now() - startTime
+    
     return {
-      totalInstances: totalData?.length || 0,
-      instancesByStatus,
-      oldestInstance: dateRangeData?.[0]?.instance_date || null,
-      newestInstance: dateRangeDataMax?.[0]?.instance_date || null
+      date,
+      totalTasks,
+      dueTasks: 0,
+      instancesCreated: 0,
+      instancesSkipped: 0,
+      errors: 0,
+      results: [],
+      executionTime,
+      testMode,
+      dryRun
     }
+  }
+
+  /**
+   * Log messages based on log level
+   */
+  private log(level: 'silent' | 'info' | 'debug', message: string): void {
+    if (this.logLevel === 'silent') return
+    
+    if (level === 'debug' && this.logLevel !== 'debug') return
+    
+    const timestamp = new Date().toISOString()
+    console.log(`[${timestamp}] [${level.toUpperCase()}] ${message}`)
+  }
+
+  /**
+   * Set the log level
+   */
+  setLogLevel(level: 'silent' | 'info' | 'debug'): void {
+    this.logLevel = level
+  }
+
+  /**
+   * Get the current recurrence engine
+   */
+  getRecurrenceEngine() {
+    return this.recurrenceEngine
   }
 }
 
+// ========================================
+// FACTORY FUNCTIONS
+// ========================================
+
 /**
- * Convenience function to generate instances
+ * Create a task instance generator with default configuration
  */
-export async function generateTaskInstances(options: GenerationOptions = {}): Promise<GenerationResult> {
-  const generator = new TaskInstanceGenerator()
-  return await generator.generateInstances(options)
+export function createTaskInstanceGenerator(
+  publicHolidays: PublicHoliday[] = [],
+  logLevel: 'silent' | 'info' | 'debug' = 'info'
+): TaskInstanceGenerator {
+  return new TaskInstanceGenerator(publicHolidays, logLevel)
 }
 
 /**
- * Convenience function to generate instances for a specific master task
+ * Create a task instance generator with test mode enabled
  */
-export async function generateInstancesForTask(masterTaskId: string): Promise<GenerationResult> {
-  return await generateTaskInstances({ masterTaskId })
+export function createTestTaskInstanceGenerator(
+  publicHolidays: PublicHoliday[] = []
+): TaskInstanceGenerator {
+  return new TaskInstanceGenerator(publicHolidays, 'debug')
 }
 
+// ========================================
+// UTILITY FUNCTIONS
+// ========================================
+
 /**
- * Daily generation job - call this from a cron job or scheduled function
+ * Generate instances for today
  */
-export async function runDailyGeneration(): Promise<GenerationResult> {
-  const result = await generateTaskInstances({
-    startDate: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000),  // Look back 7 days for any missed
-    endDate: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000),  // Generate 1 year ahead
-    forceRegenerate: false
-  })
+export async function generateForToday(
+  publicHolidays: PublicHoliday[] = [],
+  options: Partial<GenerationOptions> = {}
+): Promise<GenerationResult> {
+  const today = new Date().toISOString().split('T')[0]
+  const generator = createTaskInstanceGenerator(publicHolidays)
   
-  return result
+  return generator.generateForDate({
+    date: today,
+    ...options
+  })
+}
+
+/**
+ * Generate instances for yesterday
+ */
+export async function generateForYesterday(
+  publicHolidays: PublicHoliday[] = [],
+  options: Partial<GenerationOptions> = {}
+): Promise<GenerationResult> {
+  const yesterday = new Date()
+  yesterday.setDate(yesterday.getDate() - 1)
+  const dateString = yesterday.toISOString().split('T')[0]
+  
+  const generator = createTaskInstanceGenerator(publicHolidays)
+  
+  return generator.generateForDate({
+    date: dateString,
+    ...options
+  })
+}
+
+// ========================================
+// EXPORTS
+// ========================================
+
+export type {
+  GenerationOptions,
+  GenerationResult,
+  TaskGenerationResult,
+  BulkGenerationOptions,
+  BulkGenerationResult
 }

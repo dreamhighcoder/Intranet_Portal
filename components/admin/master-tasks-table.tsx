@@ -159,7 +159,7 @@ export function MasterTasksTable() {
                   <TableCell>
                     <Badge variant="outline">{task.category}</Badge>
                   </TableCell>
-                  <TableCell>{task.default_due_time}</TableCell>
+                  <TableCell>{(task as any).default_due_time || ''}</TableCell>
                   <TableCell>
                     <div className="flex items-center space-x-2">
                       <Button asChild size="sm" variant="outline">

@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from "react"
 import { usePositionAuth } from "@/lib/position-auth-context"
 import { Navigation } from "@/components/navigation"
-import { MasterTaskForm } from "@/components/master-task-form"
+import TaskForm from "@/components/admin/TaskForm"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -16,6 +16,7 @@ import { masterTasksApi, positionsApi, authenticatedGet } from "@/lib/api-client
 import { supabase } from "@/lib/supabase"
 import * as XLSX from 'xlsx'
 import { toastSuccess, toastError } from "@/hooks/use-toast"
+import type { MasterChecklistTask, CreateMasterTaskRequest, UpdateMasterTaskRequest } from "@/types/checklist"
 import { 
   Plus, 
   Edit, 
@@ -30,15 +31,8 @@ import {
   Menu
 } from "lucide-react"
 
-interface MasterTask {
-  id: string
-  title: string
-  description?: string
-  frequency: string
-  category?: string
-  timing?: string
-  publish_status: 'draft' | 'active' | 'inactive'
-  default_due_time?: string
+// Using the proper type from checklist.ts
+type MasterTask = MasterChecklistTask & {
   position?: {
     id: string
     name: string
@@ -47,11 +41,6 @@ interface MasterTask {
     id: string
     name: string
   }
-  weekdays?: number[]
-  months?: number[]
-  sticky_once_off: boolean
-  allow_edit_when_locked: boolean
-  publish_delay_date?: string
 }
 
 interface Position {
@@ -203,7 +192,7 @@ export default function AdminMasterTasksPage() {
     }
   }
 
-  const handleSaveTask = async (taskData: any) => {
+  const handleSaveTask = async (taskData: CreateMasterTaskRequest | UpdateMasterTaskRequest) => {
     setFormLoading(true)
     try {
       console.log('Saving task data:', taskData)
@@ -222,7 +211,6 @@ export default function AdminMasterTasksPage() {
         showToast('success', 'Task Updated', 'Task was updated successfully')
       } else {
         // Create new task
-        console.log('Creating new task')
         const newTask = await masterTasksApi.create(taskData)
         console.log('Task created:', newTask)
         
@@ -324,7 +312,7 @@ export default function AdminMasterTasksPage() {
         'Frequency': frequencyLabels[task.frequency as keyof typeof frequencyLabels] || task.frequency,
         'Category': task.category || '',
         'Status': task.publish_status,
-        'Default Due Time': task.default_due_time || '',
+        'Default Due Time': (task as any).default_due_time || '',
         'Timing': task.timing || '',
         'Weekdays': task.weekdays?.join(',') || '',
         'Months': task.months?.join(',') || '',
@@ -436,6 +424,7 @@ export default function AdminMasterTasksPage() {
           ) || row['Frequency'],
           category: row['Category']?.toString().trim() || '',
           publish_status: (['draft', 'active', 'inactive'].includes(row['Status']) ? row['Status'] : 'draft') as 'draft' | 'active' | 'inactive',
+          // Map to current column name on server; keep key for import structure
           default_due_time: row['Default Due Time']?.toString().trim() || null,
           timing: row['Timing']?.toString().trim() || '',
           weekdays: row['Weekdays'] ? 
@@ -789,7 +778,7 @@ export default function AdminMasterTasksPage() {
                           <TableCell>
                             <div className="flex items-center text-sm">
                               <Clock className="w-3 h-3 mr-1 text-gray-400" />
-                              {task.default_due_time || '17:00'}
+                              {(task as any).default_due_time || '17:00'}
                             </div>
                           </TableCell>
                           <TableCell>
@@ -965,19 +954,17 @@ export default function AdminMasterTasksPage() {
 
         {/* Task Creation/Edit Dialog */}
         <Dialog open={isTaskDialogOpen} onOpenChange={setIsTaskDialogOpen}>
-          <DialogContent className="dialog-content max-w-6xl w-[95vw] sm:w-[90vw] max-h-[95vh] h-[95vh] overflow-hidden flex flex-col">
+          <DialogContent className="dialog-content max-w-7xl w-[98vw] sm:w-[95vw] lg:w-[90vw] max-h-[98vh] h-[98vh] overflow-hidden flex flex-col">
             <DialogHeader className="flex-shrink-0 pb-4 border-b">
               <DialogTitle className="text-xl font-semibold">
                 {editingTask ? 'Edit Master Task' : 'Create New Master Task'}
               </DialogTitle>
             </DialogHeader>
-            <div className="flex-1 overflow-hidden">
-              <MasterTaskForm
+            <div className="flex-1 overflow-y-auto px-1">
+              <TaskForm
                 task={editingTask}
-                positions={positions}
-                onSave={handleSaveTask}
+                onSubmit={handleSaveTask}
                 onCancel={handleCancelEdit}
-                loading={formLoading}
               />
             </div>
           </DialogContent>

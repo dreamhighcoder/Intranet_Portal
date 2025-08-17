@@ -246,6 +246,10 @@ export const publicHolidaysApi = {
     return await authenticatedPost('/api/public-holidays', data)
   },
 
+  async update(date: string, data: { date: string; name: string; region?: string; source?: string }) {
+    return await authenticatedPut(`/api/public-holidays/${date}`, data)
+  },
+
   async delete(date: string) {
     return await authenticatedFetch('/api/public-holidays', {
       method: 'DELETE',

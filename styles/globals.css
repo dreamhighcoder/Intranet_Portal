@@ -121,3 +121,177 @@
     @apply bg-background text-slate-900 dark:text-slate-100;
   }
 }
+/* Master Task Form Improvements */
+.master-task-form {
+  scrollbar-width: thin;
+  scrollbar-color: #cbd5e1 #f1f5f9;
+}
+
+.master-task-form::-webkit-scrollbar {
+  width: 6px;
+}
+
+.master-task-form::-webkit-scrollbar-track {
+  background: #f1f5f9;
+  border-radius: 3px;
+}
+
+.master-task-form::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 3px;
+}
+
+.master-task-form::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+/* Checkbox improvements */
+.master-task-form .checkbox-container {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  transition: all 0.2s ease;
+  min-height: 40px;
+}
+
+.master-task-form .checkbox-container:hover {
+  background-color: #f8fafc;
+}
+
+/* Ensure checkbox and label are perfectly aligned */
+.master-task-form .checkbox-container input[type="checkbox"] {
+  accent-color: #2563eb;
+  flex-shrink: 0;
+}
+
+/* Custom checkbox styling for better visual alignment */
+.master-task-form .checkbox-container [data-radix-checkbox] {
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+  border: 2px solid #d1d5db;
+  border-radius: 4px;
+  background-color: white;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.master-task-form .checkbox-container [data-radix-checkbox][data-state="checked"] {
+  background-color: #2563eb;
+  border-color: #2563eb;
+}
+
+/* Ensure checkmark fits perfectly within checkbox */
+.master-task-form .checkbox-container [data-radix-checkbox] svg {
+  width: 12px;
+  height: 12px;
+  color: white;
+}
+
+/* Label styling for perfect alignment */
+.master-task-form .checkbox-container label {
+  flex: 1;
+  cursor: pointer;
+  user-select: none;
+  line-height: 1.4;
+}
+
+/* Additional checkbox styling for consistency */
+.master-task-form .checkbox-container [data-radix-checkbox]:focus {
+  outline: 2px solid #2563eb;
+  outline-offset: 2px;
+}
+
+/* Ensure all checkboxes in the form have consistent styling */
+.master-task-form [data-radix-checkbox] {
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+  border: 2px solid #d1d5db;
+  border-radius: 4px;
+  background-color: white;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.master-task-form [data-radix-checkbox][data-state="checked"] {
+  background-color: #2563eb;
+  border-color: #2563eb;
+}
+
+.master-task-form [data-radix-checkbox] svg {
+  width: 12px;
+  height: 12px;
+  color: white;
+}
+
+/* Perfect alignment for all checkbox groups */
+.master-task-form .grid .checkbox-container {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  transition: all 0.2s ease;
+  min-height: 40px;
+  width: 100%;
+}
+
+.master-task-form .grid .checkbox-container:hover {
+  background-color: #f8fafc;
+}
+
+/* Ensure consistent spacing in all checkbox sections */
+.master-task-form .space-y-3 > .checkbox-container {
+  margin-bottom: 0;
+}
+
+/* Form field improvements */
+.master-task-form .form-field {
+  margin-bottom: 24px;
+}
+
+.master-task-form .form-field label {
+  display: block;
+  margin-bottom: 8px;
+  font-weight: 600;
+  color: #374151;
+}
+
+.master-task-form .form-field input,
+.master-task-form .form-field textarea,
+.master-task-form .form-field select {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  font-size: 14px;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.master-task-form .form-field input:focus,
+.master-task-form .form-field textarea:focus,
+.master-task-form .form-field select:focus {
+  outline: none;
+  border-color: #2563eb;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+}
+
+/* Card improvements */
+.master-task-form .card {
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
+  transition: box-shadow 0.2s ease;
+}
+
+.master-task-form .card:hover {
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+}
+
