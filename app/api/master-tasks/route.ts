@@ -37,7 +37,7 @@ export async function GET(request: NextRequest) {
       .from('master_tasks')
       .select(`
         *,
-        positions!inner (
+        positions (
           id,
           name
         )

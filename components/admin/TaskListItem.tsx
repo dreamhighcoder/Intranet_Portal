@@ -11,6 +11,42 @@ import { createRecurrenceEngine } from '@/lib/recurrence-engine'
 import { createHolidayHelper } from '@/lib/public-holidays'
 import type { MasterChecklistTask, FrequencyRule, FrequencyType } from '@/types/checklist'
 
+// Define responsibility options for proper display names
+const RESPONSIBILITY_OPTIONS = [
+  { value: 'pharmacist-primary', label: 'Pharmacist (Primary)' },
+  { value: 'pharmacist-supporting', label: 'Pharmacist (Supporting)' },
+  { value: 'pharmacy-assistants', label: 'Pharmacy Assistant/s' },
+  { value: 'dispensary-technicians', label: 'Dispensary Technician/s' },
+  { value: 'daa-packers', label: 'DAA Packer/s' },
+  { value: 'shared-exc-pharmacist', label: 'Shared (exc. Pharmacist)' },
+  { value: 'shared-inc-pharmacist', label: 'Shared (inc. Pharmacist)' },
+  { value: 'operational-managerial', label: 'Operational/Managerial' }
+]
+
+// Define category options for proper display names
+const CATEGORY_OPTIONS = [
+  { value: 'stock-control', label: 'Stock Control' },
+  { value: 'compliance', label: 'Compliance' },
+  { value: 'cleaning', label: 'Cleaning' },
+  { value: 'pharmacy-services', label: 'Pharmacy Services' },
+  { value: 'fos-operations', label: 'FOS Operations' },
+  { value: 'dispensary-operations', label: 'Dispensary Operations' },
+  { value: 'general-pharmacy-operations', label: 'General Pharmacy Operations' },
+  { value: 'business-management', label: 'Business Management' }
+]
+
+// Helper function to get display name for responsibilities
+const getResponsibilityDisplayName = (value: string): string => {
+  const option = RESPONSIBILITY_OPTIONS.find(opt => opt.value === value)
+  return option ? option.label : value.replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase())
+}
+
+// Helper function to get display name for categories
+const getCategoryDisplayName = (value: string): string => {
+  const option = CATEGORY_OPTIONS.find(opt => opt.value === value)
+  return option ? option.label : value.replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase())
+}
+
 interface TaskListItemProps {
   task: MasterChecklistTask
   onEdit: (task: MasterChecklistTask) => void
@@ -269,13 +305,13 @@ export default function TaskListItem({ task, onEdit, onDelete }: TaskListItemPro
               </p>
               <div className="flex flex-wrap gap-1 mt-1">
                 {task.categories?.slice(0, 2).map((category, index) => (
-                  <Badge key={index} variant="secondary" className="text-xs">
-                    {category}
+                  <Badge key={index} variant="secondary" className="text-xs whitespace-nowrap">
+                    {getCategoryDisplayName(category)}
                   </Badge>
                 ))}
                 {task.categories && task.categories.length > 2 && (
                   <Badge variant="secondary" className="text-xs">
-                    +{task.categories.length - 2} more
+                    + ({task.categories.length - 2})
                   </Badge>
                 )}
               </div>
@@ -291,13 +327,13 @@ export default function TaskListItem({ task, onEdit, onDelete }: TaskListItemPro
               </p>
               <div className="flex flex-wrap gap-1 mt-1">
                 {task.responsibility?.slice(0, 2).map((role, index) => (
-                  <Badge key={index} variant="outline" className="text-xs">
-                    {role}
+                  <Badge key={index} variant="outline" className="text-xs whitespace-nowrap">
+                    {getResponsibilityDisplayName(role)}
                   </Badge>
                 ))}
                 {task.responsibility && task.responsibility.length > 2 && (
                   <Badge variant="outline" className="text-xs">
-                    +{task.responsibility.length - 2} more
+                    + ({task.responsibility.length - 2})
                   </Badge>
                 )}
               </div>

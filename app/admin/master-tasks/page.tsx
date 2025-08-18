@@ -65,8 +65,49 @@ const frequencyLabels = {
   end_certain_months: 'End Certain Months'
 }
 
+// Define responsibility options for proper display names
+const RESPONSIBILITY_OPTIONS = [
+  { value: 'pharmacist-primary', label: 'Pharmacist (Primary)' },
+  { value: 'pharmacist-supporting', label: 'Pharmacist (Supporting)' },
+  { value: 'pharmacy-assistants', label: 'Pharmacy Assistant/s' },
+  { value: 'dispensary-technicians', label: 'Dispensary Technician/s' },
+  { value: 'daa-packers', label: 'DAA Packer/s' },
+  { value: 'shared-exc-pharmacist', label: 'Shared (exc. Pharmacist)' },
+  { value: 'shared-inc-pharmacist', label: 'Shared (inc. Pharmacist)' },
+  { value: 'operational-managerial', label: 'Operational/Managerial' }
+]
+
+// Define category options for proper display names
+const CATEGORY_OPTIONS = [
+  { value: 'stock-control', label: 'Stock Control' },
+  { value: 'compliance', label: 'Compliance' },
+  { value: 'cleaning', label: 'Cleaning' },
+  { value: 'pharmacy-services', label: 'Pharmacy Services' },
+  { value: 'fos-operations', label: 'FOS Operations' },
+  { value: 'dispensary-operations', label: 'Dispensary Operations' },
+  { value: 'general-pharmacy-operations', label: 'General Pharmacy Operations' },
+  { value: 'business-management', label: 'Business Management' }
+]
+
+// Helper function to get display name for responsibilities
+const getResponsibilityDisplayName = (value: string): string => {
+  const option = RESPONSIBILITY_OPTIONS.find(opt => opt.value === value)
+  return option ? option.label : value.replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase())
+}
+
+// Helper function to get display name for categories
+const getCategoryDisplayName = (value: string): string => {
+  const option = CATEGORY_OPTIONS.find(opt => opt.value === value)
+  return option ? option.label : value.replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase())
+}
+
 // Helper function to render truncated array with badges
-const renderTruncatedArray = (items: string[] | undefined, maxVisible: number = 2, variant: "default" | "secondary" | "outline" = "secondary") => {
+const renderTruncatedArray = (
+  items: string[] | undefined, 
+  maxVisible: number = 2, 
+  variant: "default" | "secondary" | "outline" = "secondary",
+  type: "responsibility" | "category" | "general" = "general"
+) => {
   if (!items || items.length === 0) {
     return <span className="text-gray-400 text-xs">None</span>
   }
@@ -74,16 +115,40 @@ const renderTruncatedArray = (items: string[] | undefined, maxVisible: number = 
   const visibleItems = items.slice(0, maxVisible)
   const remainingCount = items.length - maxVisible
 
+  // Function to get proper display name based on type
+  const getDisplayName = (item: string): string => {
+    switch (type) {
+      case "responsibility":
+        return getResponsibilityDisplayName(item)
+      case "category":
+        return getCategoryDisplayName(item)
+      default:
+        return item.replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase())
+    }
+  }
+
   return (
-    <div className="flex flex-wrap gap-1">
-      {visibleItems.map((item, index) => (
-        <Badge key={index} variant={variant} className="text-xs">
-          {item.replace('-', ' ').replace(/\b\w/g, l => l.toUpperCase())}
-        </Badge>
-      ))}
+    <div className="flex flex-wrap gap-1 max-w-[200px]">
+      {visibleItems.map((item, index) => {
+        const displayName = getDisplayName(item)
+        return (
+          <Badge 
+            key={index} 
+            variant={variant} 
+            className="text-xs whitespace-nowrap" 
+            title={displayName}
+          >
+            {displayName}
+          </Badge>
+        )
+      })}
       {remainingCount > 0 && (
-        <Badge variant="outline" className="text-xs">
-          +{remainingCount}
+        <Badge 
+          variant="outline" 
+          className="text-xs" 
+          title={`${remainingCount} more: ${items.slice(maxVisible).map(item => getDisplayName(item)).join(', ')}`}
+        >
+          + ({remainingCount})
         </Badge>
       )}
     </div>
@@ -93,6 +158,99 @@ const renderTruncatedArray = (items: string[] | undefined, maxVisible: number = 
 // Helper function to format frequency for display
 const formatFrequency = (frequency: string) => {
   return frequency.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())
+}
+
+// Helper function to format frequency rules for display
+const formatFrequencyRules = (frequencyRules: any) => {
+  if (!frequencyRules || typeof frequencyRules !== 'object') {
+    return 'No frequency rules defined'
+  }
+
+  const rules = []
+  
+  // Type
+  if (frequencyRules.type) {
+    rules.push(`Type: ${frequencyRules.type.replace(/_/g, ' ').replace(/\b\w/g, (l: string) => l.toUpperCase())}`)
+  }
+  
+  // Interval settings
+  if (frequencyRules.every_n_days) {
+    rules.push(`Every ${frequencyRules.every_n_days} day${frequencyRules.every_n_days !== 1 ? 's' : ''}`)
+  }
+  if (frequencyRules.every_n_weeks) {
+    rules.push(`Every ${frequencyRules.every_n_weeks} week${frequencyRules.every_n_weeks !== 1 ? 's' : ''}`)
+  }
+  if (frequencyRules.every_n_months) {
+    rules.push(`Every ${frequencyRules.every_n_months} month${frequencyRules.every_n_months !== 1 ? 's' : ''}`)
+  }
+  
+  // Weekdays
+  if (frequencyRules.weekdays && Array.isArray(frequencyRules.weekdays) && frequencyRules.weekdays.length > 0) {
+    const dayNames = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
+    const weekdayNames = frequencyRules.weekdays.map((day: number) => dayNames[day - 1] || `Day ${day}`)
+    rules.push(`Weekdays: ${weekdayNames.join(', ')}`)
+  }
+  
+  // Months
+  if (frequencyRules.months && Array.isArray(frequencyRules.months) && frequencyRules.months.length > 0) {
+    const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
+    const monthNamesList = frequencyRules.months.map((month: number) => monthNames[month - 1] || `Month ${month}`)
+    rules.push(`Months: ${monthNamesList.join(', ')}`)
+  }
+  
+  // Business days only
+  if (frequencyRules.business_days_only) {
+    rules.push('Business days only: Yes')
+  }
+  
+  // Due date
+  if (frequencyRules.due_date) {
+    rules.push(`Due date: ${new Date(frequencyRules.due_date).toLocaleDateString()}`)
+  }
+  
+  return rules.length > 0 ? rules : ['No specific rules defined']
+}
+
+// Helper function to render frequency with additional details
+const renderFrequencyWithDetails = (task: MasterTask) => {
+  const baseFrequency = formatFrequency(task.frequency)
+  const details = []
+  
+  // Add weekdays if applicable
+  if (task.weekdays && task.weekdays.length > 0) {
+    const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+    const weekdayNames = task.weekdays.map(day => dayNames[day] || day).slice(0, 3)
+    if (task.weekdays.length > 3) {
+      weekdayNames.push(`+${task.weekdays.length - 3}`)
+    }
+    details.push(weekdayNames.join(', '))
+  }
+  
+  // Add months if applicable
+  if (task.months && task.months.length > 0) {
+    const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+    const monthNamesList = task.months.map(month => monthNames[month - 1] || month).slice(0, 3)
+    if (task.months.length > 3) {
+      monthNamesList.push(`+${task.months.length - 3}`)
+    }
+    details.push(monthNamesList.join(', '))
+  }
+  
+  return (
+    <div className="space-y-1">
+      <Badge variant="outline" className="text-xs">{baseFrequency}</Badge>
+      {details.length > 0 && (
+        <div className="text-xs text-gray-500 truncate max-w-[120px]" title={details.join(' • ')}>
+          {details.join(' • ')}
+        </div>
+      )}
+      {task.timing && (
+        <div className="text-xs text-gray-500 truncate max-w-[120px]" title={task.timing}>
+          {task.timing}
+        </div>
+      )}
+    </div>
+  )
 }
 
 // Task Details Modal Component
@@ -156,7 +314,7 @@ const TaskDetailsModal = ({ task, positions }: { task: MasterTask, positions: Po
                   <div className="flex flex-wrap gap-1">
                     {task.responsibility.map((resp, index) => (
                       <Badge key={index} variant="secondary" className="text-xs">
-                        {resp.replace('-', ' ').replace(/\b\w/g, l => l.toUpperCase())}
+                        {getResponsibilityDisplayName(resp)}
                       </Badge>
                     ))}
                   </div>
@@ -176,12 +334,12 @@ const TaskDetailsModal = ({ task, positions }: { task: MasterTask, positions: Po
                   <div className="flex flex-wrap gap-1">
                     {task.categories.map((category, index) => (
                       <Badge key={index} variant="outline" className="text-xs">
-                        {category}
+                        {getCategoryDisplayName(category)}
                       </Badge>
                     ))}
                   </div>
                 ) : task.category ? (
-                  <Badge variant="outline" className="text-xs">{task.category}</Badge>
+                  <Badge variant="outline" className="text-xs">{getCategoryDisplayName(task.category)}</Badge>
                 ) : (
                   <span className="text-gray-400 text-xs">No categories</span>
                 )}
@@ -272,8 +430,70 @@ const TaskDetailsModal = ({ task, positions }: { task: MasterTask, positions: Po
           </div>
         </div>
 
+        {/* Additional Details */}
+        {(task.due_date || task.start_date || task.end_date || task.publish_delay || task.publish_delay_date) && (
+          <div className="space-y-4">
+            <h3 className="text-lg font-semibold flex items-center gap-2">
+              <Calendar className="h-4 w-4" />
+              Date Settings
+            </h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {task.due_date && (
+                <div>
+                  <label className="text-sm font-medium text-gray-600">Due Date (Once-off)</label>
+                  <p className="text-sm mt-1">{new Date(task.due_date).toLocaleDateString()}</p>
+                </div>
+              )}
+              {task.start_date && (
+                <div>
+                  <label className="text-sm font-medium text-gray-600">Start Date</label>
+                  <p className="text-sm mt-1">{new Date(task.start_date).toLocaleDateString()}</p>
+                </div>
+              )}
+              {task.end_date && (
+                <div>
+                  <label className="text-sm font-medium text-gray-600">End Date</label>
+                  <p className="text-sm mt-1">{new Date(task.end_date).toLocaleDateString()}</p>
+                </div>
+              )}
+              {task.publish_delay && (
+                <div>
+                  <label className="text-sm font-medium text-gray-600">Publish Delay</label>
+                  <p className="text-sm mt-1">{new Date(task.publish_delay).toLocaleDateString()}</p>
+                </div>
+              )}
+              {task.publish_delay_date && (
+                <div>
+                  <label className="text-sm font-medium text-gray-600">Publish Delay Date</label>
+                  <p className="text-sm mt-1">{new Date(task.publish_delay_date).toLocaleDateString()}</p>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Frequency Rules */}
+        {task.frequency_rules && Object.keys(task.frequency_rules).length > 0 && (
+          <div className="space-y-4">
+            <h3 className="text-lg font-semibold flex items-center gap-2">
+              <Settings className="h-4 w-4" />
+              Frequency Rules
+            </h3>
+            <div className="p-3 bg-gray-50 rounded-md">
+              <div className="space-y-2">
+                {formatFrequencyRules(task.frequency_rules).map((rule, index) => (
+                  <div key={index} className="text-sm text-gray-700">
+                    • {rule}
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Metadata */}
         <div className="space-y-4 pt-4 border-t">
+          <h3 className="text-sm font-semibold text-gray-700">Task Information</h3>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs text-gray-500">
             <div>
               <span className="font-medium">Created:</span> {new Date(task.created_at).toLocaleString()}
@@ -281,6 +501,16 @@ const TaskDetailsModal = ({ task, positions }: { task: MasterTask, positions: Po
             <div>
               <span className="font-medium">Updated:</span> {new Date(task.updated_at).toLocaleString()}
             </div>
+            {(task as any).created_by && (
+              <div>
+                <span className="font-medium">Created By:</span> {(task as any).created_by}
+              </div>
+            )}
+            {(task as any).updated_by && (
+              <div>
+                <span className="font-medium">Updated By:</span> {(task as any).updated_by}
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -332,6 +562,35 @@ export default function AdminMasterTasksPage() {
       ])
       console.log('Loaded tasks:', tasksData.length)
       console.log('Loaded positions:', positionsData.length)
+      
+      // Debug: Log the first few tasks to see their structure
+      if (tasksData.length > 0) {
+        console.log('Sample task data:', {
+          id: tasksData[0].id,
+          title: tasksData[0].title,
+          responsibility: tasksData[0].responsibility,
+          categories: tasksData[0].categories,
+          position_id: tasksData[0].position_id,
+          category: tasksData[0].category,
+          positions: tasksData[0].positions,
+          position: tasksData[0].position
+        })
+        
+        // Log all tasks to see the pattern
+        console.log('All tasks responsibility/categories data:')
+        tasksData.forEach((task, index) => {
+          console.log(`Task ${index + 1}:`, {
+            title: task.title,
+            responsibility: task.responsibility,
+            categories: task.categories,
+            hasResponsibilityArray: Array.isArray(task.responsibility),
+            hasCategoriesArray: Array.isArray(task.categories),
+            responsibilityLength: task.responsibility?.length || 0,
+            categoriesLength: task.categories?.length || 0
+          })
+        })
+      }
+      
       setTasks(tasksData)
       
       // Filter out administrator positions from the dropdown
@@ -967,24 +1226,27 @@ export default function AdminMasterTasksPage() {
                           </TableCell>
                           <TableCell>
                             {task.responsibility && task.responsibility.length > 0 ? (
-                              renderTruncatedArray(task.responsibility, 2, "secondary")
+                              renderTruncatedArray(task.responsibility, 2, "secondary", "responsibility")
                             ) : task.positions?.name || task.position?.name ? (
-                              <Badge variant="secondary" className="text-xs">{task.positions?.name || task.position?.name}</Badge>
+                              <div>
+                                <Badge variant="secondary" className="text-xs">{task.positions?.name || task.position?.name}</Badge>
+                                <div className="text-xs text-red-500 mt-1">Legacy data - needs migration</div>
+                              </div>
                             ) : (
                               <span className="text-gray-400 text-xs">None</span>
                             )}
                           </TableCell>
                           <TableCell>
-                            <Badge variant="outline" className="text-xs">{formatFrequency(task.frequency)}</Badge>
-                            {task.timing && (
-                              <div className="text-xs text-gray-500 mt-1">{task.timing}</div>
-                            )}
+                            {renderFrequencyWithDetails(task)}
                           </TableCell>
                           <TableCell>
                             {task.categories && task.categories.length > 0 ? (
-                              renderTruncatedArray(task.categories, 2, "outline")
+                              renderTruncatedArray(task.categories, 2, "outline", "category")
                             ) : task.category ? (
-                              <Badge variant="outline" className="text-xs">{task.category}</Badge>
+                              <div>
+                                <Badge variant="outline" className="text-xs">{getCategoryDisplayName(task.category)}</Badge>
+                                <div className="text-xs text-red-500 mt-1">Legacy data - needs migration</div>
+                              </div>
                             ) : (
                               <span className="text-gray-400 text-xs">None</span>
                             )}
@@ -1095,7 +1357,10 @@ export default function AdminMasterTasksPage() {
                                 {task.responsibility && task.responsibility.length > 0 ? (
                                   renderTruncatedArray(task.responsibility, 3, "secondary")
                                 ) : task.positions?.name || task.position?.name ? (
-                                  <Badge variant="secondary" className="text-xs">{task.positions?.name || task.position?.name}</Badge>
+                                  <div>
+                                    <Badge variant="secondary" className="text-xs">{task.positions?.name || task.position?.name}</Badge>
+                                    <div className="text-xs text-red-500 mt-1">Legacy data - needs migration</div>
+                                  </div>
                                 ) : (
                                   <span className="text-gray-400 text-xs">None</span>
                                 )}
@@ -1104,19 +1369,19 @@ export default function AdminMasterTasksPage() {
                             <div>
                               <span className="text-gray-500">Frequency:</span>
                               <div className="mt-1">
-                                <Badge variant="outline" className="text-xs">{formatFrequency(task.frequency)}</Badge>
-                                {task.timing && (
-                                  <div className="text-xs text-gray-500 mt-1">{task.timing}</div>
-                                )}
+                                {renderFrequencyWithDetails(task)}
                               </div>
                             </div>
                             <div>
                               <span className="text-gray-500">Categories:</span>
                               <div className="mt-1">
                                 {task.categories && task.categories.length > 0 ? (
-                                  renderTruncatedArray(task.categories, 3, "outline")
+                                  renderTruncatedArray(task.categories, 3, "outline", "category")
                                 ) : task.category ? (
-                                  <Badge variant="outline" className="text-xs">{task.category}</Badge>
+                                  <div>
+                                    <Badge variant="outline" className="text-xs">{getCategoryDisplayName(task.category)}</Badge>
+                                    <div className="text-xs text-red-500 mt-1">Legacy data - needs migration</div>
+                                  </div>
                                 ) : (
                                   <span className="text-gray-400 text-xs">None</span>
                                 )}
