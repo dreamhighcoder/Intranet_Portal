@@ -6,49 +6,310 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Switch } from "@/components/ui/switch"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Edit, Trash2, Plus } from "lucide-react"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
+import { Edit, Trash2, Plus, Eye, Clock, Calendar, User, Tag, Settings, FileText } from "lucide-react"
 import Link from "next/link"
 import { MasterTask, Position } from "@/lib/types"
 import { authenticatedGet, authenticatedPut } from "@/lib/api-client"
 import { toastError, toastSuccess } from "@/hooks/use-toast"
+
+// Helper function to render truncated array with badges
+const renderTruncatedArray = (items: string[] | undefined, maxVisible: number = 2, variant: "default" | "secondary" | "outline" = "secondary") => {
+  if (!items || items.length === 0) {
+    return <span className="text-gray-400 text-xs">None</span>
+  }
+
+  const visibleItems = items.slice(0, maxVisible)
+  const remainingCount = items.length - maxVisible
+
+  return (
+    <div className="flex flex-wrap gap-1">
+      {visibleItems.map((item, index) => (
+        <Badge key={index} variant={variant} className="text-xs">
+          {item.replace('-', ' ').replace(/\b\w/g, l => l.toUpperCase())}
+        </Badge>
+      ))}
+      {remainingCount > 0 && (
+        <Badge variant="outline" className="text-xs">
+          +{remainingCount}
+        </Badge>
+      )}
+    </div>
+  )
+}
+
+// Helper function to format frequency for display
+const formatFrequency = (frequency: string) => {
+  return frequency.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())
+}
+
+// Task Details Modal Component
+const TaskDetailsModal = ({ task, positions }: { task: MasterTask, positions: Position[] }) => {
+  const getPositionName = (positionId: string) => {
+    const position = positions.find(p => p.id === positionId)
+    return position?.name || 'Unknown Position'
+  }
+
+  return (
+    <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+      <DialogHeader>
+        <DialogTitle className="flex items-center gap-2">
+          <FileText className="h-5 w-5" />
+          Task Details
+        </DialogTitle>
+      </DialogHeader>
+      
+      <div className="space-y-6">
+        {/* Basic Information */}
+        <div className="space-y-4">
+          <h3 className="text-lg font-semibold flex items-center gap-2">
+            <Settings className="h-4 w-4" />
+            Basic Information
+          </h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="text-sm font-medium text-gray-600">Title</label>
+              <p className="text-sm mt-1">{task.title}</p>
+            </div>
+            <div>
+              <label className="text-sm font-medium text-gray-600">Status</label>
+              <div className="mt-1">
+                <Badge className={task.publish_status === 'active' ? 'bg-green-100 text-green-800' : 
+                                task.publish_status === 'draft' ? 'bg-yellow-100 text-yellow-800' : 
+                                'bg-gray-100 text-gray-800'}>
+                  {task.publish_status}
+                </Badge>
+              </div>
+            </div>
+          </div>
+          {task.description && (
+            <div>
+              <label className="text-sm font-medium text-gray-600">Description</label>
+              <p className="text-sm mt-1 p-3 bg-gray-50 rounded-md">{task.description}</p>
+            </div>
+          )}
+        </div>
+
+        {/* Assignment & Responsibilities */}
+        <div className="space-y-4">
+          <h3 className="text-lg font-semibold flex items-center gap-2">
+            <User className="h-4 w-4" />
+            Assignment & Responsibilities
+          </h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="text-sm font-medium text-gray-600">Responsibilities</label>
+              <div className="mt-1">
+                {task.responsibility && task.responsibility.length > 0 ? (
+                  <div className="flex flex-wrap gap-1">
+                    {task.responsibility.map((resp, index) => (
+                      <Badge key={index} variant="secondary" className="text-xs">
+                        {resp.replace('-', ' ').replace(/\b\w/g, l => l.toUpperCase())}
+                      </Badge>
+                    ))}
+                  </div>
+                ) : task.position_id ? (
+                  <Badge variant="secondary" className="text-xs">
+                    {getPositionName(task.position_id)}
+                  </Badge>
+                ) : (
+                  <span className="text-gray-400 text-xs">No responsibilities assigned</span>
+                )}
+              </div>
+            </div>
+            <div>
+              <label className="text-sm font-medium text-gray-600">Categories</label>
+              <div className="mt-1">
+                {task.categories && task.categories.length > 0 ? (
+                  <div className="flex flex-wrap gap-1">
+                    {task.categories.map((category, index) => (
+                      <Badge key={index} variant="outline" className="text-xs">
+                        {category}
+                      </Badge>
+                    ))}
+                  </div>
+                ) : task.category ? (
+                  <Badge variant="outline" className="text-xs">{task.category}</Badge>
+                ) : (
+                  <span className="text-gray-400 text-xs">No categories</span>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Scheduling */}
+        <div className="space-y-4">
+          <h3 className="text-lg font-semibold flex items-center gap-2">
+            <Calendar className="h-4 w-4" />
+            Scheduling
+          </h3>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div>
+              <label className="text-sm font-medium text-gray-600">Frequency</label>
+              <p className="text-sm mt-1">
+                <Badge variant="outline">{formatFrequency(task.frequency)}</Badge>
+              </p>
+            </div>
+            <div>
+              <label className="text-sm font-medium text-gray-600">Timing</label>
+              <p className="text-sm mt-1">{task.timing || 'Not specified'}</p>
+            </div>
+            <div>
+              <label className="text-sm font-medium text-gray-600">Due Time</label>
+              <p className="text-sm mt-1 flex items-center gap-1">
+                <Clock className="h-3 w-3" />
+                {task.due_time || (task as any).default_due_time || 'Not specified'}
+              </p>
+            </div>
+          </div>
+          
+          {/* Advanced Scheduling */}
+          {(task.weekdays && task.weekdays.length > 0) && (
+            <div>
+              <label className="text-sm font-medium text-gray-600">Specific Weekdays</label>
+              <div className="mt-1 flex flex-wrap gap-1">
+                {task.weekdays.map((day, index) => {
+                  const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+                  return (
+                    <Badge key={index} variant="outline" className="text-xs">
+                      {dayNames[day] || day}
+                    </Badge>
+                  )
+                })}
+              </div>
+            </div>
+          )}
+          
+          {(task.months && task.months.length > 0) && (
+            <div>
+              <label className="text-sm font-medium text-gray-600">Specific Months</label>
+              <div className="mt-1 flex flex-wrap gap-1">
+                {task.months.map((month, index) => {
+                  const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+                  return (
+                    <Badge key={index} variant="outline" className="text-xs">
+                      {monthNames[month - 1] || month}
+                    </Badge>
+                  )
+                })}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Advanced Options */}
+        <div className="space-y-4">
+          <h3 className="text-lg font-semibold flex items-center gap-2">
+            <Tag className="h-4 w-4" />
+            Advanced Options
+          </h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="flex items-center justify-between p-3 bg-gray-50 rounded-md">
+              <span className="text-sm font-medium">Sticky Once Off</span>
+              <Badge variant={task.sticky_once_off ? "default" : "outline"}>
+                {task.sticky_once_off ? "Enabled" : "Disabled"}
+              </Badge>
+            </div>
+            <div className="flex items-center justify-between p-3 bg-gray-50 rounded-md">
+              <span className="text-sm font-medium">Allow Edit When Locked</span>
+              <Badge variant={task.allow_edit_when_locked ? "default" : "outline"}>
+                {task.allow_edit_when_locked ? "Enabled" : "Disabled"}
+              </Badge>
+            </div>
+          </div>
+          
+          {/* Dates */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {task.start_date && (
+              <div>
+                <label className="text-sm font-medium text-gray-600">Start Date</label>
+                <p className="text-sm mt-1">{new Date(task.start_date).toLocaleDateString()}</p>
+              </div>
+            )}
+            {task.end_date && (
+              <div>
+                <label className="text-sm font-medium text-gray-600">End Date</label>
+                <p className="text-sm mt-1">{new Date(task.end_date).toLocaleDateString()}</p>
+              </div>
+            )}
+            {task.publish_delay && (
+              <div>
+                <label className="text-sm font-medium text-gray-600">Publish Delay</label>
+                <p className="text-sm mt-1">{new Date(task.publish_delay).toLocaleDateString()}</p>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Metadata */}
+        <div className="space-y-4 pt-4 border-t">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs text-gray-500">
+            <div>
+              <span className="font-medium">Created:</span> {new Date(task.created_at).toLocaleString()}
+            </div>
+            <div>
+              <span className="font-medium">Updated:</span> {new Date(task.updated_at).toLocaleString()}
+            </div>
+          </div>
+        </div>
+      </div>
+    </DialogContent>
+  )
+}
 
 export function MasterTasksTable() {
   const [tasks, setTasks] = useState<MasterTask[]>([])
   const [positions, setPositions] = useState<Position[]>([])
   const [isLoading, setIsLoading] = useState(true)
 
-  useEffect(() => {
-    async function fetchData() {
-      try {
-        console.log('MasterTasksTable: Fetching data...')
-        const [tasksData, positionsData] = await Promise.all([
-          authenticatedGet('/api/master-tasks?status=all'),
-          authenticatedGet('/api/positions')
-        ])
-        
-        console.log('MasterTasksTable: Received data:', { 
-          tasksCount: tasksData?.length || 0,
-          positionsCount: positionsData?.length || 0,
-          tasks: tasksData,
-          positions: positionsData
-        })
-        
-        if (tasksData) {
-          setTasks(tasksData)
-        }
-        if (positionsData) {
-          setPositions(positionsData)
-        }
-      } catch (error) {
-        console.error('MasterTasksTable: Error fetching data:', error)
-        toastError("Error", "Failed to load master tasks data")
-      } finally {
-        setIsLoading(false)
+  const fetchData = async () => {
+    try {
+      console.log('MasterTasksTable: Fetching data...')
+      const [tasksData, positionsData] = await Promise.all([
+        authenticatedGet('/api/master-tasks?status=all'),
+        authenticatedGet('/api/positions')
+      ])
+      
+      console.log('MasterTasksTable: Received data:', { 
+        tasksCount: tasksData?.length || 0,
+        positionsCount: positionsData?.length || 0,
+        tasks: tasksData,
+        positions: positionsData
+      })
+      
+      if (tasksData) {
+        setTasks(tasksData)
       }
+      if (positionsData) {
+        setPositions(positionsData)
+      }
+    } catch (error) {
+      console.error('MasterTasksTable: Error fetching data:', error)
+      toastError("Error", "Failed to load master tasks data")
+    } finally {
+      setIsLoading(false)
     }
-    
+  }
+
+  useEffect(() => {
     fetchData()
   }, [])
+
+  const handleDelete = async (taskId: string) => {
+    if (!confirm('Are you sure you want to delete this task? This action cannot be undone.')) {
+      return
+    }
+
+    try {
+      await authenticatedPut(`/api/master-tasks/${taskId}`, { publish_status: 'inactive' })
+      toastSuccess("Success", "Task deleted successfully")
+      fetchData() // Refresh the data
+    } catch (error) {
+      console.error('Error deleting task:', error)
+      toastError("Error", "Failed to delete task")
+    }
+  }
 
   const handlePublishToggle = async (taskId: string) => {
     const task = tasks.find(t => t.id === taskId)
@@ -123,9 +384,9 @@ export function MasterTasksTable() {
                 <TableRow>
                   <TableHead>Status</TableHead>
                   <TableHead>Task Title</TableHead>
-                  <TableHead>Position</TableHead>
-                  <TableHead>Frequency</TableHead>
-                  <TableHead>Category</TableHead>
+                  <TableHead>Responsibilities</TableHead>
+                  <TableHead>Frequencies</TableHead>
+                  <TableHead>Categories</TableHead>
                   <TableHead>Due Time</TableHead>
                   <TableHead>Actions</TableHead>
                 </TableRow>
@@ -152,23 +413,50 @@ export function MasterTasksTable() {
                       )}
                     </div>
                   </TableCell>
-                  <TableCell>{getPositionName(task.position_id)}</TableCell>
                   <TableCell>
-                    <Badge variant="outline">{task.frequency.replace("_", " ")}</Badge>
+                    {task.responsibility && task.responsibility.length > 0 ? (
+                      renderTruncatedArray(task.responsibility, 2, "secondary")
+                    ) : task.position_id ? (
+                      <Badge variant="secondary" className="text-xs">{getPositionName(task.position_id)}</Badge>
+                    ) : (
+                      <span className="text-gray-400 text-xs">None</span>
+                    )}
                   </TableCell>
                   <TableCell>
-                    <Badge variant="outline">{task.category}</Badge>
+                    <Badge variant="outline" className="text-xs">{formatFrequency(task.frequency)}</Badge>
                   </TableCell>
-                  <TableCell>{(task as any).default_due_time || ''}</TableCell>
                   <TableCell>
-                    <div className="flex items-center space-x-2">
-                      <Button asChild size="sm" variant="outline">
+                    {task.categories && task.categories.length > 0 ? (
+                      renderTruncatedArray(task.categories, 2, "outline")
+                    ) : task.category ? (
+                      <Badge variant="outline" className="text-xs">{task.category}</Badge>
+                    ) : (
+                      <span className="text-gray-400 text-xs">None</span>
+                    )}
+                  </TableCell>
+                  <TableCell>{task.due_time || (task as any).default_due_time || ''}</TableCell>
+                  <TableCell>
+                    <div className="flex items-center space-x-1">
+                      <Dialog>
+                        <DialogTrigger asChild>
+                          <Button size="sm" variant="outline" className="h-8 w-8 p-0">
+                            <Eye className="h-4 w-4" />
+                          </Button>
+                        </DialogTrigger>
+                        <TaskDetailsModal task={task} positions={positions} />
+                      </Dialog>
+                      <Button asChild size="sm" variant="outline" className="h-8 w-8 p-0">
                         <Link href={`/admin/task-editor/${task.id}`}>
-                          <Edit className="w-4 h-4" />
+                          <Edit className="h-4 w-4" />
                         </Link>
                       </Button>
-                      <Button size="sm" variant="outline" className="text-red-600 hover:text-red-700 bg-transparent">
-                        <Trash2 className="w-4 h-4" />
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => handleDelete(task.id)}
+                        className="h-8 w-8 p-0 text-red-600 hover:text-red-700"
+                      >
+                        <Trash2 className="h-4 w-4" />
                       </Button>
                     </div>
                   </TableCell>

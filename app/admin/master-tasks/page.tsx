@@ -10,7 +10,7 @@ import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 
 import { masterTasksApi, positionsApi, authenticatedGet } from "@/lib/api-client"
 import { supabase } from "@/lib/supabase"
@@ -28,7 +28,11 @@ import {
   Upload,
   Eye,
   EyeOff,
-  Menu
+  Menu,
+  FileText,
+  User,
+  Tag,
+  Settings
 } from "lucide-react"
 
 // Using the proper type from checklist.ts
@@ -59,6 +63,229 @@ const frequencyLabels = {
   certain_months: 'Certain Months',
   end_every_month: 'End Every Month',
   end_certain_months: 'End Certain Months'
+}
+
+// Helper function to render truncated array with badges
+const renderTruncatedArray = (items: string[] | undefined, maxVisible: number = 2, variant: "default" | "secondary" | "outline" = "secondary") => {
+  if (!items || items.length === 0) {
+    return <span className="text-gray-400 text-xs">None</span>
+  }
+
+  const visibleItems = items.slice(0, maxVisible)
+  const remainingCount = items.length - maxVisible
+
+  return (
+    <div className="flex flex-wrap gap-1">
+      {visibleItems.map((item, index) => (
+        <Badge key={index} variant={variant} className="text-xs">
+          {item.replace('-', ' ').replace(/\b\w/g, l => l.toUpperCase())}
+        </Badge>
+      ))}
+      {remainingCount > 0 && (
+        <Badge variant="outline" className="text-xs">
+          +{remainingCount}
+        </Badge>
+      )}
+    </div>
+  )
+}
+
+// Helper function to format frequency for display
+const formatFrequency = (frequency: string) => {
+  return frequency.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())
+}
+
+// Task Details Modal Component
+const TaskDetailsModal = ({ task, positions }: { task: MasterTask, positions: Position[] }) => {
+  const getPositionName = (positionId: string) => {
+    const position = positions.find(p => p.id === positionId)
+    return position?.name || 'Unknown Position'
+  }
+
+  return (
+    <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+      <DialogHeader>
+        <DialogTitle className="flex items-center gap-2">
+          <FileText className="h-5 w-5" />
+          Task Details
+        </DialogTitle>
+      </DialogHeader>
+      
+      <div className="space-y-6">
+        {/* Basic Information */}
+        <div className="space-y-4">
+          <h3 className="text-lg font-semibold flex items-center gap-2">
+            <Settings className="h-4 w-4" />
+            Basic Information
+          </h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="text-sm font-medium text-gray-600">Title</label>
+              <p className="text-sm mt-1">{task.title}</p>
+            </div>
+            <div>
+              <label className="text-sm font-medium text-gray-600">Status</label>
+              <div className="mt-1">
+                <Badge className={task.publish_status === 'active' ? 'bg-green-100 text-green-800' : 
+                                task.publish_status === 'draft' ? 'bg-yellow-100 text-yellow-800' : 
+                                'bg-gray-100 text-gray-800'}>
+                  {task.publish_status}
+                </Badge>
+              </div>
+            </div>
+          </div>
+          {task.description && (
+            <div>
+              <label className="text-sm font-medium text-gray-600">Description</label>
+              <p className="text-sm mt-1 p-3 bg-gray-50 rounded-md">{task.description}</p>
+            </div>
+          )}
+        </div>
+
+        {/* Assignment & Responsibilities */}
+        <div className="space-y-4">
+          <h3 className="text-lg font-semibold flex items-center gap-2">
+            <User className="h-4 w-4" />
+            Assignment & Responsibilities
+          </h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="text-sm font-medium text-gray-600">Responsibilities</label>
+              <div className="mt-1">
+                {task.responsibility && task.responsibility.length > 0 ? (
+                  <div className="flex flex-wrap gap-1">
+                    {task.responsibility.map((resp, index) => (
+                      <Badge key={index} variant="secondary" className="text-xs">
+                        {resp.replace('-', ' ').replace(/\b\w/g, l => l.toUpperCase())}
+                      </Badge>
+                    ))}
+                  </div>
+                ) : task.position_id ? (
+                  <Badge variant="secondary" className="text-xs">
+                    {getPositionName(task.position_id)}
+                  </Badge>
+                ) : (
+                  <span className="text-gray-400 text-xs">No responsibilities assigned</span>
+                )}
+              </div>
+            </div>
+            <div>
+              <label className="text-sm font-medium text-gray-600">Categories</label>
+              <div className="mt-1">
+                {task.categories && task.categories.length > 0 ? (
+                  <div className="flex flex-wrap gap-1">
+                    {task.categories.map((category, index) => (
+                      <Badge key={index} variant="outline" className="text-xs">
+                        {category}
+                      </Badge>
+                    ))}
+                  </div>
+                ) : task.category ? (
+                  <Badge variant="outline" className="text-xs">{task.category}</Badge>
+                ) : (
+                  <span className="text-gray-400 text-xs">No categories</span>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Scheduling */}
+        <div className="space-y-4">
+          <h3 className="text-lg font-semibold flex items-center gap-2">
+            <Calendar className="h-4 w-4" />
+            Scheduling
+          </h3>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div>
+              <label className="text-sm font-medium text-gray-600">Frequency</label>
+              <p className="text-sm mt-1">
+                <Badge variant="outline">{formatFrequency(task.frequency)}</Badge>
+              </p>
+            </div>
+            <div>
+              <label className="text-sm font-medium text-gray-600">Timing</label>
+              <p className="text-sm mt-1">{task.timing || 'Not specified'}</p>
+            </div>
+            <div>
+              <label className="text-sm font-medium text-gray-600">Due Time</label>
+              <p className="text-sm mt-1 flex items-center gap-1">
+                <Clock className="h-3 w-3" />
+                {(task as any).default_due_time || 'Not specified'}
+              </p>
+            </div>
+          </div>
+          
+          {/* Advanced Scheduling */}
+          {(task.weekdays && task.weekdays.length > 0) && (
+            <div>
+              <label className="text-sm font-medium text-gray-600">Specific Weekdays</label>
+              <div className="mt-1 flex flex-wrap gap-1">
+                {task.weekdays.map((day, index) => {
+                  const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+                  return (
+                    <Badge key={index} variant="outline" className="text-xs">
+                      {dayNames[day] || day}
+                    </Badge>
+                  )
+                })}
+              </div>
+            </div>
+          )}
+          
+          {(task.months && task.months.length > 0) && (
+            <div>
+              <label className="text-sm font-medium text-gray-600">Specific Months</label>
+              <div className="mt-1 flex flex-wrap gap-1">
+                {task.months.map((month, index) => {
+                  const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+                  return (
+                    <Badge key={index} variant="outline" className="text-xs">
+                      {monthNames[month - 1] || month}
+                    </Badge>
+                  )
+                })}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Advanced Options */}
+        <div className="space-y-4">
+          <h3 className="text-lg font-semibold flex items-center gap-2">
+            <Tag className="h-4 w-4" />
+            Advanced Options
+          </h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="flex items-center justify-between p-3 bg-gray-50 rounded-md">
+              <span className="text-sm font-medium">Sticky Once Off</span>
+              <Badge variant={task.sticky_once_off ? "default" : "outline"}>
+                {task.sticky_once_off ? "Enabled" : "Disabled"}
+              </Badge>
+            </div>
+            <div className="flex items-center justify-between p-3 bg-gray-50 rounded-md">
+              <span className="text-sm font-medium">Allow Edit When Locked</span>
+              <Badge variant={task.allow_edit_when_locked ? "default" : "outline"}>
+                {task.allow_edit_when_locked ? "Enabled" : "Disabled"}
+              </Badge>
+            </div>
+          </div>
+        </div>
+
+        {/* Metadata */}
+        <div className="space-y-4 pt-4 border-t">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs text-gray-500">
+            <div>
+              <span className="font-medium">Created:</span> {new Date(task.created_at).toLocaleString()}
+            </div>
+            <div>
+              <span className="font-medium">Updated:</span> {new Date(task.updated_at).toLocaleString()}
+            </div>
+          </div>
+        </div>
+      </div>
+    </DialogContent>
+  )
 }
 
 export default function AdminMasterTasksPage() {
@@ -717,9 +944,9 @@ export default function AdminMasterTasksPage() {
                     <TableHeader>
                       <TableRow>
                         <TableHead>Task</TableHead>
-                        <TableHead>Position</TableHead>
-                        <TableHead>Frequency</TableHead>
-                        <TableHead>Category</TableHead>
+                        <TableHead>Responsibilities</TableHead>
+                        <TableHead>Frequencies</TableHead>
+                        <TableHead>Categories</TableHead>
                         <TableHead>Status</TableHead>
                         <TableHead>Due Time</TableHead>
                         <TableHead>Actions</TableHead>
@@ -739,23 +966,27 @@ export default function AdminMasterTasksPage() {
                             </div>
                           </TableCell>
                           <TableCell>
-                            <span className="text-sm">{task.positions?.name || task.position?.name || 'Unknown Position'}</span>
-                          </TableCell>
-                          <TableCell>
-                            <div className="text-sm">
-                              {frequencyLabels[task.frequency as keyof typeof frequencyLabels]}
-                              {task.timing && (
-                                <div className="text-xs text-gray-500">{task.timing}</div>
-                              )}
-                            </div>
-                          </TableCell>
-                          <TableCell>
-                            {task.category ? (
-                              <Badge variant="outline" className="text-xs">
-                                {task.category}
-                              </Badge>
+                            {task.responsibility && task.responsibility.length > 0 ? (
+                              renderTruncatedArray(task.responsibility, 2, "secondary")
+                            ) : task.positions?.name || task.position?.name ? (
+                              <Badge variant="secondary" className="text-xs">{task.positions?.name || task.position?.name}</Badge>
                             ) : (
-                              <span className="text-gray-400">-</span>
+                              <span className="text-gray-400 text-xs">None</span>
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant="outline" className="text-xs">{formatFrequency(task.frequency)}</Badge>
+                            {task.timing && (
+                              <div className="text-xs text-gray-500 mt-1">{task.timing}</div>
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            {task.categories && task.categories.length > 0 ? (
+                              renderTruncatedArray(task.categories, 2, "outline")
+                            ) : task.category ? (
+                              <Badge variant="outline" className="text-xs">{task.category}</Badge>
+                            ) : (
+                              <span className="text-gray-400 text-xs">None</span>
                             )}
                           </TableCell>
                           <TableCell>
@@ -783,12 +1014,26 @@ export default function AdminMasterTasksPage() {
                           </TableCell>
                           <TableCell>
                             <div className="flex space-x-1">
+                              <Dialog>
+                                <DialogTrigger asChild>
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    className="h-8 w-8 p-0"
+                                    title="View task details"
+                                  >
+                                    <Eye className="w-3 h-3" />
+                                  </Button>
+                                </DialogTrigger>
+                                <TaskDetailsModal task={task} positions={positions} />
+                              </Dialog>
                               <Button
                                 size="sm"
                                 variant="outline"
                                 onClick={() => handleGenerateInstances(task.id)}
                                 disabled={generatingInstancesId === task.id}
                                 title="Generate instances for this task"
+                                className="h-8 w-8 p-0"
                               >
                                 {generatingInstancesId === task.id ? (
                                   <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-blue-600"></div>
@@ -803,6 +1048,7 @@ export default function AdminMasterTasksPage() {
                                   setEditingTask(task)
                                   setIsTaskDialogOpen(true)
                                 }}
+                                className="h-8 w-8 p-0"
                               >
                                 <Edit className="w-3 h-3" />
                               </Button>
@@ -842,34 +1088,45 @@ export default function AdminMasterTasksPage() {
                           </div>
 
                           {/* Details Grid */}
-                          <div className="grid grid-cols-2 gap-3 text-sm">
+                          <div className="space-y-3 text-sm">
                             <div>
-                              <span className="text-gray-500">Position:</span>
-                              <div className="font-medium">{task.positions?.name || task.position?.name || 'Unknown Position'}</div>
-                            </div>
-                            <div>
-                              <span className="text-gray-500">Frequency:</span>
-                              <div className="font-medium">
-                                {frequencyLabels[task.frequency as keyof typeof frequencyLabels]}
+                              <span className="text-gray-500">Responsibilities:</span>
+                              <div className="mt-1">
+                                {task.responsibility && task.responsibility.length > 0 ? (
+                                  renderTruncatedArray(task.responsibility, 3, "secondary")
+                                ) : task.positions?.name || task.position?.name ? (
+                                  <Badge variant="secondary" className="text-xs">{task.positions?.name || task.position?.name}</Badge>
+                                ) : (
+                                  <span className="text-gray-400 text-xs">None</span>
+                                )}
                               </div>
                             </div>
                             <div>
-                              <span className="text-gray-500">Category:</span>
-                              <div>
-                                {task.category ? (
-                                  <Badge variant="outline" className="text-xs">
-                                    {task.category}
-                                  </Badge>
+                              <span className="text-gray-500">Frequency:</span>
+                              <div className="mt-1">
+                                <Badge variant="outline" className="text-xs">{formatFrequency(task.frequency)}</Badge>
+                                {task.timing && (
+                                  <div className="text-xs text-gray-500 mt-1">{task.timing}</div>
+                                )}
+                              </div>
+                            </div>
+                            <div>
+                              <span className="text-gray-500">Categories:</span>
+                              <div className="mt-1">
+                                {task.categories && task.categories.length > 0 ? (
+                                  renderTruncatedArray(task.categories, 3, "outline")
+                                ) : task.category ? (
+                                  <Badge variant="outline" className="text-xs">{task.category}</Badge>
                                 ) : (
-                                  <span className="text-gray-400">-</span>
+                                  <span className="text-gray-400 text-xs">None</span>
                                 )}
                               </div>
                             </div>
                             <div>
                               <span className="text-gray-500">Due Time:</span>
-                              <div className="flex items-center font-medium">
+                              <div className="flex items-center font-medium mt-1">
                                 <Clock className="w-3 h-3 mr-1 text-gray-400" />
-                                {task.default_due_time || '17:00'}
+                                {(task as any).default_due_time || '17:00'}
                               </div>
                             </div>
                           </div>
@@ -897,6 +1154,18 @@ export default function AdminMasterTasksPage() {
                               </div>
 
                               <div className="flex space-x-1">
+                                <Dialog>
+                                  <DialogTrigger asChild>
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      title="View task details"
+                                    >
+                                      <Eye className="w-3 h-3" />
+                                    </Button>
+                                  </DialogTrigger>
+                                  <TaskDetailsModal task={task} positions={positions} />
+                                </Dialog>
                                 <Button
                                   size="sm"
                                   variant="outline"

@@ -12,10 +12,12 @@ import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Switch } from "@/components/ui/switch"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { TASK_CATEGORIES, TASK_FREQUENCIES, TASK_TIMINGS } from "@/lib/constants"
+import { TASK_CATEGORIES, TASK_FREQUENCIES, TASK_TIMINGS, POSITION_TYPES } from "@/lib/constants"
+import { Checkbox } from "@/components/ui/checkbox"
 import { useRouter, useParams } from "next/navigation"
 import type { MasterTask, Position } from "@/lib/types"
 import { positionsApi, authenticatedGet, authenticatedPost, authenticatedPut } from "@/lib/api-client"
+import { toastSuccess, toastError } from "@/hooks/use-toast"
 
 export default function TaskEditorPage() {
   const { user, isLoading, isAdmin } = usePositionAuth()
@@ -34,6 +36,8 @@ export default function TaskEditorPage() {
     timing: "morning",
     default_due_time: "09:00",
     category: "Compliance",
+    categories: [],
+    responsibility: [],
     publish_status: "draft",
     sticky_once_off: false,
     allow_edit_when_locked: false,
@@ -89,13 +93,14 @@ export default function TaskEditorPage() {
 
       if (result) {
         console.log('Task saved:', result)
+        toastSuccess("Success", `Task ${isEditing ? 'updated' : 'created'} successfully`)
         router.push("/admin/master-tasks")
       } else {
         throw new Error('Failed to save task')
       }
     } catch (error) {
       console.error('Error saving task:', error)
-      alert(`Failed to save task: ${error instanceof Error ? error.message : 'Unknown error'}`)
+      toastError("Error", `Failed to save task: ${error instanceof Error ? error.message : 'Unknown error'}`)
     } finally {
       setIsSaving(false)
     }
@@ -164,19 +169,28 @@ export default function TaskEditorPage() {
                   </div>
 
                   <div>
-                    <Label htmlFor="category">Category *</Label>
-                    <Select value={formData.category} onValueChange={(value) => handleInputChange("category", value)}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select category" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {TASK_CATEGORIES.map((category) => (
-                          <SelectItem key={category} value={category}>
+                    <Label>Categories</Label>
+                    <div className="grid grid-cols-2 gap-2 mt-2 p-3 border rounded-md">
+                      {TASK_CATEGORIES.map((category) => (
+                        <div key={category} className="flex items-center space-x-2">
+                          <Checkbox
+                            id={`category-${category}`}
+                            checked={formData.categories?.includes(category) || false}
+                            onCheckedChange={(checked) => {
+                              const currentCategories = formData.categories || []
+                              if (checked) {
+                                handleInputChange("categories", [...currentCategories, category])
+                              } else {
+                                handleInputChange("categories", currentCategories.filter(c => c !== category))
+                              }
+                            }}
+                          />
+                          <Label htmlFor={`category-${category}`} className="text-sm font-normal">
                             {category}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                          </Label>
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 </CardContent>
               </Card>
@@ -187,22 +201,31 @@ export default function TaskEditorPage() {
                 </CardHeader>
                 <CardContent className="space-y-4">
                   <div>
-                    <Label htmlFor="position">Responsibility (Position) *</Label>
-                    <Select
-                      value={formData.position_id}
-                      onValueChange={(value) => handleInputChange("position_id", value)}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select position" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {positions.map((position) => (
-                          <SelectItem key={position.id} value={position.id}>
-                            {position.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <Label>Responsibilities *</Label>
+                    <div className="grid grid-cols-1 gap-2 mt-2 p-3 border rounded-md">
+                      {POSITION_TYPES.map((position) => {
+                        const positionKey = position.toLowerCase().replace(/[()]/g, '').replace(/\s+/g, '-')
+                        return (
+                          <div key={positionKey} className="flex items-center space-x-2">
+                            <Checkbox
+                              id={`responsibility-${positionKey}`}
+                              checked={formData.responsibility?.includes(positionKey) || false}
+                              onCheckedChange={(checked) => {
+                                const currentResponsibilities = formData.responsibility || []
+                                if (checked) {
+                                  handleInputChange("responsibility", [...currentResponsibilities, positionKey])
+                                } else {
+                                  handleInputChange("responsibility", currentResponsibilities.filter(r => r !== positionKey))
+                                }
+                              }}
+                            />
+                            <Label htmlFor={`responsibility-${positionKey}`} className="text-sm font-normal">
+                              {position}
+                            </Label>
+                          </div>
+                        )
+                      })}
+                    </div>
                   </div>
 
                   <div>

@@ -52,11 +52,21 @@ export interface MasterTask {
   months: number[] // For month-specific frequencies (1-12)
   timing?: string
   default_due_time?: string // HH:MM format
-  category?: string
+  due_time?: string // HH:MM format (new field)
+  category?: string // Legacy single category field
+  categories?: string[] // New multiple categories field
+  responsibility?: string[] // New multiple responsibilities field
+  frequency_rules?: any // JSONB frequency rules
+  due_date?: string // ISO date string for once-off tasks
   publish_status: "active" | "draft" | "inactive"
   publish_delay_date?: string
+  publish_delay?: string // New field
+  start_date?: string // ISO date string
+  end_date?: string // ISO date string
   sticky_once_off: boolean
   allow_edit_when_locked: boolean
+  created_by?: string // UUID of user who created the task
+  updated_by?: string // UUID of user who last updated the task
   created_at: string
   updated_at: string
   positions?: Position

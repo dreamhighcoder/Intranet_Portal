@@ -239,9 +239,23 @@ export async function POST(request: NextRequest) {
       timing: mappedTiming,
       default_due_time: due_time || default_due_time || '09:00:00',
       category: categories && categories.length > 0 ? categories[0] : (category || 'General'),
+      responsibility: responsibility || [],
+      categories: categories || [],
+      frequency_rules: frequency_rules,
+      due_date: due_date,
+      due_time: due_time || default_due_time || '09:00:00',
       publish_status: publish_status || 'draft',
+      publish_delay: publish_delay,
       sticky_once_off: sticky_once_off || false,
       allow_edit_when_locked: allow_edit_when_locked || false
+    }
+
+    // Only add start_date and end_date if they have values
+    if (start_date) {
+      insertData.start_date = start_date
+    }
+    if (end_date) {
+      insertData.end_date = end_date
     }
 
     // Handle weekdays from frequency_rules or legacy

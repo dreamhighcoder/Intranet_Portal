@@ -103,9 +103,15 @@ export async function PUT(
       publish_status,
       sticky_once_off,
       allow_edit_when_locked,
-      start_date,
-      end_date,
       updated_at: new Date().toISOString()
+    }
+
+    // Only add start_date and end_date if they have values
+    if (start_date) {
+      updateData.start_date = start_date
+    }
+    if (end_date) {
+      updateData.end_date = end_date
     }
 
     // Handle new format
@@ -114,6 +120,12 @@ export async function PUT(
       updateData.frequency = frequency || 'every_day'
       updateData.default_due_time = due_time
       updateData.category = categories && categories.length > 0 ? categories[0] : 'General'
+      updateData.responsibility = responsibility || []
+      updateData.categories = categories || []
+      updateData.frequency_rules = frequency_rules
+      updateData.due_date = due_date
+      updateData.due_time = due_time
+      updateData.publish_delay = publish_delay
     } else {
       // Handle legacy format
       updateData.frequency = frequency
@@ -121,6 +133,8 @@ export async function PUT(
       updateData.months = months
       updateData.default_due_time = default_due_time
       updateData.category = category
+      updateData.responsibility = responsibility || []
+      updateData.categories = categories || []
     }
 
     let { data: masterTask, error } = await supabase
