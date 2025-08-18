@@ -11,10 +11,29 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { getTasksByPosition, getTaskCounts, calculateTaskStatus, completeTask, undoTask } from "@/lib/task-utils"
+import { createHolidayHelper } from "@/lib/public-holidays"
 import { positionsApi } from "@/lib/api-client"
 import { Check, X, Eye, LogOut, Settings } from "lucide-react"
 import Link from "next/link"
 import { toastError, toastSuccess } from "@/hooks/use-toast"
+
+// Define category options for proper display names
+const CATEGORY_OPTIONS = [
+  { value: 'stock-control', label: 'Stock Control' },
+  { value: 'compliance', label: 'Compliance' },
+  { value: 'cleaning', label: 'Cleaning' },
+  { value: 'pharmacy-services', label: 'Pharmacy Services' },
+  { value: 'fos-operations', label: 'FOS Operations' },
+  { value: 'dispensary-operations', label: 'Dispensary Operations' },
+  { value: 'general-pharmacy-operations', label: 'General Pharmacy Operations' },
+  { value: 'business-management', label: 'Business Management' }
+]
+
+// Helper function to get display name for categories
+const getCategoryDisplayName = (value: string): string => {
+  const option = CATEGORY_OPTIONS.find(opt => opt.value === value)
+  return option ? option.label : value.replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase())
+}
 
 export default function ChecklistPage() {
   const { user, isLoading, signOut, isAdmin } = usePositionAuth()
@@ -41,6 +60,8 @@ export default function ChecklistPage() {
     overdue: 0,
     missed: 0
   })
+  const [isHoliday, setIsHoliday] = useState(false)
+  const [holidayName, setHolidayName] = useState("")
 
   // Create stable references to prevent infinite re-renders
   const userId = useMemo(() => {
@@ -123,6 +144,31 @@ export default function ChecklistPage() {
     }
   }, [isLoading, user])
 
+  // Check if current date is a holiday
+  useEffect(() => {
+    const checkHoliday = async () => {
+      try {
+        const response = await fetch(`/api/holidays/check?date=${currentDate}`)
+        if (response.ok) {
+          const result = await response.json()
+          if (result.success && result.data) {
+            setIsHoliday(result.data.is_holiday)
+            setHolidayName(result.data.holiday_info?.name || "")
+          } else {
+            setIsHoliday(false)
+            setHolidayName("")
+          }
+        }
+      } catch (error) {
+        console.error('Error checking holiday:', error)
+        setIsHoliday(false)
+        setHolidayName("")
+      }
+    }
+
+    checkHoliday()
+  }, [currentDate])
+
   // Load tasks when date, refresh key, user, or viewing position changes
   useEffect(() => {
     const loadTasks = async () => {
@@ -144,29 +190,80 @@ export default function ChecklistPage() {
         setTasks([])
         return
       }
+
+      // If it's a holiday, don't load tasks
+      if (isHoliday) {
+        setLoading(false)
+        setTasks([])
+        setTaskCounts({
+          total: 0,
+          done: 0,
+          due_today: 0,
+          overdue: 0,
+          missed: 0
+        })
+        return
+      }
       
       setLoading(true)
       try {
         if (viewingPositionId) {
-          // Load tasks for specific position
-          const [tasksByPosition, counts] = await Promise.all([
-            getTasksByPosition(currentDate),
-            getTaskCounts(currentDate)
-          ])
+          // Load tasks for specific position using the API
+          const queryParams = new URLSearchParams({
+            date: currentDate,
+            position_id: viewingPositionId
+          })
           
-          const positionTasks = tasksByPosition[viewingPositionId] || []
-          setTasks(positionTasks)
-          setTaskCounts(counts)
+          const response = await fetch(`/api/task-instances?${queryParams.toString()}`)
+          if (response.ok) {
+            const tasks = await response.json()
+            setTasks(tasks)
+            
+            // Calculate counts from the fetched tasks
+            const counts = {
+              total: tasks.length,
+              done: tasks.filter((t: any) => t.status === 'done').length,
+              due_today: tasks.filter((t: any) => calculateTaskStatus(t) === 'due_today').length,
+              overdue: tasks.filter((t: any) => calculateTaskStatus(t) === 'overdue').length,
+              missed: tasks.filter((t: any) => calculateTaskStatus(t) === 'missed').length
+            }
+            setTaskCounts(counts)
+          } else {
+            setTasks([])
+            setTaskCounts({
+              total: 0,
+              done: 0,
+              due_today: 0,
+              overdue: 0,
+              missed: 0
+            })
+          }
         } else if (userRole === 'admin') {
           // Admin users can see all tasks when no specific position is selected
-          const [tasksByPosition, counts] = await Promise.all([
-            getTasksByPosition(currentDate),
-            getTaskCounts(currentDate)
-          ])
-          
-          const allTasks = Object.values(tasksByPosition).flat()
-          setTasks(allTasks)
-          setTaskCounts(counts)
+          const response = await fetch(`/api/task-instances?date=${currentDate}`)
+          if (response.ok) {
+            const tasks = await response.json()
+            setTasks(tasks)
+            
+            // Calculate counts from the fetched tasks
+            const counts = {
+              total: tasks.length,
+              done: tasks.filter((t: any) => t.status === 'done').length,
+              due_today: tasks.filter((t: any) => calculateTaskStatus(t) === 'due_today').length,
+              overdue: tasks.filter((t: any) => calculateTaskStatus(t) === 'overdue').length,
+              missed: tasks.filter((t: any) => calculateTaskStatus(t) === 'missed').length
+            }
+            setTaskCounts(counts)
+          } else {
+            setTasks([])
+            setTaskCounts({
+              total: 0,
+              done: 0,
+              due_today: 0,
+              overdue: 0,
+              missed: 0
+            })
+          }
         } else {
           // Fallback: Regular users with no position should see empty list
           setTasks([])
@@ -187,7 +284,7 @@ export default function ChecklistPage() {
     }
 
     loadTasks()
-  }, [currentDate, refreshKey, isLoading, userId, userRole, userPositionId, viewingPositionId])
+  }, [currentDate, refreshKey, isLoading, userId, userRole, userPositionId, viewingPositionId, isHoliday])
 
   useEffect(() => {
     const dateParam = searchParams.get("date")
@@ -376,10 +473,27 @@ export default function ChecklistPage() {
           />
         </div>
 
+        {/* Holiday Notice */}
+        {isHoliday && (
+          <Card className="card-surface mb-6 bg-blue-50 border-blue-200">
+            <CardContent className="p-6 text-center">
+              <h3 className="text-lg font-semibold text-blue-800 mb-2">🎉 Public Holiday</h3>
+              <p className="text-blue-700">
+                {holidayName ? `Today is ${holidayName}` : "Today is a public holiday"}
+              </p>
+              <p className="text-blue-600 text-sm mt-2">No tasks are scheduled for today. Enjoy your day off!</p>
+            </CardContent>
+          </Card>
+        )}
+
         {/* Task List - List Layout */}
         <Card className="card-surface mb-6">
           <CardContent className="p-0">
-            {filteredTasks.length === 0 ? (
+            {isHoliday ? (
+              <div className="py-12 text-center">
+                <p className="text-[var(--color-text-secondary)] text-lg">No tasks scheduled on public holidays.</p>
+              </div>
+            ) : filteredTasks.length === 0 ? (
               <div className="py-12 text-center">
                 <p className="text-[var(--color-text-secondary)] text-lg">No tasks found for the selected filters.</p>
               </div>
@@ -403,9 +517,31 @@ export default function ChecklistPage() {
                       <TableRow key={`${task.id}-${refreshKey}`}>
                         <TableCell>
                           <div className="font-medium">{task.master_task.title}</div>
+                          {task.master_task.description && (
+                            <div className="text-xs text-gray-500 mt-1">{task.master_task.description}</div>
+                          )}
+                          {task.completed_at && (
+                            <div className="text-xs text-green-600 mt-1">
+                              Completed: {new Date(task.completed_at).toLocaleString()}
+                            </div>
+                          )}
                         </TableCell>
                         <TableCell>
-                          <Badge variant="outline">{task.master_task.category}</Badge>
+                          <div className="flex flex-wrap gap-1">
+                            {task.master_task.categories && task.master_task.categories.length > 0 ? (
+                              task.master_task.categories.map((cat, index) => (
+                                <Badge key={index} variant="outline" className="text-xs">
+                                  {getCategoryDisplayName(cat)}
+                                </Badge>
+                              ))
+                            ) : task.master_task.category ? (
+                              <Badge variant="outline" className="text-xs">
+                                {getCategoryDisplayName(task.master_task.category)}
+                              </Badge>
+                            ) : (
+                              <span className="text-gray-400 text-xs">No category</span>
+                            )}
+                          </div>
                         </TableCell>
                         {userRole === 'admin' && !viewingPositionId && (
                           <TableCell>
@@ -430,6 +566,7 @@ export default function ChecklistPage() {
                                 variant="outline"
                                 onClick={() => handleTaskUndo(task.id)}
                                 disabled={task.locked && !task.master_task?.allow_edit_when_locked}
+                                title={task.locked && !task.master_task?.allow_edit_when_locked ? "Task is locked" : "Undo completion"}
                               >
                                 <X className="w-4 h-4 mr-1" />
                                 Undo
@@ -440,18 +577,25 @@ export default function ChecklistPage() {
                                 onClick={() => handleTaskComplete(task.id)}
                                 disabled={task.locked && !task.master_task?.allow_edit_when_locked}
                                 className="bg-[var(--color-primary)] text-[var(--color-primary-on)]"
+                                title={task.locked && !task.master_task?.allow_edit_when_locked ? "Task is locked" : "Mark as complete"}
                               >
                                 <Check className="w-4 h-4 mr-1" />
                                 Mark Done
                               </Button>
                             )}
+                            {task.locked && (
+                              <Badge variant="secondary" className="text-xs">
+                                🔒 Locked
+                              </Badge>
+                            )}
                             <Button
                               size="sm"
                               variant="ghost"
                               onClick={() => {
-                                // Mock task detail view
+                                // Mock task detail view - could be enhanced later
                                 console.log("View task details:", task.id)
                               }}
+                              title="View task details"
                             >
                               <Eye className="w-4 h-4" />
                             </Button>

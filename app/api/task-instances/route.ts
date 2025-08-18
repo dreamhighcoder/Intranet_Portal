@@ -15,6 +15,7 @@ export async function GET(request: NextRequest) {
     const date = searchParams.get('date')
     const dateRange = searchParams.get('dateRange')
     const positionIdParam = searchParams.get('position_id')
+    const responsibility = searchParams.get('responsibility')
     const status = searchParams.get('status')
     const category = searchParams.get('category')
 
@@ -29,7 +30,14 @@ export async function GET(request: NextRequest) {
           frequency,
           timing,
           category,
+          categories,
+          responsibility,
           position_id,
+          due_time,
+          frequency_rules,
+          publish_status,
+          sticky_once_off,
+          allow_edit_when_locked,
           positions!inner (
             id,
             name
@@ -54,6 +62,11 @@ export async function GET(request: NextRequest) {
     // Filter by position if provided/effective
     if (effectivePositionId) {
       query = query.eq('master_tasks.position_id', effectivePositionId)
+    }
+
+    // Filter by responsibility if provided (for new responsibility-based filtering)
+    if (responsibility) {
+      query = query.contains('master_tasks.responsibility', [responsibility])
     }
 
     // Filter by status if provided
@@ -98,7 +111,14 @@ export async function GET(request: NextRequest) {
         frequency: instance.master_tasks.frequency,
         timing: instance.master_tasks.timing,
         category: instance.master_tasks.category,
+        categories: instance.master_tasks.categories,
+        responsibility: instance.master_tasks.responsibility,
         position_id: instance.master_tasks.position_id,
+        due_time: instance.master_tasks.due_time,
+        frequency_rules: instance.master_tasks.frequency_rules,
+        publish_status: instance.master_tasks.publish_status,
+        sticky_once_off: instance.master_tasks.sticky_once_off,
+        allow_edit_when_locked: instance.master_tasks.allow_edit_when_locked,
         position: {
           id: instance.master_tasks.positions.id,
           name: instance.master_tasks.positions.name

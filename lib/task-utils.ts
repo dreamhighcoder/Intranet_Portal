@@ -149,9 +149,12 @@ export async function getTaskCounts(date: string) {
   return counts
 }
 
-// Real function to complete a task
+// Real function to complete a task with audit trail
 export async function completeTask(taskId: string, userId?: string): Promise<boolean> {
   try {
+    const completionTime = new Date().toISOString()
+    
+    // Complete the task
     const response = await fetch(`/api/task-instances/${taskId}`, {
       method: 'PUT',
       headers: {
@@ -169,6 +172,25 @@ export async function completeTask(taskId: string, userId?: string): Promise<boo
       return false
     }
 
+    // Log the completion in audit trail
+    try {
+      await fetch('/api/audit/task-completion', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          task_instance_id: taskId,
+          action: 'completed',
+          completion_time: completionTime,
+          notes: 'Task marked as completed'
+        })
+      })
+    } catch (auditError) {
+      console.warn('Failed to log completion audit:', auditError)
+      // Don't fail the main operation if audit logging fails
+    }
+
     return true
   } catch (error) {
     console.error('Error completing task:', error)
@@ -176,9 +198,12 @@ export async function completeTask(taskId: string, userId?: string): Promise<boo
   }
 }
 
-// Real function to undo task completion
+// Real function to undo task completion with audit trail
 export async function undoTask(taskId: string, userId?: string): Promise<boolean> {
   try {
+    const undoTime = new Date().toISOString()
+    
+    // Undo the task
     const response = await fetch(`/api/task-instances/${taskId}`, {
       method: 'PUT',
       headers: {
@@ -194,6 +219,25 @@ export async function undoTask(taskId: string, userId?: string): Promise<boolean
       const error = await response.json()
       console.error('Error undoing task:', error)
       return false
+    }
+
+    // Log the undo in audit trail
+    try {
+      await fetch('/api/audit/task-completion', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          task_instance_id: taskId,
+          action: 'uncompleted',
+          completion_time: undoTime,
+          notes: 'Task completion undone'
+        })
+      })
+    } catch (auditError) {
+      console.warn('Failed to log undo audit:', auditError)
+      // Don't fail the main operation if audit logging fails
     }
 
     return true

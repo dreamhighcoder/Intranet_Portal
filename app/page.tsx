@@ -55,7 +55,7 @@ export default function HomePage() {
     return descriptions[displayName] || `${displayName} tasks and responsibilities`
   }
 
-  // Load positions from database
+  // Load positions from database - always show all positions
   useEffect(() => {
     const loadPositions = async () => {
       try {

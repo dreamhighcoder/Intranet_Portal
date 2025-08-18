@@ -638,6 +638,67 @@ export async function generateForYesterday(
   })
 }
 
+/**
+ * Generate instances for a specific task
+ */
+export async function generateInstancesForTask(
+  taskId: string,
+  date: string,
+  publicHolidays: PublicHoliday[] = [],
+  options: Partial<GenerationOptions> = {}
+): Promise<TaskGenerationResult> {
+  const generator = createTaskInstanceGenerator(publicHolidays)
+  const result = await generator.generateForDate({
+    date,
+    maxTasks: 1,
+    ...options
+  })
+  
+  const taskResult = result.tasks.find(t => t.taskId === taskId)
+  return taskResult || {
+    taskId,
+    taskTitle: 'Unknown Task',
+    isDue: false,
+    instanceCreated: false,
+    error: 'Task not found'
+  }
+}
+
+/**
+ * Run daily generation job
+ */
+export async function runDailyGeneration(
+  options: Partial<GenerationOptions> = {}
+): Promise<GenerationResult> {
+  // Fetch holidays from database
+  const { data: holidays } = await supabase
+    .from('public_holidays')
+    .select('*')
+    .order('date', { ascending: true })
+
+  return generateForToday(holidays || [], options)
+}
+
+/**
+ * Generate task instances for a specific date
+ */
+export async function generateTaskInstances(
+  date: string,
+  options: Partial<GenerationOptions> = {}
+): Promise<GenerationResult> {
+  // Fetch holidays from database
+  const { data: holidays } = await supabase
+    .from('public_holidays')
+    .select('*')
+    .order('date', { ascending: true })
+
+  const generator = createTaskInstanceGenerator(holidays || [])
+  return generator.generateForDate({
+    date,
+    ...options
+  })
+}
+
 // ========================================
 // EXPORTS
 // ========================================

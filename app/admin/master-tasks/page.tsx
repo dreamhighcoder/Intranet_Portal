@@ -1206,9 +1206,9 @@ export default function AdminMasterTasksPage() {
                         <TableHead>Responsibilities</TableHead>
                         <TableHead>Frequencies</TableHead>
                         <TableHead>Categories</TableHead>
-                        <TableHead>Status</TableHead>
-                        <TableHead>Due Time</TableHead>
-                        <TableHead>Actions</TableHead>
+                        <TableHead className="text-center">Status</TableHead>
+                        <TableHead className="text-center">Due Time</TableHead>
+                        <TableHead className="text-center">Actions</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>

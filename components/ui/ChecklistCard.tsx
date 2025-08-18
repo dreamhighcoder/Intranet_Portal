@@ -31,7 +31,7 @@ export default function ChecklistCard({
   icon: Icon, 
   iconBg 
 }: ChecklistCardProps) {
-  const { user } = usePositionAuth()
+  const { user, isLoading: authLoading } = usePositionAuth()
   const router = useRouter()
   const [taskCounts, setTaskCounts] = useState<TaskCounts>({
     total: 0,
@@ -50,59 +50,37 @@ export default function ChecklistCard({
         setError(null)
         
         const today = new Date().toISOString().split('T')[0]
-        const response = await fetch(`/api/checklist?role=${role}&date=${today}`)
         
-        if (!response.ok) {
-          throw new Error('Failed to fetch task counts')
-        }
-        
-        const data = await response.json()
-        
-        if (!data.success) {
-          throw new Error(data.error || 'Failed to fetch task counts')
-        }
-        
-        const tasks = data.data || []
-        const now = new Date()
-        const nineAM = new Date()
-        nineAM.setHours(9, 0, 0, 0)
-        
-        // Calculate task counts
-        const counts: TaskCounts = {
-          total: tasks.length,
-          newSinceNine: 0,
-          dueToday: 0,
-          overdue: 0,
-          completed: 0
-        }
-        
-        tasks.forEach((task: any) => {
-          // Count completed tasks
-          if (task.status === 'completed') {
-            counts.completed++
-          }
-          
-          // Count tasks due today (not completed)
-          if (task.status !== 'completed') {
-            counts.dueToday++
-            
-            // Check if overdue (past due time on today's date)
-            if (task.master_task?.due_time) {
-              const dueTime = new Date(`${today}T${task.master_task.due_time}`)
-              if (now > dueTime) {
-                counts.overdue++
-              }
-            }
-            
-            // Count new tasks since 9 AM (created or appeared after 9 AM)
-            const taskCreatedAt = new Date(task.created_at)
-            if (taskCreatedAt > nineAM) {
-              counts.newSinceNine++
-            }
-          }
+        // Use public API for task counts (no authentication required)
+        const queryParams = new URLSearchParams({
+          date: today,
+          position_id: positionId
         })
         
-        setTaskCounts(counts)
+        // If role is a responsibility value, use responsibility filtering
+        const responsibilityValues = [
+          'pharmacist-primary', 'pharmacist-supporting', 'pharmacy-assistants',
+          'dispensary-technicians', 'daa-packers', 'shared-exc-pharmacist',
+          'shared-inc-pharmacist', 'operational-managerial'
+        ]
+        
+        if (responsibilityValues.includes(role)) {
+          queryParams.set('responsibility', role)
+        }
+        
+        const response = await fetch(`/api/public/task-counts?${queryParams.toString()}`)
+        
+        if (!response.ok) {
+          throw new Error(`API request failed: ${response.status} ${response.statusText}`)
+        }
+        
+        const result = await response.json()
+        
+        if (!result.success) {
+          throw new Error(result.error || 'Failed to fetch task counts')
+        }
+        
+        setTaskCounts(result.data)
       } catch (err) {
         console.error('Error fetching task counts:', err)
         setError(err instanceof Error ? err.message : 'Failed to fetch task counts')
@@ -111,20 +89,16 @@ export default function ChecklistCard({
       }
     }
 
-    // Only fetch if user is not authenticated (for public homepage)
-    if (!user) {
-      fetchTaskCounts()
-    }
-  }, [role, user])
+    // Always fetch task counts for the homepage cards
+    fetchTaskCounts()
+  }, [role, positionId])
 
   const handleOpenChecklist = () => {
     router.push(`/checklist?position=${positionId}`)
   }
 
-  // Don't show card if no tasks and user is not authenticated
-  if (!user && !loading && taskCounts.total === 0) {
-    return null
-  }
+  // Always show card, but make it inactive if no tasks
+  const hasNoTasks = !loading && taskCounts.total === 0
 
   const getAlertLevel = () => {
     if (taskCounts.overdue > 0) return 'high'
@@ -153,9 +127,9 @@ export default function ChecklistCard({
 
   const getAlertMessage = (level: string) => {
     switch (level) {
-      case 'high': return `${taskCounts.overdue} overdue task${taskCounts.overdue !== 1 ? 's' : ''}`
-      case 'medium': return `${taskCounts.dueToday} task${taskCounts.dueToday !== 1 ? 's' : ''} due today`
-      case 'low': return `${taskCounts.newSinceNine} new task${taskCounts.newSinceNine !== 1 ? 's' : ''} since 9:00 AM`
+      case 'high': return `${taskCounts.overdue} tasks overdue`
+      case 'medium': return `${taskCounts.dueToday} tasks due today`
+      case 'low': return `New task(s)!`
       default: return 'All caught up!'
     }
   }
@@ -163,12 +137,12 @@ export default function ChecklistCard({
   const alertLevel = getAlertLevel()
 
   return (
-    <Card className="card-surface hover:shadow-lg transition-all duration-200 group flex flex-col h-full">
+    <Card className={`card-surface hover:shadow-lg transition-all duration-200 group flex flex-col h-full ${hasNoTasks ? 'opacity-60' : ''}`}>
       <CardHeader className="pb-3">
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-3">
             <div
-              className="p-2 rounded-lg text-white group-hover:scale-110 transition-transform"
+              className={`p-2 rounded-lg text-white group-hover:scale-110 transition-transform ${hasNoTasks ? 'opacity-50' : ''}`}
               style={{ backgroundColor: iconBg }}
             >
               <Icon className="h-5 w-5" />
@@ -179,7 +153,7 @@ export default function ChecklistCard({
           </div>
           
           {/* Alert Badge */}
-          {alertLevel !== 'none' && (
+          {!hasNoTasks && alertLevel !== 'none' && (
             <Badge className={`${getAlertColor(alertLevel)} border`}>
               <div className="flex items-center space-x-1">
                 {getAlertIcon(alertLevel)}
@@ -210,38 +184,39 @@ export default function ChecklistCard({
           </div>
         ) : (
           <>
-            {/* Task Summary */}
+            {/* Task Summary - Always show the four key alerts */}
             <div className="mb-4 space-y-2">
+              {/* New tasks alert */}
+              {taskCounts.newSinceNine > 0 && (
+                <div className="flex items-center justify-between text-sm p-2 bg-blue-50 rounded border-l-4 border-blue-400">
+                  <span className="text-blue-700 font-medium">New task(s)!</span>
+                  <span className="text-blue-600 font-semibold">{taskCounts.newSinceNine}</span>
+                </div>
+              )}
+              
+              {/* Total tasks to do */}
               <div className="flex items-center justify-between text-sm">
-                <span className="text-gray-600">Total Tasks:</span>
+                <span className="text-gray-600">{taskCounts.total} tasks to do</span>
                 <span className="font-medium">{taskCounts.total}</span>
               </div>
               
+              {/* Tasks due today */}
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-orange-600">{taskCounts.dueToday} tasks due today</span>
+                <span className="font-medium text-orange-600">{taskCounts.dueToday}</span>
+              </div>
+              
+              {/* Overdue tasks */}
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-red-600">{taskCounts.overdue} tasks overdue</span>
+                <span className="font-medium text-red-600">{taskCounts.overdue}</span>
+              </div>
+              
+              {/* Completed tasks (if any) */}
               {taskCounts.completed > 0 && (
                 <div className="flex items-center justify-between text-sm">
                   <span className="text-green-600">Completed:</span>
                   <span className="font-medium text-green-600">{taskCounts.completed}</span>
-                </div>
-              )}
-              
-              {taskCounts.dueToday > 0 && (
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-orange-600">Due Today:</span>
-                  <span className="font-medium text-orange-600">{taskCounts.dueToday}</span>
-                </div>
-              )}
-              
-              {taskCounts.overdue > 0 && (
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-red-600">Overdue:</span>
-                  <span className="font-medium text-red-600">{taskCounts.overdue}</span>
-                </div>
-              )}
-              
-              {taskCounts.newSinceNine > 0 && (
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-blue-600">New Since 9:00 AM:</span>
-                  <span className="font-medium text-blue-600">{taskCounts.newSinceNine}</span>
                 </div>
               )}
             </div>
@@ -250,9 +225,9 @@ export default function ChecklistCard({
             <Button
               onClick={handleOpenChecklist}
               className="w-full bg-[var(--color-primary)] hover:bg-[var(--color-primary)]/90 text-[var(--color-primary-on)] border-0 mt-auto"
-              disabled={taskCounts.total === 0}
+              disabled={hasNoTasks}
             >
-              {taskCounts.total === 0 ? 'No Tasks' : 'Open Checklist'}
+              {hasNoTasks ? 'No Tasks Available' : 'Open Checklist'}
             </Button>
           </>
         )}

@@ -1,182 +1,181 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/auth-middleware'
-import { supabase } from '@/lib/supabase'
+import { createClient } from '@supabase/supabase-js'
+
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
+const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
+const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey)
 
 export async function GET(request: NextRequest) {
   try {
-    // Authenticate the request
+    // Require authentication
     const user = await requireAuth(request)
-    
+
     const searchParams = request.nextUrl.searchParams
     const taskInstanceId = searchParams.get('task_instance_id')
-    const role = searchParams.get('role')
+    const userId = searchParams.get('user_id')
     const startDate = searchParams.get('start_date')
     const endDate = searchParams.get('end_date')
-    const limit = parseInt(searchParams.get('limit') || '100')
-    
-    let query = supabase
-      .from('audit_log')
+    const limit = parseInt(searchParams.get('limit') || '50')
+
+    let query = supabaseAdmin
+      .from('task_completion_log')
       .select(`
-        id,
-        task_instance_id,
-        user_id,
-        action,
-        old_values,
-        new_values,
-        metadata,
-        created_at,
-        user_profiles!inner (
+        *,
+        task_instances!inner (
           id,
-          display_name
+          master_tasks!inner (
+            id,
+            title,
+            positions (
+              id,
+              name
+            )
+          )
+        ),
+        user_profiles (
+          id,
+          display_name,
+          positions (
+            id,
+            name
+          )
         )
       `)
-      .in('action', ['completed', 'uncompleted'])
       .order('created_at', { ascending: false })
       .limit(limit)
-    
-    // Apply filters
+
+    // Filter by task instance if provided
     if (taskInstanceId) {
       query = query.eq('task_instance_id', taskInstanceId)
     }
-    
+
+    // Filter by user if provided
+    if (userId) {
+      query = query.eq('user_id', userId)
+    }
+
+    // Filter by date range if provided
     if (startDate) {
-      query = query.gte('created_at', startDate)
+      query = query.gte('completion_time', startDate)
     }
-    
     if (endDate) {
-      query = query.lte('created_at', endDate)
+      query = query.lte('completion_time', endDate)
     }
-    
-    const { data: auditLogs, error } = await query
-    
+
+    const { data: completionLogs, error } = await query
+
     if (error) {
-      console.error('Error fetching audit logs:', error)
-      return NextResponse.json({ error: 'Failed to fetch audit logs' }, { status: 500 })
+      console.error('Error fetching completion logs:', error)
+      return NextResponse.json({ error: 'Failed to fetch completion logs' }, { status: 500 })
     }
-    
-    // If role filter is specified, we need to join with checklist instances to filter by role
-    let filteredLogs = auditLogs || []
-    
-    if (role) {
-      const taskInstanceIds = filteredLogs.map(log => log.task_instance_id)
-      
-      if (taskInstanceIds.length > 0) {
-        const { data: instances } = await supabase
-          .from('checklist_instances')
-          .select('id, role')
-          .in('id', taskInstanceIds)
-          .eq('role', role)
-        
-        const roleInstanceIds = new Set(instances?.map(i => i.id) || [])
-        filteredLogs = filteredLogs.filter(log => roleInstanceIds.has(log.task_instance_id))
-      }
-    }
-    
-    // Transform the data for better readability
-    const transformedLogs = filteredLogs.map(log => ({
-      id: log.id,
-      task_instance_id: log.task_instance_id,
-      user_id: log.user_id,
-      user_name: log.user_profiles?.display_name || 'Unknown User',
-      action: log.action,
-      old_status: log.old_values?.status,
-      new_status: log.new_values?.status,
-      timestamp: log.created_at,
-      metadata: log.metadata
-    }))
-    
+
     return NextResponse.json({
       success: true,
-      data: transformedLogs,
+      data: completionLogs || [],
       meta: {
-        total: transformedLogs.length,
-        limit,
-        filters: {
-          task_instance_id: taskInstanceId,
-          role,
-          start_date: startDate,
-          end_date: endDate
-        }
+        total: completionLogs?.length || 0,
+        limit
       }
     })
-    
   } catch (error) {
-    console.error('Audit API error:', error)
-    
-    if (error instanceof Error) {
-      if (error.message.includes('Authentication')) {
-        return NextResponse.json({ error: error.message }, { status: 401 })
-      }
+    console.error('Completion log API error:', error)
+    if (error instanceof Error && error.message.includes('Authentication')) {
+      return NextResponse.json({ error: 'Authentication required' }, { status: 401 })
     }
-    
-    return NextResponse.json({ 
-      error: 'Internal server error',
-      details: error instanceof Error ? error.message : 'Unknown error'
-    }, { status: 500 })
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }
 
 export async function POST(request: NextRequest) {
   try {
-    // Authenticate the request
+    // Require authentication
     const user = await requireAuth(request)
-    
+
     const body = await request.json()
-    const { 
-      task_instance_id, 
-      action, 
-      old_values, 
-      new_values, 
-      metadata = {} 
-    } = body
-    
-    // Validate required fields
-    if (!task_instance_id || !action) {
-      return NextResponse.json({ 
-        error: 'Missing required fields: task_instance_id, action' 
-      }, { status: 400 })
+    const { task_instance_id, action, completion_time, notes } = body
+
+    if (!task_instance_id || !action || !completion_time) {
+      return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
     }
-    
-    // Insert audit log entry
-    const { data: auditLog, error } = await supabase
-      .from('audit_log')
+
+    if (!['completed', 'uncompleted'].includes(action)) {
+      return NextResponse.json({ error: 'Invalid action' }, { status: 400 })
+    }
+
+    // Get the task instance to calculate time to complete
+    const { data: taskInstance, error: taskError } = await supabaseAdmin
+      .from('task_instances')
+      .select('created_at, due_date, due_time')
+      .eq('id', task_instance_id)
+      .single()
+
+    if (taskError || !taskInstance) {
+      return NextResponse.json({ error: 'Task instance not found' }, { status: 404 })
+    }
+
+    // Calculate time to complete if this is a completion action
+    let timeToComplete = null
+    if (action === 'completed') {
+      const createdAt = new Date(taskInstance.created_at)
+      const completedAt = new Date(completion_time)
+      const diffMs = completedAt.getTime() - createdAt.getTime()
+      
+      // Convert to PostgreSQL interval format (e.g., "1 day 2 hours 30 minutes")
+      const days = Math.floor(diffMs / (1000 * 60 * 60 * 24))
+      const hours = Math.floor((diffMs % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60))
+      const minutes = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60))
+      
+      const parts = []
+      if (days > 0) parts.push(`${days} day${days !== 1 ? 's' : ''}`)
+      if (hours > 0) parts.push(`${hours} hour${hours !== 1 ? 's' : ''}`)
+      if (minutes > 0) parts.push(`${minutes} minute${minutes !== 1 ? 's' : ''}`)
+      
+      timeToComplete = parts.join(' ') || '0 minutes'
+    }
+
+    // Insert completion log entry
+    const { data: completionLog, error: insertError } = await supabaseAdmin
+      .from('task_completion_log')
       .insert([{
         task_instance_id,
         user_id: user.id,
         action,
-        old_values: old_values || {},
-        new_values: new_values || {},
-        metadata: {
-          ...metadata,
-          timestamp: new Date().toISOString(),
-          user_agent: request.headers.get('user-agent') || 'Unknown'
-        }
+        completion_time,
+        time_to_complete: timeToComplete,
+        notes
       }])
-      .select()
+      .select(`
+        *,
+        task_instances (
+          id,
+          master_tasks (
+            id,
+            title
+          )
+        ),
+        user_profiles (
+          id,
+          display_name
+        )
+      `)
       .single()
-    
-    if (error) {
-      console.error('Error creating audit log:', error)
-      return NextResponse.json({ error: 'Failed to create audit log' }, { status: 500 })
+
+    if (insertError) {
+      console.error('Error creating completion log:', insertError)
+      return NextResponse.json({ error: 'Failed to create completion log' }, { status: 500 })
     }
-    
+
     return NextResponse.json({
       success: true,
-      data: auditLog
-    })
-    
+      data: completionLog,
+      message: `Task ${action} logged successfully`
+    }, { status: 201 })
   } catch (error) {
-    console.error('Audit creation error:', error)
-    
-    if (error instanceof Error) {
-      if (error.message.includes('Authentication')) {
-        return NextResponse.json({ error: error.message }, { status: 401 })
-      }
+    console.error('Completion log creation error:', error)
+    if (error instanceof Error && error.message.includes('Authentication')) {
+      return NextResponse.json({ error: 'Authentication required' }, { status: 401 })
     }
-    
-    return NextResponse.json({ 
-      error: 'Internal server error',
-      details: error instanceof Error ? error.message : 'Unknown error'
-    }, { status: 500 })
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }

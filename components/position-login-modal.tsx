@@ -248,7 +248,7 @@ export function PositionLoginModal({
             className="w-full bg-[var(--color-primary)] hover:bg-[var(--color-primary)]/90 text-[var(--color-primary-on)] border-0"
             disabled={isSubmitting}
           >
-            {isSubmitting ? "Signing in..." : "Login"}
+            {isSubmitting ? "logging in..." : "Login"}
           </Button>
         </form>
 
@@ -257,7 +257,7 @@ export function PositionLoginModal({
           <div className="mt-6 p-4 bg-[var(--color-tertiary)] rounded-lg">
             <p className="text-sm text-[var(--color-text)] mb-2 font-medium">Demo Passwords:</p>
             <div className="text-xs space-y-1 text-[var(--color-text-muted)]">
-              <p>Administrator: Any admin password from your database</p>
+              <p>Administrator: admin123</p>
               <p>Pharmacist (Primary): pharmprim123</p>
               <p>Pharmacist (Supporting): pharmsup123</p>
               <p>Pharmacy Assistants: assistant123</p>

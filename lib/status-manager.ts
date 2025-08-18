@@ -729,6 +729,69 @@ export async function updateStatusesForYesterday(
   })
 }
 
+/**
+ * Update a specific task instance status
+ */
+export async function updateSpecificTaskStatus(
+  taskInstanceId: string, 
+  newStatus: ChecklistInstanceStatus, 
+  userId?: string
+): Promise<boolean> {
+  try {
+    const updateData: any = {
+      status: newStatus,
+      updated_at: new Date().toISOString()
+    }
+
+    if (newStatus === 'completed') {
+      updateData.completed_at = new Date().toISOString()
+      updateData.completed_by = userId
+    } else if (newStatus !== 'completed') {
+      // Clear completion data if not completed
+      updateData.completed_at = null
+      updateData.completed_by = null
+    }
+
+    const { error } = await supabase
+      .from('task_instances')
+      .update(updateData)
+      .eq('id', taskInstanceId)
+
+    if (error) {
+      console.error('Error updating task status:', error)
+      return false
+    }
+
+    return true
+  } catch (error) {
+    console.error('Error in updateSpecificTaskStatus:', error)
+    return false
+  }
+}
+
+/**
+ * Run status update job for all instances
+ */
+export async function runStatusUpdateJob(
+  options: Partial<StatusUpdateOptions> = {}
+): Promise<StatusUpdateResult> {
+  return updateStatusesForToday(options)
+}
+
+/**
+ * Update task statuses for a specific date
+ */
+export async function updateTaskStatuses(
+  date?: string,
+  options: Partial<StatusUpdateOptions> = {}
+): Promise<StatusUpdateResult> {
+  const manager = createStatusManager()
+  return manager.updateStatusesForDate({
+    date: date || new Date().toISOString().split('T')[0],
+    ...options
+  })
+}
+
 // ========================================
 // EXPORTS
 // ========================================
