@@ -27,7 +27,6 @@ export async function POST(request: NextRequest) {
     })
 
   } catch (error) {
-    console.error('Error in update-statuses job:', error)
     return NextResponse.json(
       { 
         error: 'Status update failed', 
@@ -56,7 +55,6 @@ export async function GET() {
     })
 
   } catch (error) {
-    console.error('Error in manual status update trigger:', error)
     return NextResponse.json(
       { 
         error: 'Status update failed', 

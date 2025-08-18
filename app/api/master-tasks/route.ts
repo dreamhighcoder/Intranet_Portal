@@ -213,9 +213,55 @@ export async function POST(request: NextRequest) {
     if (!mappedPositionId && responsibility && responsibility.length > 0) {
       mappedPositionId = responsibilityToPositionMap[responsibility[0]]
     }
-    // Default to primary pharmacist if no mapping found
-    if (!mappedPositionId) {
-      mappedPositionId = '550e8400-e29b-41d4-a716-446655440001'
+    
+    // Validate that the position exists before using it
+    if (mappedPositionId) {
+      const { data: positionExists, error: positionError } = await supabase
+        .from('positions')
+        .select('id')
+        .eq('id', mappedPositionId)
+        .single()
+      
+      if (positionError || !positionExists) {
+        console.error('Position validation failed:', {
+          position_id: mappedPositionId,
+          error: positionError?.message
+        })
+        
+        // Try to get the first available position as fallback
+        const { data: firstPosition, error: firstPositionError } = await supabase
+          .from('positions')
+          .select('id')
+          .limit(1)
+          .single()
+        
+        if (firstPositionError || !firstPosition) {
+          return NextResponse.json({ 
+            error: 'No valid positions found in database. Please ensure positions are properly configured.',
+            details: 'Run "npm run check-positions" to diagnose and fix position issues.'
+          }, { status: 400 })
+        }
+        
+        mappedPositionId = firstPosition.id
+        console.log('Using fallback position:', mappedPositionId)
+      }
+    } else {
+      // No position specified, get the first available position
+      const { data: firstPosition, error: firstPositionError } = await supabase
+        .from('positions')
+        .select('id')
+        .limit(1)
+        .single()
+      
+      if (firstPositionError || !firstPosition) {
+        return NextResponse.json({ 
+          error: 'No positions found in database. Please ensure positions are properly configured.',
+          details: 'Run "npm run check-positions" to diagnose and fix position issues.'
+        }, { status: 400 })
+      }
+      
+      mappedPositionId = firstPosition.id
+      console.log('Using first available position:', mappedPositionId)
     }
 
     // Map timing values from TaskForm to database values

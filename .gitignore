@@ -32,3 +32,32 @@ next-env.d.ts
 *.swp
 *.swo
 *~
+
+# Debug and test files
+test-*.js
+*-test.js
+*.test.js
+__tests__/
+*.spec.ts
+*.spec.js
+
+# AI assistant configurations
+.continue/
+.zencoder/
+.cursor/
+
+# Temporary files
+*.tmp
+*.temp
+temp/
+tmp/
+
+# Log files
+*.log
+logs/
+
+# Database debug scripts
+*-debug.sql
+*-test.sql
+check-*.ts
+fix-*.ts

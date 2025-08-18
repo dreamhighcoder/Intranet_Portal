@@ -15,17 +15,11 @@ export async function getAuthUser(request: NextRequest): Promise<AuthUser | null
     const authHeader = request.headers.get('authorization')
     const positionAuthHeader = request.headers.get('x-position-auth')
     
-    console.log('Auth middleware - Authorization header present:', !!authHeader)
-    console.log('Auth middleware - Position auth header:', positionAuthHeader)
-    console.log('Auth middleware - All headers:', Object.fromEntries(request.headers.entries()))
-    
     // Handle position-based authentication first
     if (positionAuthHeader === 'true') {
       const userId = request.headers.get('x-position-user-id')
       const userRole = request.headers.get('x-position-user-role') as 'admin' | 'viewer'
       const displayName = request.headers.get('x-position-display-name')
-      
-      console.log('Auth middleware - Position auth data:', { userId, userRole, displayName })
       
       if (userId && userRole) {
         return {
@@ -37,47 +31,29 @@ export async function getAuthUser(request: NextRequest): Promise<AuthUser | null
         }
       }
       
-      console.log('Auth middleware - Invalid position auth data')
       return null
     }
     
     // Handle Supabase Bearer token authentication
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      console.log('Auth middleware - Missing or invalid authorization header, returning null')
       return null
     }
 
     const token = authHeader.substring(7)
-    console.log('Auth middleware - Token length:', token.length)
-    console.log('Auth middleware - Token preview:', token.substring(0, 30) + '...')
     
     // Create server supabase client with the JWT token
     const supabase = createServerSupabaseClient()
     
     // Set the JWT token for this request
-    console.log('Auth middleware - Setting session with token')
     const sessionResult = await supabase.auth.setSession({
       access_token: token,
       refresh_token: ''
     })
     
-    console.log('Auth middleware - Set session result:', {
-      success: !sessionResult.error,
-      error: sessionResult.error?.message,
-      userExists: !!sessionResult.data?.user
-    })
-    
     // Verify the JWT token with Supabase
     const { data: { user }, error } = await supabase.auth.getUser()
     
-    console.log('Auth middleware - Supabase getUser result:', {
-      userFound: !!user,
-      userEmail: user?.email,
-      error: error?.message
-    })
-    
     if (error || !user) {
-      console.log('Auth middleware - User verification failed:', error?.message)
       return null
     }
 
@@ -88,19 +64,9 @@ export async function getAuthUser(request: NextRequest): Promise<AuthUser | null
       .eq('id', user.id)
       .single()
 
-    console.log('Auth middleware - User profile lookup:', {
-      userId: user.id,
-      userEmail: user.email,
-      profileFound: !!profile,
-      profileError: profileError?.message,
-      profileRole: profile?.role
-    })
-
     // If profile doesn't exist, create one
     if (!profile && (profileError?.code === 'PGRST116' || profileError?.message?.includes('No rows'))) {
       const isAdmin = user.email?.includes('admin') || false
-      
-      console.log('Creating new user profile for:', user.email, 'isAdmin:', isAdmin)
       
       const { data: newProfile, error: createError } = await supabase
         .from('user_profiles')
@@ -117,7 +83,6 @@ export async function getAuthUser(request: NextRequest): Promise<AuthUser | null
         .single()
 
       if (createError) {
-        console.error('Error creating user profile in middleware:', createError)
         // Try to fetch the profile one more time in case it was created by another request
         const { data: retryProfile } = await supabase
           .from('user_profiles')
@@ -127,11 +92,9 @@ export async function getAuthUser(request: NextRequest): Promise<AuthUser | null
         
         if (retryProfile) {
           profile = retryProfile
-          console.log('Found existing profile on retry:', profile)
         }
       } else {
         profile = newProfile
-        console.log('Successfully created new user profile:', profile)
       }
     }
 
@@ -149,20 +112,12 @@ export async function getAuthUser(request: NextRequest): Promise<AuthUser | null
 }
 
 export async function requireAuth(request: NextRequest): Promise<AuthUser> {
-  console.log('requireAuth - Starting authentication check')
   const user = await getAuthUser(request)
-  console.log('requireAuth - getAuthUser result:', {
-    userFound: !!user,
-    userEmail: user?.email,
-    userRole: user?.role
-  })
   
   if (!user) {
-    console.log('requireAuth - Authentication failed, throwing error')
     throw new Error('Authentication required')
   }
   
-  console.log('requireAuth - Authentication successful for:', user.email)
   return user
 }
 

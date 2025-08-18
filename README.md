@@ -13,19 +13,32 @@ This application allows pharmacists to track, manage, and complete daily tasks w
 
 ## 🚀 Quick Setup
 
-See **[SETUP.md](SETUP.md)** for complete setup instructions.
-
 **Prerequisites:** Node.js 18+ and pnpm, Supabase account
 
-**Quick Start:**
-1. Create Supabase project and configure authentication
-2. Run 4 SQL scripts in order (schema → policies → data → verify)
-3. Create admin user and start development
+**Setup Steps:**
+1. Clone repository and install dependencies:
+   ```bash
+   pnpm install
+   ```
 
-```bash
-pnpm install
-pnpm run dev
-```
+2. Set up environment variables:
+   ```bash
+   cp .env.template .env.local
+   # Edit .env.local with your Supabase credentials
+   ```
+
+3. Set up database (run SQL scripts in Supabase Dashboard in order):
+   ```bash
+   # 1. supabase/schema.sql - Database schema
+   # 2. supabase/rls-policies.sql - Security policies  
+   # 3. supabase/seed-data.sql - Initial data
+   # 4. supabase/verify-setup.sql - Verification
+   ```
+
+4. Start development server:
+   ```bash
+   pnpm run dev
+   ```
 
 Visit http://localhost:3000/login with your admin credentials.
 
@@ -105,6 +118,12 @@ Supports complex scheduling patterns:
 - **Users:** Can read own profile, update task completions
 
 ## 🚀 Production Scripts
+
+### Database Setup
+```bash
+# Set up database schema and initial data
+pnpm run setup-db
+```
 
 ### Automated Background Jobs
 ```bash

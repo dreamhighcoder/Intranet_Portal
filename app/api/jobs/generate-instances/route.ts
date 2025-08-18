@@ -48,7 +48,6 @@ export async function POST(request: NextRequest) {
     })
 
   } catch (error) {
-    console.error('Error in generate-instances job:', error)
     return NextResponse.json(
       { 
         error: 'Instance generation failed', 
@@ -71,14 +70,10 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Admin access required' }, { status: 403 })
     }
     
-    console.log('Generate instances GET - Admin user authenticated:', user.email)
-    
     const { searchParams } = new URL(request.url)
     const mode = searchParams.get('mode') || 'custom'
     const masterTaskId = searchParams.get('masterTaskId') || undefined
     const forceRegenerate = searchParams.get('forceRegenerate') === 'true'
-
-    console.log('Generate instances GET - Parameters:', { mode, masterTaskId, forceRegenerate })
 
     let result
     
@@ -90,8 +85,6 @@ export async function GET(request: NextRequest) {
         forceRegenerate
       })
     }
-
-    console.log('Generate instances GET - Result:', result)
 
     return NextResponse.json({
       success: result.success,
@@ -105,8 +98,6 @@ export async function GET(request: NextRequest) {
     })
 
   } catch (error) {
-    console.error('Error in manual generate-instances trigger:', error)
-    
     if (error instanceof Error && error.message.includes('Authentication')) {
       return NextResponse.json({ error: 'Authentication required' }, { status: 401 })
     }
