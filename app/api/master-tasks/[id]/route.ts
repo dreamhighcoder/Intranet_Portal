@@ -123,7 +123,7 @@ export async function PUT(
       updateData.category = category
     }
 
-    const { data: masterTask, error } = await supabase
+    let { data: masterTask, error } = await supabase
       .from('master_tasks')
       .update(updateData)
       .eq('id', params.id)
@@ -135,6 +135,40 @@ export async function PUT(
         )
       `)
       .single()
+
+    // Handle schema cache issue with default_due_time column
+    if (error && error.message.includes('default_due_time')) {
+      console.log('Schema cache issue detected - retrying without default_due_time field')
+      
+      // Remove the problematic field and retry
+      const { default_due_time, ...updateDataWithoutDueTime } = updateData
+      
+      const retryResult = await supabase
+        .from('master_tasks')
+        .update(updateDataWithoutDueTime)
+        .eq('id', params.id)
+        .select(`
+          *,
+          positions (
+            id,
+            name
+          )
+        `)
+        .single()
+      
+      if (retryResult.error) {
+        console.error('Master task update retry failed:', retryResult.error)
+        return NextResponse.json({ 
+          error: 'Failed to update master task',
+          schemaIssue: 'The default_due_time column is not available in the schema cache. Please refresh your database schema.'
+        }, { status: 500 })
+      }
+      
+      masterTask = retryResult.data
+      error = null
+      
+      console.log('Master task updated successfully without default_due_time field')
+    }
 
     if (error) {
       console.error('Error updating master task:', error)

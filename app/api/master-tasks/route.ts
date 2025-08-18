@@ -262,7 +262,7 @@ export async function POST(request: NextRequest) {
 
     console.log('Master task POST - Inserting with frequency:', legacyFrequency, 'timing:', mappedTiming)
 
-    const { data: masterTask, error } = await supabase
+    let { data: masterTask, error } = await supabase
       .from('master_tasks')
       .insert([insertData])
       .select(`
@@ -273,6 +273,42 @@ export async function POST(request: NextRequest) {
         )
       `)
       .single()
+
+    // Handle schema cache issue with default_due_time column
+    if (error && error.message.includes('default_due_time')) {
+      console.log('Schema cache issue detected - retrying without default_due_time field')
+      
+      // Remove the problematic field and retry
+      const { default_due_time, ...insertDataWithoutDueTime } = insertData
+      
+      const retryResult = await supabase
+        .from('master_tasks')
+        .insert([insertDataWithoutDueTime])
+        .select(`
+          *,
+          positions (
+            id,
+            name
+          )
+        `)
+        .single()
+      
+      if (retryResult.error) {
+        console.error('Master task POST - Retry failed:', retryResult.error)
+        return NextResponse.json({ 
+          error: `Database error: ${retryResult.error.message}`,
+          details: retryResult.error.details,
+          hint: retryResult.error.hint,
+          code: retryResult.error.code,
+          schemaIssue: 'The default_due_time column is not available in the schema cache. Please refresh your database schema.'
+        }, { status: 500 })
+      }
+      
+      masterTask = retryResult.data
+      error = null
+      
+      console.log('Master task created successfully without default_due_time field')
+    }
 
     if (error) {
       console.error('Master task POST - Database error:', error)
