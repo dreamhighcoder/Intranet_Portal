@@ -64,10 +64,9 @@ export async function PUT(
     const {
       title,
       description,
-      position_id,
-      responsibility = [],
-      categories = [],
-      frequency_rules,
+      responsibility,
+      categories,
+      frequency,
       timing,
       due_time,
       due_date,
@@ -78,9 +77,10 @@ export async function PUT(
       sticky_once_off,
       allow_edit_when_locked,
       // Legacy fields for backward compatibility
-      frequency,
-      weekdays = [],
-      months = [],
+      position_id,
+      frequency_rules,
+      weekdays,
+      months,
       default_due_time,
       category,
       publish_delay_date
@@ -88,23 +88,33 @@ export async function PUT(
 
     console.log('Master task [id] PUT - Updating with data:', { 
       title, 
-      position_id, 
-      frequency_rules: frequency_rules || { type: frequency },
+      frequency,
       responsibility,
-      categories
+      categories,
+      timing
     })
 
-    // Prepare data for update - support both new and legacy formats
+    // Prepare data for update using new schema
     const updateData: any = {
-      title,
-      description,
-      position_id,
-      timing,
-      publish_status,
-      sticky_once_off,
-      allow_edit_when_locked,
       updated_at: new Date().toISOString()
     }
+
+    // Only add fields that are explicitly provided in the request
+    if (title !== undefined) updateData.title = title
+    if (description !== undefined) updateData.description = description
+    if (frequency !== undefined) updateData.frequency = frequency
+    if (timing !== undefined) updateData.timing = timing
+    if (due_time !== undefined) updateData.due_time = due_time
+    if (due_date !== undefined) updateData.due_date = due_date
+    if (publish_status !== undefined) updateData.publish_status = publish_status
+    if (publish_delay !== undefined) updateData.publish_delay = publish_delay
+    if (responsibility !== undefined) updateData.responsibility = responsibility
+    if (categories !== undefined) updateData.categories = categories
+    if (sticky_once_off !== undefined) updateData.sticky_once_off = sticky_once_off
+    if (allow_edit_when_locked !== undefined) updateData.allow_edit_when_locked = allow_edit_when_locked
+
+    // Legacy field for backward compatibility
+    if (categories !== undefined && categories.length > 0) updateData.category = categories[0]
 
     // Only add start_date and end_date if they have values
     if (start_date) {
@@ -112,29 +122,6 @@ export async function PUT(
     }
     if (end_date) {
       updateData.end_date = end_date
-    }
-
-    // Handle new format
-    if (frequency_rules) {
-      // For now, convert to legacy format until migration is applied
-      updateData.frequency = frequency || 'every_day'
-      updateData.default_due_time = due_time
-      updateData.category = categories && categories.length > 0 ? categories[0] : 'General'
-      updateData.responsibility = responsibility || []
-      updateData.categories = categories || []
-      updateData.frequency_rules = frequency_rules
-      updateData.due_date = due_date
-      updateData.due_time = due_time
-      updateData.publish_delay = publish_delay
-    } else {
-      // Handle legacy format
-      updateData.frequency = frequency
-      updateData.weekdays = weekdays
-      updateData.months = months
-      updateData.default_due_time = default_due_time
-      updateData.category = category
-      updateData.responsibility = responsibility || []
-      updateData.categories = categories || []
     }
 
     let { data: masterTask, error } = await supabase

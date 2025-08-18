@@ -472,6 +472,8 @@ export async function getTasksForRoleOnDate(
   date: string
 ): Promise<{ data: TaskRowWithPosition[]; error: any }> {
   try {
+    // Get all tasks where the role is in the responsibility array
+    // Also check that the task is active and respects publish_delay
     const { data, error } = await supabase
       .from('master_tasks')
       .select(`
@@ -482,7 +484,7 @@ export async function getTasksForRoleOnDate(
           description
         )
       `)
-      .overlaps('responsibility', [role])
+      .overlaps('responsibility', [role, 'Shared (inc. Pharmacist)', 'Shared (exc. Pharmacist)'])
       .eq('publish_status', 'active')
       .or(`publish_delay.is.null,publish_delay.lte.${date}`)
 
@@ -491,7 +493,31 @@ export async function getTasksForRoleOnDate(
       return { data: [], error }
     }
 
-    return { data: data as TaskRowWithPosition[], error: null }
+    // Filter out tasks that shouldn't be visible to this role
+    // For example, if role is not a Pharmacist, filter out 'Shared (inc. Pharmacist)'
+    const filteredData = data.filter(task => {
+      // Check if the task is directly assigned to this role
+      if (task.responsibility.includes(role)) {
+        return true;
+      }
+      
+      // Handle shared responsibilities
+      const isPharmacistRole = role.toLowerCase().includes('pharmacist');
+      
+      // If task is shared including pharmacists, only show to pharmacist roles
+      if (task.responsibility.includes('Shared (inc. Pharmacist)')) {
+        return isPharmacistRole;
+      }
+      
+      // If task is shared excluding pharmacists, only show to non-pharmacist roles
+      if (task.responsibility.includes('Shared (exc. Pharmacist)')) {
+        return !isPharmacistRole;
+      }
+      
+      return false;
+    });
+
+    return { data: filteredData as TaskRowWithPosition[], error: null }
   } catch (error) {
     console.error('Unexpected error getting tasks for role on date:', error)
     return { data: [], error }

@@ -36,31 +36,55 @@ export interface MasterTask {
   id: string
   title: string
   description?: string
-  position_id?: string
+  position_id?: string // Legacy field - kept for backward compatibility
+  responsibility: string[] // Multi-select responsibilities (required)
+  categories: string[] // Multi-select categories (required)
   frequency:
-    | "once_off_sticky"
+    | "once_off"
     | "every_day"
-    | "weekly"
-    | "specific_weekdays"
-    | "start_every_month"
-    | "start_certain_months"
-    | "every_month"
-    | "certain_months"
-    | "end_every_month"
-    | "end_certain_months"
+    | "once_weekly"
+    | "monday"
+    | "tuesday"
+    | "wednesday"
+    | "thursday"
+    | "friday"
+    | "saturday"
+    | "once_monthly"
+    | "start_of_month_jan"
+    | "start_of_month_feb"
+    | "start_of_month_mar"
+    | "start_of_month_apr"
+    | "start_of_month_may"
+    | "start_of_month_jun"
+    | "start_of_month_jul"
+    | "start_of_month_aug"
+    | "start_of_month_sep"
+    | "start_of_month_oct"
+    | "start_of_month_nov"
+    | "start_of_month_dec"
+    | "end_of_month_jan"
+    | "end_of_month_feb"
+    | "end_of_month_mar"
+    | "end_of_month_apr"
+    | "end_of_month_may"
+    | "end_of_month_jun"
+    | "end_of_month_jul"
+    | "end_of_month_aug"
+    | "end_of_month_sep"
+    | "end_of_month_oct"
+    | "end_of_month_nov"
+    | "end_of_month_dec"
   weekdays: number[] // For specific_weekdays frequency (1=Monday, 7=Sunday)
   months: number[] // For month-specific frequencies (1-12)
-  timing?: string
-  default_due_time?: string // HH:MM format
-  due_time?: string // HH:MM format (new field)
+  timing: "opening" | "anytime_during_day" | "before_order_cut_off" | "closing"
+  default_due_time?: string // HH:MM format (legacy)
+  due_time?: string // HH:MM format - auto-filled based on timing or manually set
+  due_date?: string // ISO date string - auto-calculated from frequency (except once-off)
   category?: string // Legacy single category field
-  categories?: string[] // New multiple categories field
-  responsibility?: string[] // New multiple responsibilities field
   frequency_rules?: any // JSONB frequency rules
-  due_date?: string // ISO date string for once-off tasks
   publish_status: "active" | "draft" | "inactive"
-  publish_delay_date?: string
-  publish_delay?: string // New field
+  publish_delay_date?: string // Legacy field
+  publish_delay?: string // Publishing delay date - tasks remain hidden until this date
   start_date?: string // ISO date string
   end_date?: string // ISO date string
   sticky_once_off: boolean
@@ -182,18 +206,42 @@ export type TaskStatus = "not_due" | "due_today" | "overdue" | "missed" | "done"
 export type UserRole = "admin" | "viewer"
 
 export type TaskFrequency =
-  | "once_off_sticky"
+  | "once_off"
   | "every_day"
-  | "weekly"
-  | "specific_weekdays"
-  | "start_every_month"
-  | "start_certain_months"
-  | "every_month"
-  | "certain_months"
-  | "end_every_month"
-  | "end_certain_months"
+  | "once_weekly"
+  | "monday"
+  | "tuesday"
+  | "wednesday"
+  | "thursday"
+  | "friday"
+  | "saturday"
+  | "once_monthly"
+  | "start_of_month_jan"
+  | "start_of_month_feb"
+  | "start_of_month_mar"
+  | "start_of_month_apr"
+  | "start_of_month_may"
+  | "start_of_month_jun"
+  | "start_of_month_jul"
+  | "start_of_month_aug"
+  | "start_of_month_sep"
+  | "start_of_month_oct"
+  | "start_of_month_nov"
+  | "start_of_month_dec"
+  | "end_of_month_jan"
+  | "end_of_month_feb"
+  | "end_of_month_mar"
+  | "end_of_month_apr"
+  | "end_of_month_may"
+  | "end_of_month_jun"
+  | "end_of_month_jul"
+  | "end_of_month_aug"
+  | "end_of_month_sep"
+  | "end_of_month_oct"
+  | "end_of_month_nov"
+  | "end_of_month_dec"
 
-export type TaskTiming = "morning" | "before_close" | "custom"
+export type TaskTiming = "opening" | "anytime_during_day" | "before_order_cut_off" | "closing"
 export type PublishStatus = "active" | "draft" | "inactive"
 
 export interface OutstandingTask extends TaskWithDetails {

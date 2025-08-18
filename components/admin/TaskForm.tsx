@@ -19,50 +19,8 @@ import { DatePicker } from '@/components/ui/date-picker'
 
 import { createRecurrenceEngine } from '@/lib/recurrence-engine'
 import { createHolidayHelper } from '@/lib/public-holidays'
+import { RESPONSIBILITY_OPTIONS, TASK_CATEGORIES, TASK_FREQUENCIES, TASK_TIMINGS, DEFAULT_DUE_TIMES } from '@/lib/constants'
 import type { MasterChecklistTask, CreateMasterTaskRequest, UpdateMasterTaskRequest, FrequencyRule } from '@/types/checklist'
-
-// Define responsibility options
-const RESPONSIBILITY_OPTIONS = [
-  { value: 'pharmacist-primary', label: 'Pharmacist (Primary)' },
-  { value: 'pharmacist-supporting', label: 'Pharmacist (Supporting)' },
-  { value: 'pharmacy-assistants', label: 'Pharmacy Assistant/s' },
-  { value: 'dispensary-technicians', label: 'Dispensary Technician/s' },
-  { value: 'daa-packers', label: 'DAA Packer/s' },
-  { value: 'shared-exc-pharmacist', label: 'Shared (exc. Pharmacist)' },
-  { value: 'shared-inc-pharmacist', label: 'Shared (inc. Pharmacist)' },
-  { value: 'operational-managerial', label: 'Operational/Managerial' }
-]
-
-// Define frequency options
-const FREQUENCY_OPTIONS = [
-  { value: 'once_off', label: 'Once Off', group: 'Basic' },
-  { value: 'daily', label: 'Every Day', group: 'Daily' },
-  { value: 'weekly', label: 'Once Weekly', group: 'Weekly' },
-  { value: 'specific_weekdays', label: 'Every Monday–Saturday', group: 'Weekly' },
-  { value: 'every_month', label: 'Once Monthly', group: 'Monthly' },
-  { value: 'start_of_month', label: 'Start of Month', group: 'Monthly' },
-  { value: 'end_of_month', label: 'End of Month', group: 'Monthly' }
-]
-
-// Define category options
-const CATEGORY_OPTIONS = [
-  { value: 'stock-control', label: 'Stock Control' },
-  { value: 'compliance', label: 'Compliance' },
-  { value: 'cleaning', label: 'Cleaning' },
-  { value: 'pharmacy-services', label: 'Pharmacy Services' },
-  { value: 'fos-operations', label: 'FOS Operations' },
-  { value: 'dispensary-operations', label: 'Dispensary Operations' },
-  { value: 'general-pharmacy-operations', label: 'General Pharmacy Operations' },
-  { value: 'business-management', label: 'Business Management' }
-]
-
-// Define timing options
-const TIMING_OPTIONS = [
-  { value: 'opening', label: 'Opening' },
-  { value: 'anytime', label: 'Anytime During Day' },
-  { value: 'before-cutoff', label: 'Before Order Cut Off' },
-  { value: 'closing', label: 'Closing' }
-]
 
 // Zod schema for form validation
 const taskFormSchema = z.object({
@@ -70,26 +28,25 @@ const taskFormSchema = z.object({
   description: z.string().min(1, 'Description is required').max(200, 'Description must be less than 200 characters'),
   responsibility: z.array(z.string()).min(1, 'At least one responsibility is required'),
   categories: z.array(z.string()).min(1, 'At least one category is required'),
-  timing: z.enum(['opening', 'anytime', 'before-cutoff', 'closing']),
+  timing: z.enum(['opening', 'anytime_during_day', 'before_order_cut_off', 'closing']),
   due_time: z.string().optional(),
   due_date: z.string().optional(),
   publish_status: z.enum(['active', 'inactive', 'draft']),
   publish_delay: z.string().optional(),
-  frequency_type: z.enum([
-    'once_off', 'daily', 'weekly', 'specific_weekdays',
-    'start_of_month', 'end_of_month', 'every_month', 'certain_months'
+  frequency: z.enum([
+    'once_off', 'every_day', 'once_weekly', 'monday', 'tuesday', 'wednesday', 
+    'thursday', 'friday', 'saturday', 'once_monthly', 'start_of_month_jan',
+    'start_of_month_feb', 'start_of_month_mar', 'start_of_month_apr',
+    'start_of_month_may', 'start_of_month_jun', 'start_of_month_jul',
+    'start_of_month_aug', 'start_of_month_sep', 'start_of_month_oct',
+    'start_of_month_nov', 'start_of_month_dec', 'end_of_month_jan',
+    'end_of_month_feb', 'end_of_month_mar', 'end_of_month_apr',
+    'end_of_month_may', 'end_of_month_jun', 'end_of_month_jul',
+    'end_of_month_aug', 'end_of_month_sep', 'end_of_month_oct',
+    'end_of_month_nov', 'end_of_month_dec'
   ]),
-  business_days_only: z.boolean().default(false),
-  every_n_days: z.number().min(1).max(365).optional(),
-  every_n_weeks: z.number().min(1).max(52).optional(),
-  every_n_months: z.number().min(1).max(12).optional(),
-  weekdays: z.array(z.number()).optional(),
-  start_day: z.number().min(1).max(31).optional(),
-  end_day: z.number().min(1).max(31).optional(),
-  months: z.array(z.number()).optional(),
   start_date: z.string().optional(),
-  end_date: z.string().optional(),
-  max_occurrences: z.number().min(1).max(1000).optional()
+  end_date: z.string().optional()
 })
 
 type TaskFormData = z.infer<typeof taskFormSchema>
@@ -115,27 +72,26 @@ export default function TaskForm({ task, onSubmit, onCancel }: TaskFormProps) {
       responsibility: task?.responsibility || [],
       categories: task?.categories || [],
       timing: task?.timing || 'opening',
-      due_time: task?.due_time || '09:00',
+      due_time: task?.due_time || DEFAULT_DUE_TIMES.opening,
       due_date: task?.due_date || '',
       publish_status: task?.publish_status || 'draft',
       publish_delay: task?.publish_delay || '',
-      frequency_type: task?.frequency_rules?.type || 'daily',
-      business_days_only: task?.frequency_rules?.business_days_only || false,
-      every_n_days: task?.frequency_rules?.every_n_days || 1,
-      every_n_weeks: task?.frequency_rules?.every_n_weeks || 1,
-      every_n_months: task?.frequency_rules?.every_n_months || 1,
-      weekdays: task?.frequency_rules?.weekdays || [1, 2, 3, 4, 5],
-      start_day: task?.frequency_rules?.start_day || 1,
-      end_day: task?.frequency_rules?.end_day || 31,
-      months: task?.frequency_rules?.months || [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11],
+      frequency: task?.frequency || 'every_day',
       start_date: task?.start_date || new Date().toISOString().split('T')[0],
-      end_date: task?.end_date || '',
-      max_occurrences: task?.frequency_rules?.max_occurrences
+      end_date: task?.end_date || ''
     }
   })
 
   const { watch, setValue, formState: { errors, isValid } } = form
-  const frequencyType = watch('frequency_type')
+  const frequency = watch('frequency')
+  const timing = watch('timing')
+
+  // Auto-fill due_time based on timing selection
+  React.useEffect(() => {
+    if (timing && DEFAULT_DUE_TIMES[timing as keyof typeof DEFAULT_DUE_TIMES]) {
+      setValue('due_time', DEFAULT_DUE_TIMES[timing as keyof typeof DEFAULT_DUE_TIMES])
+    }
+  }, [timing, setValue])
 
   const generatePreview = async () => {
     setIsGeneratingPreview(true)
@@ -359,7 +315,7 @@ export default function TaskForm({ task, onSubmit, onCancel }: TaskFormProps) {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {TIMING_OPTIONS.map(option => (
+                  {TASK_TIMINGS.map(option => (
                     <SelectItem key={option.value} value={option.value}>
                       {option.label}
                     </SelectItem>
@@ -453,7 +409,7 @@ export default function TaskForm({ task, onSubmit, onCancel }: TaskFormProps) {
                 </PopoverTrigger>
                 <PopoverContent className="w-80 p-2" align="start">
                   <div className="space-y-2">
-                    {CATEGORY_OPTIONS.map(category => (
+                    {TASK_CATEGORIES.map(category => (
                       <div
                         key={category.value}
                         className="flex items-center space-x-2 p-2 hover:bg-gray-50 rounded cursor-pointer"
@@ -479,7 +435,7 @@ export default function TaskForm({ task, onSubmit, onCancel }: TaskFormProps) {
               {/* Selected Categories */}
               <div className="flex flex-wrap gap-2 min-h-[2rem]">
                 {form.watch('categories')?.map(category => {
-                  const categoryObj = CATEGORY_OPTIONS.find(c => c.value === category);
+                  const categoryObj = TASK_CATEGORIES.find(c => c.value === category);
                   return (
                     <Badge 
                       key={category} 
@@ -580,36 +536,52 @@ export default function TaskForm({ task, onSubmit, onCancel }: TaskFormProps) {
         </CardContent>
       </Card>
 
-      {/* Frequency Rules */}
+      {/* Frequency */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center space-x-2">
             <CalendarDays className="h-5 w-5" />
-            <span>Frequency Rules</span>
+            <span>Frequency</span>
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="space-y-3">
-            <Label>Frequency Type *</Label>
+            <Label>Frequency *</Label>
             <Select
-              value={frequencyType}
-              onValueChange={(value) => form.setValue('frequency_type', value as any)}
+              value={frequency}
+              onValueChange={(value) => form.setValue('frequency', value as any)}
             >
               <SelectTrigger>
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="once_off">Once Off</SelectItem>
-                <SelectItem value="daily">Daily</SelectItem>
-                <SelectItem value="weekly">Weekly</SelectItem>
-                <SelectItem value="specific_weekdays">Specific Weekdays</SelectItem>
-                <SelectItem value="start_of_month">Start of Month</SelectItem>
-                <SelectItem value="end_of_month">End of Month</SelectItem>
-                <SelectItem value="every_month">Every Month</SelectItem>
-                <SelectItem value="certain_months">Certain Months</SelectItem>
+                {TASK_FREQUENCIES.map(freq => (
+                  <SelectItem key={freq.value} value={freq.value}>
+                    {freq.label}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </div>
+
+          {/* Show due date field only for once_off frequency */}
+          {frequency === 'once_off' && (
+            <div className="space-y-3">
+              <Label htmlFor="due_date_once_off">Due Date *</Label>
+              <div className="relative">
+                <Calendar className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  id="due_date_once_off"
+                  type="date"
+                  {...form.register('due_date')}
+                  className="pl-10"
+                />
+              </div>
+              <p className="text-xs text-muted-foreground">
+                For once-off tasks, manually enter the due date. For recurring tasks, due dates are auto-calculated.
+              </p>
+            </div>
+          )}
 
           {/* Frequency-specific options */}
           {frequencyType === 'daily' && (

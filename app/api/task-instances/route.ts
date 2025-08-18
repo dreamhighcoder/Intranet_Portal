@@ -66,7 +66,12 @@ export async function GET(request: NextRequest) {
 
     // Filter by responsibility if provided (for new responsibility-based filtering)
     if (responsibility) {
-      query = query.contains('master_tasks.responsibility', [responsibility])
+      // Use overlaps to check if any of the values in the responsibility array match
+      query = query.overlaps('master_tasks.responsibility', [
+        responsibility, 
+        'Shared (inc. Pharmacist)', 
+        'Shared (exc. Pharmacist)'
+      ])
     }
 
     // Filter by status if provided
@@ -76,7 +81,8 @@ export async function GET(request: NextRequest) {
 
     // Filter by category if provided
     if (category && category !== 'all') {
-      query = query.eq('master_tasks.category', category)
+      // Check both legacy category field and new categories array
+      query = query.or(`master_tasks.category.eq.${category},master_tasks.categories.cs.{${category}}`)
     }
 
     // Default ordering - due date first, then time

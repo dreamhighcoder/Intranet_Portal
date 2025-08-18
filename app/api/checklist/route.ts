@@ -86,11 +86,12 @@ export async function GET(request: NextRequest) {
         id: task.master_tasks?.id || task.master_task_id,
         title: task.master_tasks?.title || 'Unknown Task',
         description: task.master_tasks?.description,
-        timing: task.master_tasks?.timing || 'morning',
+        timing: task.master_tasks?.timing || 'anytime',
         due_time: task.master_tasks?.due_time,
         responsibility: task.master_tasks?.responsibility || [role],
         categories: task.master_tasks?.categories || ['general'],
-        frequency_rules: task.master_tasks?.frequency_rules || { type: 'daily' }
+        frequency_rules: task.master_tasks?.frequency_rules || { type: 'daily' },
+        category: task.master_tasks?.category // Include legacy category field for backward compatibility
       }
     }))
     

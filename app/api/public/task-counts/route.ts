@@ -70,7 +70,16 @@ export async function GET(request: NextRequest) {
 
     // Filter by responsibility if provided
     if (responsibility) {
-      query = query.contains('master_tasks.responsibility', [responsibility])
+      // Use overlaps to check if any of the values in the responsibility array match
+      // Include both legacy format and new kebab-case format
+      query = query.overlaps('master_tasks.responsibility', [
+        responsibility, 
+        'shared-inc-pharmacist', 
+        'shared-exc-pharmacist',
+        // Legacy format for backward compatibility
+        'Shared (inc. Pharmacist)', 
+        'Shared (exc. Pharmacist)'
+      ])
     }
 
     // Only show published tasks
@@ -94,6 +103,33 @@ export async function GET(request: NextRequest) {
         }
       })
     }
+    
+    // Filter tasks based on responsibility rules
+    const filteredTaskInstances = responsibility ? taskInstances.filter((task: any) => {
+      const taskResponsibility = task.master_tasks?.responsibility || [];
+      
+      // Check if the task is directly assigned to this role
+      if (taskResponsibility.includes(responsibility)) {
+        return true;
+      }
+      
+      // Handle shared responsibilities (both legacy and new format)
+      const isPharmacistRole = responsibility.toLowerCase().includes('pharmacist');
+      
+      // If task is shared including pharmacists, only show to pharmacist roles
+      if (taskResponsibility.includes('shared-inc-pharmacist') || 
+          taskResponsibility.includes('Shared (inc. Pharmacist)')) {
+        return isPharmacistRole;
+      }
+      
+      // If task is shared excluding pharmacists, only show to non-pharmacist roles
+      if (taskResponsibility.includes('shared-exc-pharmacist') || 
+          taskResponsibility.includes('Shared (exc. Pharmacist)')) {
+        return !isPharmacistRole;
+      }
+      
+      return false;
+    }) : taskInstances;
 
     // Calculate counts
     const now = new Date()
@@ -101,7 +137,7 @@ export async function GET(request: NextRequest) {
     nineAM.setHours(9, 0, 0, 0)
     
     const counts = {
-      total: taskInstances?.length || 0,
+      total: filteredTaskInstances?.length || 0,
       newSinceNine: 0,
       dueToday: 0,
       overdue: 0,
@@ -110,7 +146,7 @@ export async function GET(request: NextRequest) {
       holidayName: null
     }
 
-    taskInstances?.forEach((task: any) => {
+    filteredTaskInstances?.forEach((task: any) => {
       // Count completed tasks
       if (task.status === 'done') {
         counts.completed++

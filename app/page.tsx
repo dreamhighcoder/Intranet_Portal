@@ -39,6 +39,7 @@ export default function HomePage() {
     icon: any
     positionId: string
     iconBg: string
+    responsibility: string
   }>>([])
   
   // Helper function to get position descriptions
@@ -54,6 +55,20 @@ export default function HomePage() {
     
     return descriptions[displayName] || `${displayName} tasks and responsibilities`
   }
+  
+  // Map position names to responsibility values
+  const getResponsibilityValue = (displayName: string): string => {
+    const mapping: Record<string, string> = {
+      "Pharmacist (Primary)": "pharmacist-primary",
+      "Pharmacist (Supporting)": "pharmacist-supporting",
+      "Pharmacy Assistants": "pharmacy-assistants",
+      "Dispensary Technicians": "dispensary-technicians",
+      "DAA Packers": "daa-packers",
+      "Operational/Managerial": "operational-managerial"
+    }
+    
+    return mapping[displayName] || displayName.toLowerCase().replace(/\s+/g, '-')
+  }
 
   // Load positions from database - always show all positions
   useEffect(() => {
@@ -68,7 +83,8 @@ export default function HomePage() {
           description: getPositionDescription(position.displayName),
           icon: iconMap[index % iconMap.length],
           positionId: position.id,
-          iconBg: colorMap[index % colorMap.length]
+          iconBg: colorMap[index % colorMap.length],
+          responsibility: getResponsibilityValue(position.displayName)
         }))
         
         setStaffChecklists(checklists)
@@ -84,7 +100,8 @@ export default function HomePage() {
           description: getPositionDescription(position.displayName),
           icon: iconMap[index % iconMap.length],
           positionId: position.id,
-          iconBg: colorMap[index % colorMap.length]
+          iconBg: colorMap[index % colorMap.length],
+          responsibility: getResponsibilityValue(position.displayName)
         }))
         
         setStaffChecklists(checklists)
@@ -182,7 +199,7 @@ export default function HomePage() {
               return (
                 <ChecklistCard
                   key={checklist.title}
-                  role={checklist.positionId}
+                  role={checklist.responsibility}
                   roleDisplayName={checklist.title.replace("Checklist – ", "")}
                   positionId={checklist.positionId}
                   icon={IconComponent}

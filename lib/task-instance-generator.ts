@@ -129,11 +129,12 @@ export class TaskInstanceGenerator {
     this.log('info', `Mode: ${testMode ? 'TEST' : 'PRODUCTION'}, Dry Run: ${dryRun}, Force: ${forceRegenerate}`)
 
     try {
-      // Step 1: Get all active master tasks
+      // Step 1: Get all active master tasks that respect publish_delay
       const { data: masterTasks, error: tasksError } = await supabase
         .from('master_tasks')
         .select('*')
         .eq('publish_status', 'active')
+        .or(`publish_delay.is.null,publish_delay.lte.${date}`) // Only include tasks that are past their publish delay
         .order('created_at', { ascending: true })
 
       if (tasksError) {
@@ -372,6 +373,21 @@ export class TaskInstanceGenerator {
 
       // Check if task is due on this date
       const checkDate = new Date(date)
+      
+      // First check if it's a holiday - no tasks should appear on holidays
+      const isHoliday = this.recurrenceEngine.holidayHelper.isHoliday(checkDate)
+      if (isHoliday) {
+        return {
+          taskId: masterTask.id,
+          taskTitle: masterTask.title || 'Unknown',
+          isDue: false,
+          instanceCreated: false,
+          skipped: true,
+          reason: 'Date is a public holiday'
+        }
+      }
+      
+      // Then check if the task is due on this date based on recurrence rules
       const isDue = this.recurrenceEngine.isDueOnDate(task, checkDate)
 
       if (!isDue) {

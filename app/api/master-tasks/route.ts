@@ -131,10 +131,9 @@ export async function POST(request: NextRequest) {
     const {
       title,
       description,
-      position_id,
       responsibility = [],
       categories = [],
-      frequency_rules,
+      frequency,
       timing,
       due_time,
       due_date,
@@ -145,55 +144,35 @@ export async function POST(request: NextRequest) {
       sticky_once_off = false,
       allow_edit_when_locked = false,
       // Legacy fields for backward compatibility
-      frequency,
+      position_id,
+      frequency_rules,
       weekdays = [],
       months = [],
       default_due_time,
       category,
       publish_delay_date
     } = body
+    
+    console.log('Request body:', body)
 
-    // Check for required fields - support both new and legacy formats
+    // Check for required fields
     if (!title) {
       return NextResponse.json({ error: 'Title is required' }, { status: 400 })
     }
-
-    // For now, convert new format to legacy format until migration is run
-    let legacyFrequency = frequency
-    if (frequency_rules && !frequency) {
-      // Convert frequency_rules to legacy frequency
-      switch (frequency_rules.type) {
-        case 'once_off':
-          legacyFrequency = 'once_off_sticky'
-          break
-        case 'daily':
-          legacyFrequency = 'every_day'
-          break
-        case 'weekly':
-          legacyFrequency = 'weekly'
-          break
-        case 'specific_weekdays':
-          legacyFrequency = 'specific_weekdays'
-          break
-        case 'start_of_month':
-          legacyFrequency = 'start_every_month'
-          break
-        case 'end_of_month':
-          legacyFrequency = 'end_every_month'
-          break
-        case 'every_month':
-          legacyFrequency = 'every_month'
-          break
-        case 'certain_months':
-          legacyFrequency = 'certain_months'
-          break
-        default:
-          legacyFrequency = 'every_day'
-      }
+    if (!description) {
+      return NextResponse.json({ error: 'Description is required' }, { status: 400 })
     }
-
-    if (!legacyFrequency) {
+    if (!responsibility || responsibility.length === 0) {
+      return NextResponse.json({ error: 'At least one responsibility is required' }, { status: 400 })
+    }
+    if (!categories || categories.length === 0) {
+      return NextResponse.json({ error: 'At least one category is required' }, { status: 400 })
+    }
+    if (!frequency) {
       return NextResponse.json({ error: 'Frequency is required' }, { status: 400 })
+    }
+    if (!timing) {
+      return NextResponse.json({ error: 'Timing is required' }, { status: 400 })
     }
 
     // Map responsibility to position_id for backward compatibility
@@ -264,43 +243,41 @@ export async function POST(request: NextRequest) {
       console.log('Using first available position:', mappedPositionId)
     }
 
-    // Map timing values from TaskForm to database values
-    const timingMap: { [key: string]: string } = {
-      'opening': 'Morning',
-      'anytime': 'Any Time',
-      'before-cutoff': 'Before Close',
-      'closing': 'Before Close'
-    }
-    
-    const mappedTiming = timing ? (timingMap[timing] || timing) : 'Any Time'
+    // Timing values are now stored directly as per new schema
+    // No mapping needed - use the values directly from the form
 
     console.log('Master task POST - Creating task:', title, 'for position:', mappedPositionId)
     
-    // Prepare data for insertion using current database schema
+    // Prepare data for insertion using new database schema
     const insertData: any = {
       title,
       description,
-      position_id: mappedPositionId,
-      frequency: legacyFrequency,
-      timing: mappedTiming,
-      default_due_time: due_time || default_due_time || '09:00:00',
-      category: categories && categories.length > 0 ? categories[0] : (category || 'General'),
+      position_id: mappedPositionId, // Keep for backward compatibility
+      frequency: frequency,
+      timing: timing,
+      due_time: due_time || '09:00:00',
+      category: categories && categories.length > 0 ? categories[0] : 'general-pharmacy-operations', // Legacy field
       responsibility: responsibility || [],
       categories: categories || [],
-      frequency_rules: frequency_rules,
-      due_date: due_date,
-      due_time: due_time || default_due_time || '09:00:00',
       publish_status: publish_status || 'draft',
-      publish_delay: publish_delay,
       sticky_once_off: sticky_once_off || false,
       allow_edit_when_locked: allow_edit_when_locked || false
     }
+    
+    // Only add date fields if they have valid values
+    if (due_date && due_date.trim() !== '') {
+      insertData.due_date = due_date
+    }
+    
+    if (publish_delay && publish_delay.trim() !== '') {
+      insertData.publish_delay = publish_delay
+    }
 
-    // Only add start_date and end_date if they have values
-    if (start_date) {
+    // Only add start_date and end_date if they have valid values
+    if (start_date && start_date.trim() !== '') {
       insertData.start_date = start_date
     }
-    if (end_date) {
+    if (end_date && end_date.trim() !== '') {
       insertData.end_date = end_date
     }
 
@@ -309,7 +286,7 @@ export async function POST(request: NextRequest) {
       insertData.weekdays = frequency_rules.weekdays
     } else if (weekdays && weekdays.length > 0) {
       insertData.weekdays = weekdays
-    } else if (legacyFrequency === 'specific_weekdays') {
+    } else if (frequency === 'specific_weekdays') {
       insertData.weekdays = [1, 2, 3, 4, 5] // Default to weekdays
     }
 
@@ -320,7 +297,7 @@ export async function POST(request: NextRequest) {
       insertData.months = months
     }
 
-    console.log('Master task POST - Inserting with frequency:', legacyFrequency, 'timing:', mappedTiming)
+    console.log('Master task POST - Inserting with frequency:', frequency, 'timing:', timing)
 
     let { data: masterTask, error } = await supabase
       .from('master_tasks')

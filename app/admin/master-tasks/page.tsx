@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from "react"
 import { usePositionAuth } from "@/lib/position-auth-context"
 import { Navigation } from "@/components/navigation"
-import TaskForm from "@/components/admin/TaskForm"
+import TaskForm from "@/components/admin/TaskFormNew"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -101,6 +101,36 @@ const getCategoryDisplayName = (value: string): string => {
   return option ? option.label : value.replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase())
 }
 
+// Helper to get badge color based on type and value
+const getBadgeClass = (item: string, type: string) => {
+  if (type === "responsibility") {
+    const colorMap: Record<string, string> = {
+      'pharmacist-primary': 'bg-blue-100 text-blue-800 border-blue-200',
+      'pharmacist-supporting': 'bg-sky-100 text-sky-800 border-sky-200',
+      'pharmacy-assistants': 'bg-green-100 text-green-800 border-green-200',
+      'dispensary-technicians': 'bg-teal-100 text-teal-800 border-teal-200',
+      'daa-packers': 'bg-emerald-100 text-emerald-800 border-emerald-200',
+      'shared-exc-pharmacist': 'bg-amber-100 text-amber-800 border-amber-200',
+      'shared-inc-pharmacist': 'bg-orange-100 text-orange-800 border-orange-200',
+      'operational-managerial': 'bg-purple-100 text-purple-800 border-purple-200'
+    }
+    return colorMap[item] || ''
+  } else if (type === "category") {
+    const colorMap: Record<string, string> = {
+      'stock-control': 'bg-blue-50 text-blue-700 border-blue-100',
+      'compliance': 'bg-red-50 text-red-700 border-red-100',
+      'cleaning': 'bg-green-50 text-green-700 border-green-100',
+      'pharmacy-services': 'bg-purple-50 text-purple-700 border-purple-100',
+      'fos-operations': 'bg-amber-50 text-amber-700 border-amber-100',
+      'dispensary-operations': 'bg-teal-50 text-teal-700 border-teal-100',
+      'general-pharmacy-operations': 'bg-gray-50 text-gray-700 border-gray-100',
+      'business-management': 'bg-indigo-50 text-indigo-700 border-indigo-100'
+    }
+    return colorMap[item] || ''
+  }
+  return ''
+}
+
 // Helper function to render truncated array with badges
 const renderTruncatedArray = (
   items: string[] | undefined, 
@@ -131,11 +161,13 @@ const renderTruncatedArray = (
     <div className="flex flex-wrap gap-1 max-w-[200px]">
       {visibleItems.map((item, index) => {
         const displayName = getDisplayName(item)
+        const badgeClass = getBadgeClass(item, type)
+        
         return (
           <Badge 
             key={index} 
             variant={variant} 
-            className="text-xs whitespace-nowrap" 
+            className={`text-xs whitespace-nowrap ${badgeClass}`}
             title={displayName}
           >
             {displayName}
@@ -145,10 +177,10 @@ const renderTruncatedArray = (
       {remainingCount > 0 && (
         <Badge 
           variant="outline" 
-          className="text-xs" 
+          className="text-xs bg-gray-100" 
           title={`${remainingCount} more: ${items.slice(maxVisible).map(item => getDisplayName(item)).join(', ')}`}
         >
-          + ({remainingCount})
+          +{remainingCount} more
         </Badge>
       )}
     </div>
@@ -213,40 +245,92 @@ const formatFrequencyRules = (frequencyRules: any) => {
 
 // Helper function to render frequency with additional details
 const renderFrequencyWithDetails = (task: MasterTask) => {
+  // Get the base frequency display name
+  const getFrequencyBadgeColor = (frequency: string) => {
+    const colorMap: Record<string, string> = {
+      'once_off': 'bg-purple-100 text-purple-800 border-purple-200',
+      'once_off_sticky': 'bg-purple-100 text-purple-800 border-purple-200',
+      'every_day': 'bg-blue-100 text-blue-800 border-blue-200',
+      'weekly': 'bg-green-100 text-green-800 border-green-200',
+      'specific_weekdays': 'bg-green-100 text-green-800 border-green-200',
+      'start_every_month': 'bg-amber-100 text-amber-800 border-amber-200',
+      'start_certain_months': 'bg-amber-100 text-amber-800 border-amber-200',
+      'every_month': 'bg-orange-100 text-orange-800 border-orange-200',
+      'certain_months': 'bg-orange-100 text-orange-800 border-orange-200',
+      'end_every_month': 'bg-red-100 text-red-800 border-red-200',
+      'end_certain_months': 'bg-red-100 text-red-800 border-red-200'
+    }
+    return colorMap[frequency] || 'bg-gray-100 text-gray-800 border-gray-200'
+  }
+  
   const baseFrequency = formatFrequency(task.frequency)
   const details = []
   
   // Add weekdays if applicable
   if (task.weekdays && task.weekdays.length > 0) {
     const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
-    const weekdayNames = task.weekdays.map(day => dayNames[day] || day).slice(0, 3)
+    const weekdayNames = task.weekdays.map(day => dayNames[day] || day)
+    
+    // Format for display
+    let weekdayDisplay = weekdayNames.slice(0, 3).join(', ')
     if (task.weekdays.length > 3) {
-      weekdayNames.push(`+${task.weekdays.length - 3}`)
+      weekdayDisplay += ` +${task.weekdays.length - 3} more`
     }
-    details.push(weekdayNames.join(', '))
+    
+    details.push(`Days: ${weekdayDisplay}`)
   }
   
   // Add months if applicable
   if (task.months && task.months.length > 0) {
     const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
-    const monthNamesList = task.months.map(month => monthNames[month - 1] || month).slice(0, 3)
+    const monthNamesList = task.months.map(month => monthNames[month - 1] || month)
+    
+    // Format for display
+    let monthDisplay = monthNamesList.slice(0, 3).join(', ')
     if (task.months.length > 3) {
-      monthNamesList.push(`+${task.months.length - 3}`)
+      monthDisplay += ` +${task.months.length - 3} more`
     }
-    details.push(monthNamesList.join(', '))
+    
+    details.push(`Months: ${monthDisplay}`)
+  }
+  
+  // Add due date for once-off tasks
+  if (task.frequency === 'once_off' && task.due_date) {
+    const dueDate = new Date(task.due_date).toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric'
+    })
+    details.push(`Due: ${dueDate}`)
+  }
+  
+  // Add timing information
+  if (task.timing) {
+    const timingMap: Record<string, string> = {
+      'opening': '🕘 Opening',
+      'anytime': '🕓 Anytime',
+      'before_order_cutoff': '🕒 Before Order Cutoff',
+      'closing': '🕕 Closing'
+    }
+    details.push(timingMap[task.timing] || task.timing)
   }
   
   return (
     <div className="space-y-1">
-      <Badge variant="outline" className="text-xs">{baseFrequency}</Badge>
+      <Badge 
+        variant="outline" 
+        className={`text-xs ${getFrequencyBadgeColor(task.frequency)}`}
+      >
+        {baseFrequency}
+      </Badge>
+      
       {details.length > 0 && (
-        <div className="text-xs text-gray-500 truncate max-w-[120px]" title={details.join(' • ')}>
-          {details.join(' • ')}
-        </div>
-      )}
-      {task.timing && (
-        <div className="text-xs text-gray-500 truncate max-w-[120px]" title={task.timing}>
-          {task.timing}
+        <div className="text-xs text-gray-600 space-y-1">
+          {details.map((detail, index) => (
+            <div key={index} className="truncate max-w-[180px]" title={detail}>
+              {detail}
+            </div>
+          ))}
         </div>
       )}
     </div>
@@ -312,11 +396,14 @@ const TaskDetailsModal = ({ task, positions }: { task: MasterTask, positions: Po
               <div className="mt-1">
                 {task.responsibility && task.responsibility.length > 0 ? (
                   <div className="flex flex-wrap gap-1">
-                    {task.responsibility.map((resp, index) => (
-                      <Badge key={index} variant="secondary" className="text-xs">
-                        {getResponsibilityDisplayName(resp)}
-                      </Badge>
-                    ))}
+                    {task.responsibility.map((resp, index) => {
+                      const badgeClass = getBadgeClass(resp, "responsibility");
+                      return (
+                        <Badge key={index} variant="secondary" className={`text-xs whitespace-nowrap ${badgeClass}`}>
+                          {getResponsibilityDisplayName(resp)}
+                        </Badge>
+                      );
+                    })}
                   </div>
                 ) : task.position_id ? (
                   <Badge variant="secondary" className="text-xs">
@@ -332,14 +419,19 @@ const TaskDetailsModal = ({ task, positions }: { task: MasterTask, positions: Po
               <div className="mt-1">
                 {task.categories && task.categories.length > 0 ? (
                   <div className="flex flex-wrap gap-1">
-                    {task.categories.map((category, index) => (
-                      <Badge key={index} variant="outline" className="text-xs">
-                        {getCategoryDisplayName(category)}
-                      </Badge>
-                    ))}
+                    {task.categories.map((category, index) => {
+                      const badgeClass = getBadgeClass(category, "category");
+                      return (
+                        <Badge key={index} variant="outline" className={`text-xs whitespace-nowrap ${badgeClass}`}>
+                          {getCategoryDisplayName(category)}
+                        </Badge>
+                      );
+                    })}
                   </div>
                 ) : task.category ? (
-                  <Badge variant="outline" className="text-xs">{getCategoryDisplayName(task.category)}</Badge>
+                  <Badge variant="outline" className={`text-xs ${getBadgeClass(task.category, "category")}`}>
+                    {getCategoryDisplayName(task.category)}
+                  </Badge>
                 ) : (
                   <span className="text-gray-400 text-xs">No categories</span>
                 )}
@@ -974,15 +1066,45 @@ export default function AdminMasterTasksPage() {
       task.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
       task.description?.toLowerCase().includes(searchTerm.toLowerCase())
     
-    const matchesPosition = filterPosition === 'all' || (task.positions?.id || task.position?.id) === filterPosition
+    // Check if position matches either in responsibility array or legacy position_id
+    const matchesPosition = filterPosition === 'all' || 
+      (task.positions?.id || task.position?.id) === filterPosition ||
+      (task.responsibility && task.responsibility.some(r => {
+        // If filtering by a position ID, check if any responsibility matches that position
+        const position = positions.find(p => p.id === filterPosition)
+        if (!position) return false
+        
+        // Convert position name to responsibility format for comparison
+        const positionAsResponsibility = position.name.toLowerCase().replace(/\s+/g, '-')
+        return r.includes(positionAsResponsibility)
+      }))
+    
     const matchesStatus = filterStatus === 'all' || task.publish_status === filterStatus
-    const matchesCategory = filterCategory === 'all' || task.category === filterCategory
+    
+    // Check if category matches either in categories array or legacy category field
+    const matchesCategory = filterCategory === 'all' || 
+      task.category === filterCategory ||
+      (task.categories && task.categories.includes(filterCategory))
 
     return matchesSearch && matchesPosition && matchesStatus && matchesCategory
   })
 
-  // Get unique categories for filter
-  const categories = Array.from(new Set(tasks.map(task => task.category).filter(Boolean)))
+  // Get unique categories for filter - combine legacy category and new categories array
+  const allCategories = new Set<string>()
+  
+  // Add legacy categories
+  tasks.forEach(task => {
+    if (task.category) allCategories.add(task.category)
+  })
+  
+  // Add categories from arrays
+  tasks.forEach(task => {
+    if (task.categories && Array.isArray(task.categories)) {
+      task.categories.forEach(cat => allCategories.add(cat))
+    }
+  })
+  
+  const categories = Array.from(allCategories).filter(Boolean)
 
   // Show loading spinner while authentication is still loading
   if (authLoading) {
@@ -1258,7 +1380,7 @@ export default function AdminMasterTasksPage() {
                                 handleStatusChange(task.id, value)
                               }
                             >
-                              <SelectTrigger className="w-24">
+                              <SelectTrigger className="w-28">
                                 <SelectValue />
                               </SelectTrigger>
                               <SelectContent>
@@ -1407,7 +1529,7 @@ export default function AdminMasterTasksPage() {
                                     handleStatusChange(task.id, value)
                                   }
                                 >
-                                  <SelectTrigger className="w-24 h-8">
+                                  <SelectTrigger className="w-28 h-8">
                                     <SelectValue />
                                   </SelectTrigger>
                                   <SelectContent>

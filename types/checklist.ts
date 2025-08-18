@@ -23,9 +23,10 @@ export enum PublishStatus {
  * Task timing - when tasks should be completed
  */
 export enum TaskTiming {
-  MORNING = 'morning',
-  BEFORE_CLOSE = 'before_close',
-  CUSTOM = 'custom'
+  OPENING = 'opening',
+  ANYTIME_DURING_DAY = 'anytime_during_day',
+  BEFORE_ORDER_CUT_OFF = 'before_order_cut_off',
+  CLOSING = 'closing'
 }
 
 /**
@@ -225,22 +226,28 @@ export type FrequencyRule =
 export interface MasterChecklistTask {
   id: string
   title: string
-  description?: string
-  position_id?: string
-  responsibility: string[] // Array of role names responsible for this task
-  categories: string[] // Array of category tags
-  frequency_rules: FrequencyRule // JSONB frequency configuration
-  timing: TaskTiming
-  due_date?: string // ISO date string for once-off tasks
-  due_time?: string // HH:MM format
-  publish_status: PublishStatus
-  publish_delay?: string // ISO date string for delayed publishing
-  sticky_once_off: boolean
-  allow_edit_when_locked: boolean
+  description: string
+  position_id?: string // Legacy field for backward compatibility
+  responsibility: string[] // Multi-select array of role names responsible for this task
+  categories: string[] // Multi-select array of category tags
+  frequency: string // Simplified frequency (once_off, every_day, once_weekly, monday, etc.)
+  timing: TaskTiming // Task timing (opening, anytime_during_day, before_order_cut_off, closing)
+  due_date?: string // ISO date string - manually entered for once-off tasks, auto-calculated for recurring
+  due_time?: string // HH:MM format - auto-filled based on timing or manually set
+  publish_status: PublishStatus // Active, Inactive, Draft
+  publish_delay?: string // ISO date string - tasks remain hidden until this date
+  start_date?: string // ISO date string
+  end_date?: string // ISO date string
+  sticky_once_off?: boolean
+  allow_edit_when_locked?: boolean
   created_by?: string // UUID of user who created the task
   updated_by?: string // UUID of user who last updated the task
   created_at: string // ISO timestamp
   updated_at: string // ISO timestamp
+  
+  // Legacy fields for backward compatibility
+  frequency_rules?: FrequencyRule // JSONB frequency configuration (legacy)
+  category?: string // Single category (legacy)
   
   // Optional relations
   positions?: Position
@@ -368,16 +375,17 @@ export interface AuditLog {
  */
 export interface CreateMasterTaskRequest {
   title: string
-  description?: string
-  position_id?: string
-  responsibility: string[]
-  categories: string[]
-  frequency_rules: FrequencyRule
+  description: string
+  responsibility: string[] // Multi-select array of responsibilities
+  categories: string[] // Multi-select array of categories
+  frequency: string // Simplified frequency value
   timing: TaskTiming
-  due_date?: string
-  due_time?: string
+  due_date?: string // For once-off tasks only
+  due_time?: string // Auto-filled based on timing
   publish_status?: PublishStatus
-  publish_delay?: string
+  publish_delay?: string // Publishing delay date
+  start_date?: string
+  end_date?: string
   sticky_once_off?: boolean
   allow_edit_when_locked?: boolean
 }

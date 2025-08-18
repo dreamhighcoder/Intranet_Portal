@@ -100,8 +100,8 @@ export function TaskFilters({
         <SelectContent>
           <SelectItem value="all">All Categories</SelectItem>
           {TASK_CATEGORIES.map((category) => (
-            <SelectItem key={category} value={category}>
-              {category}
+            <SelectItem key={category.value} value={category.value}>
+              {category.label}
             </SelectItem>
           ))}
         </SelectContent>

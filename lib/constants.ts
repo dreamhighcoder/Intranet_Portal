@@ -1,33 +1,82 @@
 // Constants for the pharmacy intranet portal
 
+// Task categories matching project specifications
 export const TASK_CATEGORIES = [
-  "Compliance",
-  "Security",
-  "Inventory",
-  "Customer Service",
-  "Maintenance",
-  "Training",
-  "Administration",
+  { value: "stock-control", label: "Stock Control" },
+  { value: "compliance", label: "Compliance" },
+  { value: "cleaning", label: "Cleaning" },
+  { value: "pharmacy-services", label: "Pharmacy Services" },
+  { value: "fos-operations", label: "FOS Operations" },
+  { value: "dispensary-operations", label: "Dispensary Operations" },
+  { value: "general-pharmacy-operations", label: "General Pharmacy Operations" },
+  { value: "business-management", label: "Business Management" },
 ] as const
 
+// Task frequencies matching project specifications
 export const TASK_FREQUENCIES = [
-  { value: "once_off_sticky", label: "Once-off Sticky" },
-  { value: "every_day", label: "Every Day (Mon-Sat, no PH)" },
-  { value: "weekly_monday", label: "Weekly Monday (PH push-forward)" },
-  { value: "specific_weekdays", label: "Specific Weekdays" },
-  { value: "start_of_every_month", label: "Start of Every Month" },
-  { value: "start_of_certain_months", label: "Start of Certain Months" },
-  { value: "once_every_month", label: "Once Every Month" },
-  { value: "certain_months_only", label: "Certain Months Only" },
-  { value: "end_of_every_month", label: "End of Every Month" },
-  { value: "end_of_certain_months", label: "End of Certain Months" },
+  { value: "once_off", label: "Once Off" },
+  { value: "every_day", label: "Every Day" },
+  { value: "once_weekly", label: "Once Weekly" },
+  { value: "monday", label: "Monday" },
+  { value: "tuesday", label: "Tuesday" },
+  { value: "wednesday", label: "Wednesday" },
+  { value: "thursday", label: "Thursday" },
+  { value: "friday", label: "Friday" },
+  { value: "saturday", label: "Saturday" },
+  { value: "once_monthly", label: "Once Monthly" },
+  { value: "start_of_month_jan", label: "Start of Month (Jan)" },
+  { value: "start_of_month_feb", label: "Start of Month (Feb)" },
+  { value: "start_of_month_mar", label: "Start of Month (Mar)" },
+  { value: "start_of_month_apr", label: "Start of Month (Apr)" },
+  { value: "start_of_month_may", label: "Start of Month (May)" },
+  { value: "start_of_month_jun", label: "Start of Month (Jun)" },
+  { value: "start_of_month_jul", label: "Start of Month (Jul)" },
+  { value: "start_of_month_aug", label: "Start of Month (Aug)" },
+  { value: "start_of_month_sep", label: "Start of Month (Sep)" },
+  { value: "start_of_month_oct", label: "Start of Month (Oct)" },
+  { value: "start_of_month_nov", label: "Start of Month (Nov)" },
+  { value: "start_of_month_dec", label: "Start of Month (Dec)" },
+  { value: "end_of_month_jan", label: "End of Month (Jan)" },
+  { value: "end_of_month_feb", label: "End of Month (Feb)" },
+  { value: "end_of_month_mar", label: "End of Month (Mar)" },
+  { value: "end_of_month_apr", label: "End of Month (Apr)" },
+  { value: "end_of_month_may", label: "End of Month (May)" },
+  { value: "end_of_month_jun", label: "End of Month (Jun)" },
+  { value: "end_of_month_jul", label: "End of Month (Jul)" },
+  { value: "end_of_month_aug", label: "End of Month (Aug)" },
+  { value: "end_of_month_sep", label: "End of Month (Sep)" },
+  { value: "end_of_month_oct", label: "End of Month (Oct)" },
+  { value: "end_of_month_nov", label: "End of Month (Nov)" },
+  { value: "end_of_month_dec", label: "End of Month (Dec)" },
 ] as const
 
+// Task timings matching project specifications
 export const TASK_TIMINGS = [
-  { value: "morning", label: "Morning" },
-  { value: "before_close", label: "Before Close" },
-  { value: "custom", label: "Custom Time" },
+  { value: "opening", label: "Opening" },
+  { value: "anytime_during_day", label: "Anytime During Day" },
+  { value: "before_order_cut_off", label: "Before Order Cut Off" },
+  { value: "closing", label: "Closing" },
 ] as const
+
+// Responsibility options matching project specifications
+export const RESPONSIBILITY_OPTIONS = [
+  { value: "pharmacist-primary", label: "Pharmacist (Primary)" },
+  { value: "pharmacist-supporting", label: "Pharmacist (Supporting)" },
+  { value: "pharmacy-assistants", label: "Pharmacy Assistant/s" },
+  { value: "dispensary-technicians", label: "Dispensary Technician/s" },
+  { value: "daa-packers", label: "DAA Packer/s" },
+  { value: "shared-exc-pharmacist", label: "Shared (exc. Pharmacist)" },
+  { value: "shared-inc-pharmacist", label: "Shared (inc. Pharmacist)" },
+  { value: "operational-managerial", label: "Operational/Managerial" },
+] as const
+
+// Default due times based on timing
+export const DEFAULT_DUE_TIMES = {
+  opening: "09:30",
+  anytime_during_day: "12:00",
+  before_order_cut_off: "14:00",
+  closing: "17:30",
+} as const
 
 // Updated color system - removed old TASK_STATUS_COLORS as they're now in CSS
 export const TASK_STATUS_LABELS = {

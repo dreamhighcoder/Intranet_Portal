@@ -99,13 +99,33 @@ export default function ChecklistPage() {
   const filteredTasks = useMemo(() => {
     return tasks.filter((task) => {
       // Position filter (only for admin users when NOT viewing a specific position)
-      if (userRole === 'admin' && !viewingPositionId && selectedPosition !== "all" && task.master_task.position_id !== selectedPosition) {
-        return false
+      if (userRole === 'admin' && !viewingPositionId && selectedPosition !== "all") {
+        // Check if position matches either in responsibility array or legacy position_id
+        const matchesPosition = task.master_task.position_id === selectedPosition ||
+          (task.master_task.responsibility && 
+           Array.isArray(task.master_task.responsibility) && 
+           task.master_task.responsibility.some(r => {
+             // Convert position name to responsibility format for comparison
+             const position = positions.find(p => p.id === selectedPosition)
+             if (!position) return false
+             
+             const positionAsResponsibility = position.name.toLowerCase().replace(/\s+/g, '-')
+             return r.includes(positionAsResponsibility)
+           }))
+        
+        if (!matchesPosition) return false
       }
 
       // Category filter
-      if (selectedCategory !== "all" && task.master_task.category !== selectedCategory) {
-        return false
+      if (selectedCategory !== "all") {
+        // Check if category matches either in categories array or legacy category field
+        const matchesCategory = 
+          task.master_task.category === selectedCategory ||
+          (task.master_task.categories && 
+           Array.isArray(task.master_task.categories) && 
+           task.master_task.categories.includes(selectedCategory))
+        
+        if (!matchesCategory) return false
       }
 
       // Status filter
@@ -118,7 +138,7 @@ export default function ChecklistPage() {
 
       return true
     })
-  }, [tasks, selectedPosition, selectedCategory, selectedStatus, userRole, viewingPositionId])
+  }, [tasks, selectedPosition, selectedCategory, selectedStatus, userRole, viewingPositionId, positions])
 
   // Handle auth redirect
   useEffect(() => {
