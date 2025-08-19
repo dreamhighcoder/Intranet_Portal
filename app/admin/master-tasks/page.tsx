@@ -33,7 +33,11 @@ import {
   FileText,
   User,
   Tag,
-  Settings
+  Settings,
+  Users,
+  CheckCircle2,
+  Info,
+  CalendarDays
 } from "lucide-react"
 
 // Using the proper type from checklist.ts
@@ -379,130 +383,48 @@ const TaskDetailsModal = ({ task, positions }: { task: MasterTask, positions: Po
   }
 
   return (
-    <DialogContent className="task-details-modal overflow-y-auto" style={{ maxWidth: "80rem", width: "80vw", maxHeight: "90vh" }}>
-      <DialogHeader>
-        <DialogTitle className="flex items-center gap-2">
+    <DialogContent className="task-details-modal overflow-hidden flex flex-col" style={{ maxWidth: "80rem", width: "80vw", maxHeight: "90vh", height: "90vh" }}>
+      {/* Fixed Header */}
+      <DialogHeader className="flex-shrink-0 pb-4 border-b">
+        <DialogTitle className="text-xl font-semibold flex items-center gap-2">
           <FileText className="h-5 w-5" />
           Task Details
         </DialogTitle>
       </DialogHeader>
       
-      <div className="space-y-6">
+      {/* Scrollable Content */}
+      <div className="flex-1 overflow-y-auto px-1 py-4 space-y-6">
         {/* Basic Information */}
-        <div className="space-y-4">
-          <h3 className="text-lg font-semibold flex items-center gap-2">
-            <Settings className="h-4 w-4" />
-            Basic Information
-          </h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className="text-sm font-medium text-gray-600">Title</label>
-              <p className="text-sm mt-1">{task.title}</p>
-            </div>
-            <div>
-              <label className="text-sm font-medium text-gray-600">Status</label>
-              <div className="mt-1">
-                <Badge className={task.publish_status === 'active' ? 'bg-green-100 text-green-800 border border-green-200' : 
-                                task.publish_status === 'draft' ? 'bg-yellow-100 text-yellow-800 border border-yellow-200' : 
-                                'bg-gray-100 text-gray-800 border border-gray-200'}>
-                  {task.publish_status}
-                </Badge>
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center space-x-2">
+              <CheckCircle2 className="h-5 w-5" />
+              <span>Basic Information</span>
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="text-sm font-medium text-gray-600">Title</label>
+                <p className="text-sm mt-1 font-medium">{task.title}</p>
+              </div>
+              <div>
+                <label className="text-sm font-medium text-gray-600">Status</label>
+                <div className="mt-1">
+                  <Badge className={task.publish_status === 'active' ? 'bg-green-100 text-green-800 border border-green-200' : 
+                                  task.publish_status === 'draft' ? 'bg-yellow-100 text-yellow-800 border border-yellow-200' : 
+                                  'bg-gray-100 text-gray-800 border border-gray-200'}>
+                    {task.publish_status}
+                  </Badge>
+                </div>
               </div>
             </div>
-          </div>
-          {task.description && (
-            <div>
-              <label className="text-sm font-medium text-gray-600">Description</label>
-              <p className="text-sm mt-1 p-3 bg-gray-50 rounded-md">{task.description}</p>
-            </div>
-          )}
-        </div>
-
-        {/* Assignment & Responsibilities */}
-        <div className="space-y-4">
-          <h3 className="text-lg font-semibold flex items-center gap-2">
-            <User className="h-4 w-4" />
-            Assignment & Responsibilities
-          </h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className="text-sm font-medium text-gray-600">Responsibilities</label>
-              <div className="mt-1">
-                {task.responsibility && task.responsibility.length > 0 ? (
-                  <div className="flex flex-wrap gap-1">
-                    {task.responsibility.map((resp, index) => {
-                      const badgeClass = getBadgeClass(resp, "responsibility");
-                      return (
-                        <Badge key={index} variant="secondary" className={`text-xs whitespace-nowrap ${badgeClass}`}>
-                          {getResponsibilityDisplayName(resp)}
-                        </Badge>
-                      );
-                    })}
-                  </div>
-                ) : task.position_id ? (
-                  <Badge variant="secondary" className="text-xs">
-                    {getPositionName(task.position_id)}
-                  </Badge>
-                ) : (
-                  <span className="text-gray-400 text-xs">No responsibilities assigned</span>
-                )}
+            {task.description && (
+              <div>
+                <label className="text-sm font-medium text-gray-600">Description</label>
+                <p className="text-sm mt-1 p-3 bg-gray-50 rounded-md">{task.description}</p>
               </div>
-            </div>
-            <div>
-              <label className="text-sm font-medium text-gray-600">Categories</label>
-              <div className="mt-1">
-                {task.categories && task.categories.length > 0 ? (
-                  <div className="flex flex-wrap gap-1">
-                    {task.categories.map((category, index) => {
-                      const badgeClass = getBadgeClass(category, "category");
-                      return (
-                        <Badge key={index} variant="outline" className={`text-xs whitespace-nowrap ${badgeClass}`}>
-                          {getCategoryDisplayName(category)}
-                        </Badge>
-                      );
-                    })}
-                  </div>
-                ) : task.category ? (
-                  <Badge variant="outline" className={`text-xs ${getBadgeClass(task.category, "category")}`}>
-                    {getCategoryDisplayName(task.category)}
-                  </Badge>
-                ) : (
-                  <span className="text-gray-400 text-xs">No categories</span>
-                )}
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Scheduling */}
-        <div className="space-y-4">
-          <h3 className="text-lg font-semibold flex items-center gap-2">
-            <Calendar className="h-4 w-4" />
-            Scheduling
-          </h3>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div>
-              <label className="text-sm font-medium text-gray-600">Frequency</label>
-              <p className="text-sm mt-1">
-                <Badge variant="outline" className={getFrequencyBadgeColor(task.frequency)}>{formatFrequency(task.frequency)}</Badge>
-              </p>
-            </div>
-            <div>
-              <label className="text-sm font-medium text-gray-600">Timing</label>
-              <p className="text-sm mt-1">
-                {task.timing ? (
-                  <Badge variant="outline" className={`
-                    ${task.timing === 'opening' ? 'bg-blue-100 text-blue-800 border-blue-200' : 
-                      task.timing === 'anytime' ? 'bg-purple-100 text-purple-800 border-purple-200' : 
-                      task.timing === 'before_order_cutoff' ? 'bg-amber-100 text-amber-800 border-amber-200' : 
-                      task.timing === 'closing' ? 'bg-indigo-100 text-indigo-800 border-indigo-200' : 
-                      'bg-gray-100 text-gray-800 border-gray-200'}
-                  `}>
-                    {task.timing.charAt(0).toUpperCase() + task.timing.slice(1).replace(/_/g, ' ')}
-                  </Badge>
-                ) : 'Not specified'}
-              </p>
-            </div>
+            )}
             <div>
               <label className="text-sm font-medium text-gray-600">Due Time</label>
               <p className="text-sm mt-1 flex items-center gap-1">
@@ -510,146 +432,276 @@ const TaskDetailsModal = ({ task, positions }: { task: MasterTask, positions: Po
                 {(task as any).default_due_time || 'Not specified'}
               </p>
             </div>
-          </div>
-          
-          {/* Advanced Scheduling */}
-          {(task.weekdays && task.weekdays.length > 0) && (
-            <div>
-              <label className="text-sm font-medium text-gray-600">Specific Weekdays</label>
-              <div className="mt-1 flex flex-wrap gap-1">
-                {task.weekdays.map((day, index) => {
-                  const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
-                  return (
-                    <Badge key={index} variant="outline" className="text-xs">
-                      {dayNames[day] || day}
+          </CardContent>
+        </Card>
+
+        {/* Assignment & Responsibilities */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center space-x-2">
+              <Users className="h-5 w-5" />
+              <span>Assignment & Responsibilities</span>
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="text-sm font-medium text-gray-600">Responsibilities</label>
+                <div className="mt-1">
+                  {task.responsibility && task.responsibility.length > 0 ? (
+                    <div className="flex flex-wrap gap-1">
+                      {task.responsibility.map((resp, index) => {
+                        const badgeClass = getBadgeClass(resp, "responsibility");
+                        return (
+                          <Badge key={index} variant="secondary" className={`text-xs whitespace-nowrap ${badgeClass}`}>
+                            {getResponsibilityDisplayName(resp)}
+                          </Badge>
+                        );
+                      })}
+                    </div>
+                  ) : task.position_id ? (
+                    <Badge variant="secondary" className="text-xs">
+                      {getPositionName(task.position_id)}
                     </Badge>
-                  )
-                })}
+                  ) : (
+                    <span className="text-gray-400 text-xs">No responsibilities assigned</span>
+                  )}
+                </div>
+              </div>
+              <div>
+                <label className="text-sm font-medium text-gray-600">Categories</label>
+                <div className="mt-1">
+                  {task.categories && task.categories.length > 0 ? (
+                    <div className="flex flex-wrap gap-1">
+                      {task.categories.map((category, index) => {
+                        const badgeClass = getBadgeClass(category, "category");
+                        return (
+                          <Badge key={index} variant="outline" className={`text-xs whitespace-nowrap ${badgeClass}`}>
+                            {getCategoryDisplayName(category)}
+                          </Badge>
+                        );
+                      })}
+                    </div>
+                  ) : task.category ? (
+                    <Badge variant="outline" className={`text-xs ${getBadgeClass(task.category, "category")}`}>
+                      {getCategoryDisplayName(task.category)}
+                    </Badge>
+                  ) : (
+                    <span className="text-gray-400 text-xs">No categories</span>
+                  )}
+                </div>
               </div>
             </div>
-          )}
-          
-          {(task.months && task.months.length > 0) && (
-            <div>
-              <label className="text-sm font-medium text-gray-600">Specific Months</label>
-              <div className="mt-1 flex flex-wrap gap-1">
-                {task.months.map((month, index) => {
-                  const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
-                  return (
-                    <Badge key={index} variant="outline" className="text-xs">
-                      {monthNames[month - 1] || month}
+          </CardContent>
+        </Card>
+
+        {/* Scheduling */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center space-x-2">
+              <Calendar className="h-5 w-5" />
+              <span>Scheduling</span>
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div>
+                <label className="text-sm font-medium text-gray-600">Frequency</label>
+                <p className="text-sm mt-1">
+                  <Badge variant="outline" className={getFrequencyBadgeColor(task.frequency)}>{formatFrequency(task.frequency)}</Badge>
+                </p>
+              </div>
+              <div>
+                <label className="text-sm font-medium text-gray-600">Timing</label>
+                <p className="text-sm mt-1">
+                  {task.timing ? (
+                    <Badge variant="outline" className={`
+                      ${task.timing === 'opening' ? 'bg-blue-100 text-blue-800 border-blue-200' : 
+                        task.timing === 'anytime' ? 'bg-purple-100 text-purple-800 border-purple-200' : 
+                        task.timing === 'before_order_cutoff' ? 'bg-amber-100 text-amber-800 border-amber-200' : 
+                        task.timing === 'closing' ? 'bg-indigo-100 text-indigo-800 border-indigo-200' : 
+                        'bg-gray-100 text-gray-800 border-gray-200'}
+                    `}>
+                      {task.timing.charAt(0).toUpperCase() + task.timing.slice(1).replace(/_/g, ' ')}
                     </Badge>
-                  )
-                })}
+                  ) : 'Not specified'}
+                </p>
               </div>
             </div>
-          )}
-        </div>
+            
+            {/* Advanced Scheduling */}
+            {(task.weekdays && task.weekdays.length > 0) && (
+              <div className="p-3 bg-gray-50 rounded-md">
+                <label className="text-sm font-medium text-gray-600">Specific Weekdays</label>
+                <div className="mt-1 flex flex-wrap gap-1">
+                  {task.weekdays.map((day, index) => {
+                    const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+                    return (
+                      <Badge key={index} variant="outline" className="text-xs">
+                        {dayNames[day] || day}
+                      </Badge>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
+            
+            {(task.months && task.months.length > 0) && (
+              <div className="p-3 bg-gray-50 rounded-md mt-3">
+                <label className="text-sm font-medium text-gray-600">Specific Months</label>
+                <div className="mt-1 flex flex-wrap gap-1">
+                  {task.months.map((month, index) => {
+                    const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+                    return (
+                      <Badge key={index} variant="outline" className="text-xs">
+                        {monthNames[month - 1] || month}
+                      </Badge>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
 
         {/* Advanced Options */}
-        <div className="space-y-4">
-          <h3 className="text-lg font-semibold flex items-center gap-2">
-            <Tag className="h-4 w-4" />
-            Advanced Options
-          </h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="flex items-center justify-between p-3 bg-gray-50 rounded-md">
-              <span className="text-sm font-medium">Sticky Once Off</span>
-              <Badge variant={task.sticky_once_off ? "default" : "outline"}>
-                {task.sticky_once_off ? "Enabled" : "Disabled"}
-              </Badge>
-            </div>
-            <div className="flex items-center justify-between p-3 bg-gray-50 rounded-md">
-              <span className="text-sm font-medium">Allow Edit When Locked</span>
-              <Badge variant={task.allow_edit_when_locked ? "default" : "outline"}>
-                {task.allow_edit_when_locked ? "Enabled" : "Disabled"}
-              </Badge>
-            </div>
-          </div>
-        </div>
-
-        {/* Additional Details */}
-        {(task.due_date || task.start_date || task.end_date || task.publish_delay || task.publish_delay_date) && (
-          <div className="space-y-4">
-            <h3 className="text-lg font-semibold flex items-center gap-2">
-              <Calendar className="h-4 w-4" />
-              Date Settings
-            </h3>
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center space-x-2">
+              <Tag className="h-5 w-5" />
+              <span>Advanced Options</span>
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {task.due_date && (
+              <div className="flex items-center justify-between p-4 bg-gray-50 rounded-md border border-gray-100 shadow-sm">
                 <div>
-                  <label className="text-sm font-medium text-gray-600">Due Date (Once-off)</label>
-                  <p className="text-sm mt-1">{new Date(task.due_date).toLocaleDateString()}</p>
+                  <span className="text-sm font-medium">Sticky Once Off</span>
+                  <p className="text-xs text-gray-500 mt-1">Task will remain visible after completion</p>
                 </div>
-              )}
-              {task.start_date && (
+                <Badge variant={task.sticky_once_off ? "default" : "outline"} className="ml-2">
+                  {task.sticky_once_off ? "Enabled" : "Disabled"}
+                </Badge>
+              </div>
+              <div className="flex items-center justify-between p-4 bg-gray-50 rounded-md border border-gray-100 shadow-sm">
                 <div>
-                  <label className="text-sm font-medium text-gray-600">Start Date</label>
-                  <p className="text-sm mt-1">{new Date(task.start_date).toLocaleDateString()}</p>
+                  <span className="text-sm font-medium">Allow Edit When Locked</span>
+                  <p className="text-xs text-gray-500 mt-1">Task can be edited even when locked</p>
                 </div>
-              )}
-              {task.end_date && (
-                <div>
-                  <label className="text-sm font-medium text-gray-600">End Date</label>
-                  <p className="text-sm mt-1">{new Date(task.end_date).toLocaleDateString()}</p>
-                </div>
-              )}
-              {task.publish_delay && (
-                <div>
-                  <label className="text-sm font-medium text-gray-600">Publish Delay</label>
-                  <p className="text-sm mt-1">{new Date(task.publish_delay).toLocaleDateString()}</p>
-                </div>
-              )}
-              {task.publish_delay_date && (
-                <div>
-                  <label className="text-sm font-medium text-gray-600">Publish Delay Date</label>
-                  <p className="text-sm mt-1">{new Date(task.publish_delay_date).toLocaleDateString()}</p>
-                </div>
-              )}
+                <Badge variant={task.allow_edit_when_locked ? "default" : "outline"} className="ml-2">
+                  {task.allow_edit_when_locked ? "Enabled" : "Disabled"}
+                </Badge>
+              </div>
             </div>
-          </div>
+          </CardContent>
+        </Card>
+
+        {/* Date Settings */}
+        {(task.due_date || task.start_date || task.end_date || task.publish_delay || task.publish_delay_date) && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center space-x-2">
+                <CalendarDays className="h-5 w-5" />
+                <span>Date Settings</span>
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                {task.due_date && (
+                  <div className="p-3 bg-gray-50 rounded-md border border-gray-100">
+                    <label className="text-sm font-medium text-gray-600">Due Date (Once-off)</label>
+                    <p className="text-sm mt-1">{new Date(task.due_date).toLocaleDateString()}</p>
+                  </div>
+                )}
+                {task.start_date && (
+                  <div className="p-3 bg-gray-50 rounded-md border border-gray-100">
+                    <label className="text-sm font-medium text-gray-600">Start Date</label>
+                    <p className="text-sm mt-1">{new Date(task.start_date).toLocaleDateString()}</p>
+                  </div>
+                )}
+                {task.publish_delay && (
+                  <div className="p-3 bg-gray-50 rounded-md border border-gray-100">
+                    <label className="text-sm font-medium text-gray-600">Publish Delay</label>
+                    <p className="text-sm mt-1">{new Date(task.publish_delay).toLocaleDateString()}</p>
+                  </div>
+                )}
+                {task.end_date && (
+                  <div className="p-3 bg-gray-50 rounded-md border border-gray-100">
+                    <label className="text-sm font-medium text-gray-600">End Date</label>
+                    <p className="text-sm mt-1">{new Date(task.end_date).toLocaleDateString()}</p>
+                  </div>
+                )}
+                {task.publish_delay_date && (
+                  <div className="p-3 bg-gray-50 rounded-md border border-gray-100">
+                    <label className="text-sm font-medium text-gray-600">Publish Delay Date</label>
+                    <p className="text-sm mt-1">{new Date(task.publish_delay_date).toLocaleDateString()}</p>
+                  </div>
+                )}
+              </div>
+            </CardContent>
+          </Card>
         )}
 
         {/* Frequency Rules */}
         {task.frequency_rules && Object.keys(task.frequency_rules).length > 0 && (
-          <div className="space-y-4">
-            <h3 className="text-lg font-semibold flex items-center gap-2">
-              <Settings className="h-4 w-4" />
-              Frequency Rules
-            </h3>
-            <div className="p-3 bg-gray-50 rounded-md">
-              <div className="space-y-2">
-                {formatFrequencyRules(task.frequency_rules).map((rule, index) => (
-                  <div key={index} className="text-sm text-gray-700">
-                    • {rule}
-                  </div>
-                ))}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center space-x-2">
+                <Settings className="h-5 w-5" />
+                <span>Frequency Rules</span>
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-2">
+              <div className="p-3 bg-gray-50 rounded-md border border-gray-100">
+                <div className="space-y-2">
+                  {formatFrequencyRules(task.frequency_rules).map((rule, index) => (
+                    <div key={index} className="text-sm text-gray-700">
+                      • {rule}
+                    </div>
+                  ))}
+                </div>
               </div>
-            </div>
-          </div>
+            </CardContent>
+          </Card>
         )}
 
         {/* Metadata */}
-        <div className="space-y-4 pt-4 border-t">
-          <h3 className="text-sm font-semibold text-gray-700">Task Information</h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs text-gray-500">
-            <div>
-              <span className="font-medium">Created:</span> {new Date(task.created_at).toLocaleString()}
-            </div>
-            <div>
-              <span className="font-medium">Updated:</span> {new Date(task.updated_at).toLocaleString()}
-            </div>
-            {(task as any).created_by && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center space-x-2">
+              <Info className="h-5 w-5" />
+              <span>Task Information</span>
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs text-gray-500">
               <div>
-                <span className="font-medium">Created By:</span> {(task as any).created_by}
+                <span className="font-medium">Created:</span> {new Date(task.created_at).toLocaleString()}
               </div>
-            )}
-            {(task as any).updated_by && (
               <div>
-                <span className="font-medium">Updated By:</span> {(task as any).updated_by}
+                <span className="font-medium">Updated:</span> {new Date(task.updated_at).toLocaleString()}
               </div>
-            )}
-          </div>
+              {(task as any).created_by && (
+                <div>
+                  <span className="font-medium">Created By:</span> {(task as any).created_by}
+                </div>
+              )}
+              {(task as any).updated_by && (
+                <div>
+                  <span className="font-medium">Updated By:</span> {(task as any).updated_by}
+                </div>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+      
+      {/* Fixed Footer */}
+      <div className="flex-shrink-0 pt-4 border-t mt-auto">
+        <div className="flex justify-end">
+          <Button variant="outline" onClick={() => document.querySelector('[data-state="open"] button[aria-label="Close"]')?.dispatchEvent(new MouseEvent('click', { bubbles: true }))}>
+            Close
+          </Button>
         </div>
       </div>
     </DialogContent>
@@ -663,6 +715,7 @@ export default function AdminMasterTasksPage() {
       max-width: 80rem !important;
       width: 80vw !important;
       max-height: 90vh !important;
+      height: 90vh !important;
     }
     
     .create-task-modal {
@@ -670,6 +723,19 @@ export default function AdminMasterTasksPage() {
       width: 70vw !important;
       max-height: 95vh !important;
       height: 95vh !important;
+    }
+    
+    .task-details-modal .card,
+    .create-task-modal .card {
+      border: 1px solid #e5e7eb;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+      margin-bottom: 1rem;
+    }
+    
+    .task-details-modal .card-header,
+    .create-task-modal .card-header {
+      border-bottom: 1px solid #f3f4f6;
+      padding-bottom: 0.75rem;
     }
   `;
   const { user, isLoading: authLoading, isAdmin } = usePositionAuth()
