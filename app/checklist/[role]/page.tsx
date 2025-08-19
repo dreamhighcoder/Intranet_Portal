@@ -104,6 +104,12 @@ export default function RoleChecklistPage() {
         return
       }
       
+      // Additional check to ensure user is properly authenticated
+      if (!user.isAuthenticated) {
+        console.log('User not authenticated, skipping task load')
+        return
+      }
+      
       setLoading(true)
       try {
         // Normalize role to ensure it's in the kebab-case format
@@ -113,8 +119,13 @@ export default function RoleChecklistPage() {
         
         const data = await authenticatedGet(`/api/checklist?role=${normalizedRole}&date=${currentDate}`)
         
+        console.log('Raw API response:', data)
+        console.log('Response type:', typeof data)
+        console.log('Response keys:', data ? Object.keys(data) : 'null')
+        
         if (!data || !data.success) {
           console.error('API reported failure:', data?.error)
+          console.error('Full response object:', JSON.stringify(data, null, 2))
           throw new Error(data?.error || 'Failed to fetch tasks')
         }
         
@@ -124,7 +135,7 @@ export default function RoleChecklistPage() {
         // Calculate task counts
         const counts = {
           total: data.data.length,
-          done: data.data.filter((t: ChecklistTask) => t.status === 'completed').length,
+          done: data.data.filter((t: ChecklistTask) => t.status === 'done').length,
           due_today: 0,
           overdue: 0,
           missed: 0
@@ -134,7 +145,7 @@ export default function RoleChecklistPage() {
         const today = currentDate
         
         data.data.forEach((task: ChecklistTask) => {
-          if (task.status !== 'completed') {
+          if (task.status !== 'done') {
             counts.due_today++
             
             // Check if overdue
@@ -254,7 +265,7 @@ export default function RoleChecklistPage() {
       // Status filter
       if (selectedStatus !== "all") {
         if (selectedStatus === "overdue") {
-          if (task.status === "completed") return false
+          if (task.status === "done") return false
           if (task.master_task?.due_time) {
             const dueTime = new Date(`${currentDate}T${task.master_task.due_time}`)
             const now = new Date()
@@ -264,11 +275,11 @@ export default function RoleChecklistPage() {
         }
         
         if (selectedStatus === "due_today") {
-          return task.status !== "completed"
+          return task.status !== "done"
         }
         
         if (selectedStatus === "completed") {
-          return task.status === "completed"
+          return task.status === "done"
         }
       }
 
@@ -299,16 +310,29 @@ export default function RoleChecklistPage() {
     return list.sort()
   }, [tasks])
 
-  // Show loading if auth is still loading OR local loading
-  const shouldShowLoading = isLoading || loading
+  // Show loading if auth is still loading OR local loading OR user is not authenticated
+  const shouldShowLoading = isLoading || loading || (!user || !user.isAuthenticated)
   
-  if (shouldShowLoading) {
+  if (shouldShowLoading && isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[var(--color-primary)] mx-auto"></div>
           <p className="mt-2 text-[var(--color-text-secondary)]">
-            {isLoading ? 'Loading user profile...' : 'Loading checklist...'}
+            Loading user profile...
+          </p>
+        </div>
+      </div>
+    )
+  }
+  
+  if (shouldShowLoading && loading && user && user.isAuthenticated) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[var(--color-primary)] mx-auto"></div>
+          <p className="mt-2 text-[var(--color-text-secondary)]">
+            Loading checklist...
           </p>
         </div>
       </div>
@@ -328,10 +352,10 @@ export default function RoleChecklistPage() {
   }
 
   const getStatusBadge = (task: ChecklistTask) => {
-    if (task.status === "completed") {
+    if (task.status === "done") {
       return (
         <Badge className="bg-green-100 text-green-800 border-green-200">
-          ✅ Done
+          ✓ Done
         </Badge>
       )
     }
@@ -356,7 +380,7 @@ export default function RoleChecklistPage() {
     )
   }
 
-  const allTasksCompleted = filteredTasks.length > 0 && filteredTasks.every((task) => task.status === "completed")
+  const allTasksCompleted = filteredTasks.length > 0 && filteredTasks.every((task) => task.status === "done")
 
   return (
     <div className="min-h-screen bg-[var(--color-background)]">
@@ -393,7 +417,7 @@ export default function RoleChecklistPage() {
             )}
           </div>
           <p className="text-[var(--color-text-secondary)]">
-            {filteredTasks.length} tasks • {filteredTasks.filter((t) => t.status === "completed").length} completed
+            {filteredTasks.length} tasks • {filteredTasks.filter((t) => t.status === "done").length} completed
           </p>
         </div>
 
@@ -452,91 +476,191 @@ export default function RoleChecklistPage() {
                 <p className="text-[var(--color-text-secondary)] text-lg">No tasks found for the selected filters.</p>
               </div>
             ) : (
-              <div className="overflow-x-auto">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead className="w-[35%] px-6">Task Title</TableHead>
-                      <TableHead className="w-[15%] px-4">Category</TableHead>
-                      <TableHead className="w-[12%] px-4">Timing</TableHead>
-                      <TableHead className="w-[10%] px-4">Due Time</TableHead>
-                      <TableHead className="w-[12%] px-4">Status</TableHead>
-                      <TableHead className="w-[16%] px-6">Actions</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {filteredTasks.map((task) => (
-                      <TableRow key={`${task.id}-${refreshKey}`}>
-                        <TableCell className="px-6">
-                          <div className="font-medium">{task.master_task.title}</div>
-                          {task.master_task.description && (
-                            <p className="text-sm text-gray-600 mt-1">
-                              {task.master_task.description}
-                            </p>
-                          )}
-                        </TableCell>
-                        <TableCell className="px-4">
-                          <div className="flex flex-wrap gap-1">
-                            {task.master_task.categories.map((category, index) => {
-                              const config = getCategoryConfig(category)
-                              return (
-                                <Badge key={index} className={`text-xs ${config.color}`}>
-                                  {config.label}
-                                </Badge>
-                              )
-                            })}
+              <>
+                {/* Desktop Table */}
+                <div className="hidden lg:block overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead className="min-w-[200px] px-4 sm:px-6">Task Title</TableHead>
+                        <TableHead className="min-w-[120px] px-4">Category</TableHead>
+                        <TableHead className="min-w-[100px] px-4">Timing</TableHead>
+                        <TableHead className="min-w-[90px] px-4">Due Time</TableHead>
+                        <TableHead className="min-w-[100px] px-4">Status</TableHead>
+                        <TableHead className="min-w-[140px] px-4 sm:px-6">Actions</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {filteredTasks.map((task) => (
+                        <TableRow key={`${task.id}-${refreshKey}`}>
+                          <TableCell className="px-4 sm:px-6">
+                            <div className="space-y-1">
+                              <div className="font-medium">{task.master_task.title}</div>
+                              {task.master_task.description && (
+                                <p className="text-sm text-gray-600 line-clamp-2">
+                                  {task.master_task.description}
+                                </p>
+                              )}
+                            </div>
+                          </TableCell>
+                          <TableCell className="px-4">
+                            <div className="flex flex-wrap gap-1">
+                              {task.master_task.categories.map((category, index) => {
+                                const config = getCategoryConfig(category)
+                                return (
+                                  <Badge key={index} className={`text-xs ${config.color}`}>
+                                    {config.label}
+                                  </Badge>
+                                )
+                              })}
+                            </div>
+                          </TableCell>
+                          <TableCell className="px-4">
+                            <Badge variant="secondary" className="capitalize">
+                              {task.master_task.timing.replace(/_/g, ' ')}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="px-4">
+                            {task.master_task.due_time ? (
+                              <span className="text-sm font-medium">{task.master_task.due_time}</span>
+                            ) : (
+                              <span className="text-sm text-gray-500">No due time</span>
+                            )}
+                          </TableCell>
+                          <TableCell className="px-4">{getStatusBadge(task)}</TableCell>
+                          <TableCell className="px-4 sm:px-6">
+                            <div className="flex items-center space-x-2">
+                              {task.status === "done" ? (
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => handleTaskUndo(task.id)}
+                                  className="border-green-300 bg-green-100 text-green-800 hover:bg-green-200 hover:border-green-400 font-medium"
+                                >
+                                  <span>✓ Done</span>
+                                </Button>
+                              ) : (
+                                <Button
+                                  size="sm"
+                                  onClick={() => handleTaskComplete(task.id)}
+                                  className="bg-blue-600 text-white hover:bg-blue-700 border-blue-600 hover:border-blue-700 font-medium"
+                                >
+                                  <span>Done?</span>
+                                </Button>
+                              )}
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={() => handleViewDetails(task)}
+                                title="View Details"
+                                className="hover:bg-gray-100"
+                              >
+                                <Eye className="h-4 w-4" />
+                                <span className="ml-1">Details</span>
+                              </Button>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+
+                {/* Mobile/Tablet Card Layout */}
+                <div className="lg:hidden space-y-4 p-4">
+                  {filteredTasks.map((task) => (
+                    <Card key={`${task.id}-${refreshKey}`} className="border border-gray-200">
+                      <CardContent className="p-4">
+                        <div className="space-y-3">
+                          {/* Title and Description */}
+                          <div>
+                            <h3 className="font-medium text-base">{task.master_task.title}</h3>
+                            {task.master_task.description && (
+                              <p className="text-sm text-gray-600 mt-1">{task.master_task.description}</p>
+                            )}
                           </div>
-                        </TableCell>
-                        <TableCell className="px-4">
-                          <Badge variant="secondary" className="capitalize">
-                            {task.master_task.timing.replace(/_/g, ' ')}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="px-4">
-                          {task.master_task.due_time ? (
-                            <span className="text-sm font-medium">{task.master_task.due_time}</span>
-                          ) : (
-                            <span className="text-sm text-gray-500">No due time</span>
-                          )}
-                        </TableCell>
-                        <TableCell className="px-4">{getStatusBadge(task)}</TableCell>
-                        <TableCell className="px-6">
-                          <div className="flex items-center space-x-2">
-                            {task.status === "completed" ? (
+
+                          {/* Details Grid */}
+                          <div className="space-y-3 text-sm">
+                            <div>
+                              <span className="text-gray-500">Categories:</span>
+                              <div className="flex flex-wrap gap-1 mt-1">
+                                {task.master_task.categories.map((category, index) => {
+                                  const config = getCategoryConfig(category)
+                                  return (
+                                    <Badge key={index} className={`text-xs ${config.color}`}>
+                                      {config.label}
+                                    </Badge>
+                                  )
+                                })}
+                              </div>
+                            </div>
+                            <div>
+                              <span className="text-gray-500">Timing:</span>
+                              <div className="mt-1">
+                                <Badge variant="secondary" className="capitalize text-xs">
+                                  {task.master_task.timing.replace(/_/g, ' ')}
+                                </Badge>
+                              </div>
+                            </div>
+                            <div>
+                              <span className="text-gray-500">Due Time:</span>
+                              <div className="mt-1 font-medium">
+                                {task.master_task.due_time ? (
+                                  <span>{task.master_task.due_time}</span>
+                                ) : (
+                                  <span className="text-gray-400">No due time</span>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Status and Actions */}
+                          <div className="flex flex-col space-y-3 pt-3 border-t">
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center space-x-2">
+                                <span className="text-sm text-gray-500">Status:</span>
+                                {getStatusBadge(task)}
+                              </div>
+                            </div>
+
+                            <div className="flex space-x-2">
+                              {task.status === "done" ? (
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => handleTaskUndo(task.id)}
+                                  className="flex-1 border-green-300 bg-green-100 text-green-800 hover:bg-green-200 hover:border-green-400 font-medium"
+                                >
+                                  <span>✓ Done</span>
+                                </Button>
+                              ) : (
+                                <Button
+                                  size="sm"
+                                  onClick={() => handleTaskComplete(task.id)}
+                                  className="flex-1 bg-blue-600 text-white hover:bg-blue-700 border-blue-600 hover:border-blue-700 font-medium"
+                                >
+                                  <span>Done?</span>
+                                </Button>
+                              )}
                               <Button
                                 size="sm"
                                 variant="outline"
-                                onClick={() => handleTaskUndo(task.id)}
-                                className="border-green-200 bg-green-50 text-green-700 hover:bg-green-100"
+                                onClick={() => handleViewDetails(task)}
+                                title="View Details"
+                                className="hover:bg-gray-100"
                               >
-                                <Check className="h-4 w-4 mr-1" />
-                                Done
+                                <Eye className="h-4 w-4" />
+                                <span className="ml-1">Details</span>
                               </Button>
-                            ) : (
-                              <Button
-                                size="sm"
-                                onClick={() => handleTaskComplete(task.id)}
-                                className="bg-[var(--color-primary)] text-white hover:bg-[var(--color-primary)]/90"
-                              >
-                                <Check className="h-4 w-4 mr-1" />
-                                Done?
-                              </Button>
-                            )}
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              onClick={() => handleViewDetails(task)}
-                              title="View Details"
-                            >
-                              <Eye className="h-4 w-4" />
-                            </Button>
+                            </div>
                           </div>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+              </>
             )}
           </CardContent>
         </Card>
