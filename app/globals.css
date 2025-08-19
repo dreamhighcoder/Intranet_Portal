@@ -325,6 +325,16 @@
     @apply max-w-6xl max-h-[95vh];
   }
   
+  /* Task Details Modal - wider */
+  .task-details-modal {
+    @apply max-w-4xl w-[80vw] max-h-[90vh];
+  }
+  
+  /* Create New Task Modal - narrower */
+  .create-task-modal {
+    @apply max-w-4xl w-[70vw] max-h-[95vh];
+  }
+  
   .master-task-form {
     @apply space-y-5;
   }
@@ -341,6 +351,17 @@
 
 .dialog-content > div:last-child {
   @apply flex-1 min-h-0;
+}
+
+/* Specific modal size overrides */
+.task-details-modal {
+  max-width: 80rem !important;
+  width: 80vw !important;
+}
+
+.create-task-modal {
+  max-width: 64rem !important;
+  width: 70vw !important;
 }
 
 /* Form card improvements */

@@ -96,7 +96,7 @@ export default function TaskDetailModal({
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+      <DialogContent className="overflow-y-auto" style={{ maxWidth: "80rem", width: "80vw", maxHeight: "90vh" }}>
         <DialogHeader>
           <DialogTitle className="flex items-center space-x-2">
             <span>Task Details</span>

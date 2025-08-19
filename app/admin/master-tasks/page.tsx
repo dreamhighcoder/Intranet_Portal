@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect, useRef } from "react"
+import Head from 'next/head'
 import { usePositionAuth } from "@/lib/position-auth-context"
 import { Navigation } from "@/components/navigation"
 import TaskForm from "@/components/admin/TaskFormNew"
@@ -378,7 +379,7 @@ const TaskDetailsModal = ({ task, positions }: { task: MasterTask, positions: Po
   }
 
   return (
-    <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+    <DialogContent className="task-details-modal overflow-y-auto" style={{ maxWidth: "80rem", width: "80vw", maxHeight: "90vh" }}>
       <DialogHeader>
         <DialogTitle className="flex items-center gap-2">
           <FileText className="h-5 w-5" />
@@ -656,6 +657,21 @@ const TaskDetailsModal = ({ task, positions }: { task: MasterTask, positions: Po
 }
 
 export default function AdminMasterTasksPage() {
+  // Custom styles for modals
+  const customStyles = `
+    .task-details-modal {
+      max-width: 80rem !important;
+      width: 80vw !important;
+      max-height: 90vh !important;
+    }
+    
+    .create-task-modal {
+      max-width: 64rem !important;
+      width: 70vw !important;
+      max-height: 95vh !important;
+      height: 95vh !important;
+    }
+  `;
   const { user, isLoading: authLoading, isAdmin } = usePositionAuth()
 
   const [tasks, setTasks] = useState<MasterTask[]>([])
@@ -1187,6 +1203,8 @@ export default function AdminMasterTasksPage() {
 
   return (
     <div className="min-h-screen bg-[var(--color-background)]">
+      {/* Inline styles for modal sizing */}
+      <style dangerouslySetInnerHTML={{ __html: customStyles }} />
       <Navigation />
 
       <main className="max-w-content-lg mx-auto px-4 sm:px-6 lg:px-18 py-6 sm:py-8">
@@ -1665,7 +1683,7 @@ export default function AdminMasterTasksPage() {
 
         {/* Task Creation/Edit Dialog */}
         <Dialog open={isTaskDialogOpen} onOpenChange={setIsTaskDialogOpen}>
-          <DialogContent className="dialog-content max-w-7xl w-[98vw] sm:w-[95vw] lg:w-[90vw] max-h-[98vh] h-[98vh] overflow-hidden flex flex-col">
+          <DialogContent className="dialog-content create-task-modal overflow-hidden flex flex-col" style={{ maxWidth: "64rem", width: "70vw", maxHeight: "95vh", height: "95vh" }}>
             <DialogHeader className="flex-shrink-0 pb-4 border-b">
               <DialogTitle className="text-xl font-semibold">
                 {editingTask ? 'Edit Master Task' : 'Create New Master Task'}
