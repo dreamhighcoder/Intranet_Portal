@@ -7,6 +7,7 @@ import { usePathname, useRouter } from "next/navigation"
 import { useState } from "react"
 import { Menu, X, LogOut, User } from "lucide-react"
 import { toastSuccess } from "@/hooks/use-toast"
+import { toKebabCase } from "@/lib/responsibility-mapper"
 
 
 export function Navigation() {
@@ -58,7 +59,7 @@ export function Navigation() {
         { href: "/admin/reports", label: "Reports" },
       ]
     : [
-        { href: "/checklist", label: "Checklist" },
+        { href: `/checklist/${toKebabCase(user?.position?.displayName || user?.position?.name || 'user')}`, label: "Checklist" },
         { href: "/calendar", label: "Calendar" },
       ]
 

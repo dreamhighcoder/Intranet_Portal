@@ -1,9 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabase } from '@/lib/supabase'
 import { requireAuth } from '@/lib/auth-middleware'
 import { toKebabCase, getSearchOptions, filterTasksByResponsibility } from '@/lib/responsibility-mapper'
 import { createRecurrenceEngine } from '@/lib/recurrence-engine'
 import { createHolidayHelper } from '@/lib/public-holidays'
+import { createClient } from '@supabase/supabase-js'
+
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
+const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
+const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey)
 
 export async function GET(request: NextRequest) {
   try {
@@ -47,7 +51,7 @@ export async function GET(request: NextRequest) {
     let responsibility: string | null = null
     if (positionId) {
       // Fetch position to map to responsibility
-      const { data: position } = await supabase
+      const { data: position } = await supabaseAdmin
         .from('positions')
         .select('name, display_name')
         .eq('id', positionId)
@@ -56,11 +60,11 @@ export async function GET(request: NextRequest) {
         responsibility = toKebabCase(position.display_name || position.name)
       }
     } else if (user.role !== 'admin') {
-      responsibility = toKebabCase(user.display_name || '')
+      responsibility = toKebabCase(user.position?.displayName || user.position?.name || '')
     }
 
     // Get holidays
-    const { data: holidays } = await supabase
+    const { data: holidays } = await supabaseAdmin
       .from('public_holidays')
       .select('*')
       .gte('date', startDateStr)
@@ -70,7 +74,7 @@ export async function GET(request: NextRequest) {
     const recurrenceEngine = createRecurrenceEngine(holidayHelper)
 
     // Build master_tasks query
-    let taskQuery = supabase
+    let taskQuery = supabaseAdmin
       .from('master_tasks')
       .select(`
         id,
@@ -83,7 +87,8 @@ export async function GET(request: NextRequest) {
         start_date,
         end_date,
         due_time,
-        frequency_rules
+        frequency_rules,
+        created_at
       `)
       .eq('publish_status', 'active')
 
@@ -122,7 +127,7 @@ export async function GET(request: NextRequest) {
       cur.setDate(cur.getDate() + 1)
     }
 
-    // Fill occurrences
+    // Fill occurrences using recurrence engine
     const now = new Date()
     for (const task of roleFiltered) {
       // iterate across range and add when due
@@ -137,12 +142,20 @@ export async function GET(request: NextRequest) {
         if (isDue) {
           const ds = iter.toISOString().split('T')[0]
           const day = calendarMap[ds]
-          day.total++
-          const dueTime = task.due_time ? new Date(`${ds}T${task.due_time}`) : null
-          const status = dueTime && now > dueTime ? 'overdue' : 'pending'
-          day.tasks.push({ id: `${task.id}:${ds}`, title: task.title, category: task.category, position: '', status })
-          if (status === 'overdue') day.overdue++
-          else day.pending++
+          if (day) {
+            day.total++
+            const dueTime = task.due_time ? new Date(`${ds}T${task.due_time}`) : null
+            const status = dueTime && now > dueTime ? 'overdue' : 'pending'
+            day.tasks.push({ 
+              id: `${task.id}:${ds}`, 
+              title: task.title, 
+              category: task.categories?.[0] || 'general', 
+              position: '', 
+              status 
+            })
+            if (status === 'overdue') day.overdue++
+            else day.pending++
+          }
         }
         iter.setDate(iter.getDate() + 1)
       }

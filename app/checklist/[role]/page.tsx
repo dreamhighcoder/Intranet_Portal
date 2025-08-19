@@ -16,6 +16,7 @@ import Link from 'next/link'
 import { toastError, toastSuccess } from '@/hooks/use-toast'
 import { toKebabCase } from '@/lib/responsibility-mapper'
 import { authenticatedGet } from '@/lib/api-client'
+import TaskDetailModal from '@/components/checklist/TaskDetailModal'
 
 interface ChecklistTask {
   id: string
@@ -86,6 +87,8 @@ export default function RoleChecklistPage() {
     overdue: 0,
     missed: 0
   })
+  const [selectedTask, setSelectedTask] = useState<ChecklistTask | null>(null)
+  const [isDetailModalOpen, setIsDetailModalOpen] = useState(false)
 
   // Handle auth redirect
   useEffect(() => {
@@ -228,6 +231,16 @@ export default function RoleChecklistPage() {
   const handleFinish = () => {
     signOut()
     router.push("/")
+  }
+
+  const handleViewDetails = (task: ChecklistTask) => {
+    setSelectedTask(task)
+    setIsDetailModalOpen(true)
+  }
+
+  const handleCloseDetailModal = () => {
+    setIsDetailModalOpen(false)
+    setSelectedTask(null)
   }
 
   // Apply filters to tasks
@@ -494,9 +507,10 @@ export default function RoleChecklistPage() {
                                 size="sm"
                                 variant="outline"
                                 onClick={() => handleTaskUndo(task.id)}
+                                className="border-green-200 bg-green-50 text-green-700 hover:bg-green-100"
                               >
-                                <X className="h-4 w-4 mr-1" />
-                                Undo
+                                <Check className="h-4 w-4 mr-1" />
+                                Done
                               </Button>
                             ) : (
                               <Button
@@ -505,15 +519,13 @@ export default function RoleChecklistPage() {
                                 className="bg-[var(--color-primary)] text-white hover:bg-[var(--color-primary)]/90"
                               >
                                 <Check className="h-4 w-4 mr-1" />
-                                Done
+                                Done?
                               </Button>
                             )}
                             <Button
                               size="sm"
                               variant="ghost"
-                              onClick={() => {
-                                toastError("Feature Not Available", "Task details view is not yet implemented.")
-                              }}
+                              onClick={() => handleViewDetails(task)}
                               title="View Details"
                             >
                               <Eye className="h-4 w-4" />
@@ -567,6 +579,14 @@ export default function RoleChecklistPage() {
           </div>
         </div>
       </main>
+
+      {/* Task Detail Modal */}
+      <TaskDetailModal
+        isOpen={isDetailModalOpen}
+        onClose={handleCloseDetailModal}
+        task={selectedTask}
+        onTaskUpdate={() => setRefreshKey(prev => prev + 1)}
+      />
     </div>
   )
 }
