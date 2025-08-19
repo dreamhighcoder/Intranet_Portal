@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button'
 import { AlertTriangle, CheckCircle, Clock, Calendar } from 'lucide-react'
 import { usePositionAuth } from '@/lib/position-auth-context'
 import { useRouter } from 'next/navigation'
+import { toKebabCase } from '@/lib/responsibility-mapper'
 
 interface ChecklistCardProps {
   role: string
@@ -57,16 +58,8 @@ export default function ChecklistCard({
           position_id: positionId
         })
         
-        // If role is a responsibility value, use responsibility filtering
-        const responsibilityValues = [
-          'pharmacist-primary', 'pharmacist-supporting', 'pharmacy-assistants',
-          'dispensary-technicians', 'daa-packers', 'shared-exc-pharmacist',
-          'shared-inc-pharmacist', 'operational-managerial'
-        ]
-        
-        if (responsibilityValues.includes(role)) {
-          queryParams.set('responsibility', role)
-        }
+        // Always use responsibility filtering with normalized role
+        queryParams.set('responsibility', toKebabCase(role))
         
         const response = await fetch(`/api/public/task-counts?${queryParams.toString()}`)
         
@@ -94,7 +87,15 @@ export default function ChecklistCard({
   }, [role, positionId])
 
   const handleOpenChecklist = () => {
-    router.push(`/checklist?position=${positionId}`)
+    // Instead of directly navigating, we need to trigger the login modal
+    // We'll use a custom event to communicate with the parent component
+    const event = new CustomEvent<{ positionId: string; roleDisplayName: string }>('open-checklist-login', { 
+      detail: { 
+        positionId,
+        roleDisplayName: roleDisplayName
+      }
+    });
+    window.dispatchEvent(event);
   }
 
   // Always show card, but make it inactive if no tasks
@@ -203,7 +204,7 @@ export default function ChecklistCard({
               )}
               
               {/* X tasks to do - total tasks due today (regardless of original due date) */}
-              <div className="flex items-center justify-between text-sm p-2 bg-gray-50 rounded">
+              <div className="flex items-center justify-between text-sm px-2 py-1 bg-gray-50 rounded">
                 <span className="text-gray-700 font-medium flex items-center">
                   <span className="mr-1">📋</span> Tasks to do
                 </span>
@@ -212,7 +213,7 @@ export default function ChecklistCard({
               
               {/* X tasks due today - tasks specifically due today */}
               {taskCounts.dueToday > 0 && (
-                <div className="flex items-center justify-between text-sm p-2 bg-orange-50 rounded">
+                <div className="flex items-center justify-between text-sm px-2 py-1 bg-orange-50 rounded">
                   <span className="text-orange-700 font-medium flex items-center">
                     <span className="mr-1">⏰</span> Due today
                   </span>
@@ -222,7 +223,7 @@ export default function ChecklistCard({
               
               {/* X tasks overdue - tasks past their due date but still completable */}
               {taskCounts.overdue > 0 && (
-                <div className="flex items-center justify-between text-sm p-2 bg-red-50 rounded">
+                <div className="flex items-center justify-between text-sm px-2 py-1 bg-red-50 rounded">
                   <span className="text-red-700 font-medium flex items-center">
                     <span className="mr-1">⚠️</span> Overdue
                   </span>

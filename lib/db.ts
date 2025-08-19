@@ -467,6 +467,8 @@ export async function listTasks(
  * }
  * ```
  */
+import { getSearchOptions, filterTasksByResponsibility } from './responsibility-mapper'
+
 export async function getTasksForRoleOnDate(
   role: string,
   date: string
@@ -474,6 +476,10 @@ export async function getTasksForRoleOnDate(
   try {
     // Get all tasks where the role is in the responsibility array
     // Also check that the task is active and respects publish_delay
+    
+    // Get all possible role variants and shared options to search for
+    const searchRoles = getSearchOptions(role);
+    
     const { data, error } = await supabase
       .from('master_tasks')
       .select(`
@@ -484,7 +490,7 @@ export async function getTasksForRoleOnDate(
           description
         )
       `)
-      .overlaps('responsibility', [role, 'Shared (inc. Pharmacist)', 'Shared (exc. Pharmacist)'])
+      .overlaps('responsibility', searchRoles)
       .eq('publish_status', 'active')
       .or(`publish_delay.is.null,publish_delay.lte.${date}`)
 
@@ -493,29 +499,8 @@ export async function getTasksForRoleOnDate(
       return { data: [], error }
     }
 
-    // Filter out tasks that shouldn't be visible to this role
-    // For example, if role is not a Pharmacist, filter out 'Shared (inc. Pharmacist)'
-    const filteredData = data.filter(task => {
-      // Check if the task is directly assigned to this role
-      if (task.responsibility.includes(role)) {
-        return true;
-      }
-      
-      // Handle shared responsibilities
-      const isPharmacistRole = role.toLowerCase().includes('pharmacist');
-      
-      // If task is shared including pharmacists, only show to pharmacist roles
-      if (task.responsibility.includes('Shared (inc. Pharmacist)')) {
-        return isPharmacistRole;
-      }
-      
-      // If task is shared excluding pharmacists, only show to non-pharmacist roles
-      if (task.responsibility.includes('Shared (exc. Pharmacist)')) {
-        return !isPharmacistRole;
-      }
-      
-      return false;
-    });
+    // Filter out tasks that shouldn't be visible to this role using our utility
+    const filteredData = filterTasksByResponsibility(data, role);
 
     return { data: filteredData as TaskRowWithPosition[], error: null }
   } catch (error) {

@@ -11,9 +11,11 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Check, X, Eye, LogOut, Settings, ChevronLeft, ChevronRight } from 'lucide-react'
+import { Check, X, Eye, LogOut, Settings, ChevronRight } from 'lucide-react'
 import Link from 'next/link'
 import { toastError, toastSuccess } from '@/hooks/use-toast'
+import { toKebabCase } from '@/lib/responsibility-mapper'
+import { authenticatedGet } from '@/lib/api-client'
 
 interface ChecklistTask {
   id: string
@@ -36,6 +38,26 @@ interface ChecklistTask {
     responsibility: string[]
     categories: string[]
     frequency_rules: Record<string, any>
+  }
+}
+
+// Category display names and colors
+const CATEGORY_CONFIG = {
+  'stock-control': { label: 'Stock Control', color: 'bg-blue-100 text-blue-800 border-blue-200' },
+  'compliance': { label: 'Compliance', color: 'bg-red-100 text-red-800 border-red-200' },
+  'cleaning': { label: 'Cleaning', color: 'bg-green-100 text-green-800 border-green-200' },
+  'pharmacy-services': { label: 'Pharmacy Services', color: 'bg-purple-100 text-purple-800 border-purple-200' },
+  'fos-operations': { label: 'FOS Operations', color: 'bg-yellow-100 text-yellow-800 border-yellow-200' },
+  'dispensary-operations': { label: 'Dispensary Operations', color: 'bg-indigo-100 text-indigo-800 border-indigo-200' },
+  'general-pharmacy-operations': { label: 'General Pharmacy Operations', color: 'bg-pink-100 text-pink-800 border-pink-200' },
+  'business-management': { label: 'Business Management', color: 'bg-orange-100 text-orange-800 border-orange-200' },
+  'general': { label: 'General', color: 'bg-gray-100 text-gray-800 border-gray-200' }
+}
+
+const getCategoryConfig = (category: string) => {
+  return CATEGORY_CONFIG[category as keyof typeof CATEGORY_CONFIG] || {
+    label: category.replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase()),
+    color: 'bg-gray-100 text-gray-800 border-gray-200'
   }
 }
 
@@ -81,18 +103,19 @@ export default function RoleChecklistPage() {
       
       setLoading(true)
       try {
-        const response = await fetch(`/api/checklist?role=${role}&date=${currentDate}`)
+        // Normalize role to ensure it's in the kebab-case format
+        const normalizedRole = toKebabCase(role);
         
-        if (!response.ok) {
-          throw new Error('Failed to fetch tasks')
+        console.log('Fetching tasks for role:', normalizedRole, 'and date:', currentDate)
+        
+        const data = await authenticatedGet(`/api/checklist?role=${normalizedRole}&date=${currentDate}`)
+        
+        if (!data || !data.success) {
+          console.error('API reported failure:', data?.error)
+          throw new Error(data?.error || 'Failed to fetch tasks')
         }
         
-        const data = await response.json()
-        
-        if (!data.success) {
-          throw new Error(data.error || 'Failed to fetch tasks')
-        }
-        
+        console.log('Tasks received:', data.data?.length || 0)
         setTasks(data.data || [])
         
         // Calculate task counts
@@ -150,53 +173,55 @@ export default function RoleChecklistPage() {
 
   const handleTaskComplete = async (taskId: string) => {
     try {
-      const response = await fetch(`/api/task-instances/${taskId}`, {
-        method: 'PUT',
+      const response = await fetch('/api/checklist/complete', {
+        method: 'POST',
         headers: {
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
-          status: 'completed',
-          completed_by: user?.id,
-          completed_at: new Date().toISOString()
+          taskId,
+          action: 'complete'
         })
       })
 
+      const result = await response.json()
+
       if (!response.ok) {
-        throw new Error('Failed to complete task')
+        throw new Error(result.error || 'Failed to complete task')
       }
 
       setRefreshKey((prev) => prev + 1)
       toastSuccess("Task Completed", "Task has been marked as complete.")
     } catch (error) {
       console.error('Error completing task:', error)
-      toastError("Error", "Failed to complete task. Please try again.")
+      toastError("Error", error instanceof Error ? error.message : "Failed to complete task. Please try again.")
     }
   }
 
   const handleTaskUndo = async (taskId: string) => {
     try {
-      const response = await fetch(`/api/task-instances/${taskId}`, {
-        method: 'PUT',
+      const response = await fetch('/api/checklist/complete', {
+        method: 'POST',
         headers: {
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
-          status: 'pending',
-          completed_by: null,
-          completed_at: null
+          taskId,
+          action: 'undo'
         })
       })
 
+      const result = await response.json()
+
       if (!response.ok) {
-        throw new Error('Failed to undo task')
+        throw new Error(result.error || 'Failed to undo task')
       }
 
       setRefreshKey((prev) => prev + 1)
       toastSuccess("Task Reopened", "Task has been reopened.")
     } catch (error) {
       console.error('Error undoing task:', error)
-      toastError("Error", "Failed to undo task. Please try again.")
+      toastError("Error", error instanceof Error ? error.message : "Failed to undo task. Please try again.")
     }
   }
 
@@ -238,13 +263,27 @@ export default function RoleChecklistPage() {
     })
   }, [tasks, selectedCategory, selectedStatus, currentDate])
 
-  // Get unique categories for filter
+  // Get unique categories for filter (use full catalog when empty)
   const uniqueCategories = useMemo(() => {
     const categories = new Set<string>()
     tasks.forEach(task => {
-      task.master_task.categories.forEach(cat => categories.add(cat))
+      ;(task.master_task.categories || []).forEach(cat => categories.add(cat))
     })
-    return Array.from(categories).sort()
+    const list = Array.from(categories)
+    if (list.length === 0) {
+      // Fallback to full category list from constants if no tasks or no categories loaded
+      return [
+        'stock-control',
+        'compliance',
+        'cleaning',
+        'pharmacy-services',
+        'fos-operations',
+        'dispensary-operations',
+        'general-pharmacy-operations',
+        'business-management',
+      ]
+    }
+    return list.sort()
   }, [tasks])
 
   // Show loading if auth is still loading OR local loading
@@ -315,15 +354,6 @@ export default function RoleChecklistPage() {
         <div className="mb-6">
           <div className="flex items-center justify-between mb-2">
             <div className="flex items-center space-x-4">
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => router.push('/checklist')}
-                className="text-gray-600 hover:text-gray-900"
-              >
-                <ChevronLeft className="h-4 w-4 mr-1" />
-                Back to All
-              </Button>
               <h1 className="text-3xl font-bold text-[var(--color-text-primary)]">
                 {role.charAt(0).toUpperCase() + role.slice(1)} Checklist —{" "}
                 {new Date(currentDate).toLocaleDateString("en-AU", {
@@ -371,11 +401,14 @@ export default function RoleChecklistPage() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Categories</SelectItem>
-                  {uniqueCategories.map(category => (
-                    <SelectItem key={category} value={category}>
-                      {category}
-                    </SelectItem>
-                  ))}
+                  {uniqueCategories.map(category => {
+                    const config = getCategoryConfig(category)
+                    return (
+                      <SelectItem key={category} value={category}>
+                        {config.label}
+                      </SelectItem>
+                    )
+                  })}
                 </SelectContent>
               </Select>
             </div>
@@ -406,87 +439,92 @@ export default function RoleChecklistPage() {
                 <p className="text-[var(--color-text-secondary)] text-lg">No tasks found for the selected filters.</p>
               </div>
             ) : (
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Task Title</TableHead>
-                    <TableHead>Category</TableHead>
-                    <TableHead>Timing</TableHead>
-                    <TableHead>Due Time</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredTasks.map((task) => (
-                    <TableRow key={`${task.id}-${refreshKey}`}>
-                      <TableCell>
-                        <div className="font-medium">{task.master_task.title}</div>
-                        {task.master_task.description && (
-                          <p className="text-sm text-gray-600 mt-1">
-                            {task.master_task.description}
-                          </p>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex flex-wrap gap-1">
-                          {task.master_task.categories.map((category, index) => (
-                            <Badge key={index} variant="outline" className="text-xs">
-                              {category}
-                            </Badge>
-                          ))}
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant="secondary" className="capitalize">
-                          {task.master_task.timing}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>
-                        {task.master_task.due_time ? (
-                          <span className="text-sm font-medium">{task.master_task.due_time}</span>
-                        ) : (
-                          <span className="text-sm text-gray-500">No due time</span>
-                        )}
-                      </TableCell>
-                      <TableCell>{getStatusBadge(task)}</TableCell>
-                      <TableCell>
-                        <div className="flex items-center space-x-2">
-                          {task.status === "completed" ? (
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => handleTaskUndo(task.id)}
-                            >
-                              <X className="h-4 w-4 mr-1" />
-                              Undo
-                            </Button>
-                          ) : (
-                            <Button
-                              size="sm"
-                              onClick={() => handleTaskComplete(task.id)}
-                              className="bg-[var(--color-primary)] text-[var(--color-primary-on)]"
-                            >
-                              <Check className="h-4 w-4 mr-1" />
-                              Mark Done
-                            </Button>
-                          )}
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            onClick={() => {
-                              // Mock task detail view
-                              console.log("View task details:", task.id)
-                            }}
-                          >
-                            <Eye className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      </TableCell>
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="w-[35%] px-6">Task Title</TableHead>
+                      <TableHead className="w-[15%] px-4">Category</TableHead>
+                      <TableHead className="w-[12%] px-4">Timing</TableHead>
+                      <TableHead className="w-[10%] px-4">Due Time</TableHead>
+                      <TableHead className="w-[12%] px-4">Status</TableHead>
+                      <TableHead className="w-[16%] px-6">Actions</TableHead>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+                  </TableHeader>
+                  <TableBody>
+                    {filteredTasks.map((task) => (
+                      <TableRow key={`${task.id}-${refreshKey}`}>
+                        <TableCell className="px-6">
+                          <div className="font-medium">{task.master_task.title}</div>
+                          {task.master_task.description && (
+                            <p className="text-sm text-gray-600 mt-1">
+                              {task.master_task.description}
+                            </p>
+                          )}
+                        </TableCell>
+                        <TableCell className="px-4">
+                          <div className="flex flex-wrap gap-1">
+                            {task.master_task.categories.map((category, index) => {
+                              const config = getCategoryConfig(category)
+                              return (
+                                <Badge key={index} className={`text-xs ${config.color}`}>
+                                  {config.label}
+                                </Badge>
+                              )
+                            })}
+                          </div>
+                        </TableCell>
+                        <TableCell className="px-4">
+                          <Badge variant="secondary" className="capitalize">
+                            {task.master_task.timing.replace(/_/g, ' ')}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="px-4">
+                          {task.master_task.due_time ? (
+                            <span className="text-sm font-medium">{task.master_task.due_time}</span>
+                          ) : (
+                            <span className="text-sm text-gray-500">No due time</span>
+                          )}
+                        </TableCell>
+                        <TableCell className="px-4">{getStatusBadge(task)}</TableCell>
+                        <TableCell className="px-6">
+                          <div className="flex items-center space-x-2">
+                            {task.status === "completed" ? (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => handleTaskUndo(task.id)}
+                              >
+                                <X className="h-4 w-4 mr-1" />
+                                Undo
+                              </Button>
+                            ) : (
+                              <Button
+                                size="sm"
+                                onClick={() => handleTaskComplete(task.id)}
+                                className="bg-[var(--color-primary)] text-white hover:bg-[var(--color-primary)]/90"
+                              >
+                                <Check className="h-4 w-4 mr-1" />
+                                Done
+                              </Button>
+                            )}
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => {
+                                toastError("Feature Not Available", "Task details view is not yet implemented.")
+                              }}
+                              title="View Details"
+                            >
+                              <Eye className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
             )}
           </CardContent>
         </Card>

@@ -10,6 +10,7 @@ import { usePositionAuth } from "@/lib/position-auth-context"
 import { PositionAuthService, PositionAuth } from "@/lib/position-auth"
 import { useRouter } from "next/navigation"
 import { toastError } from "@/hooks/use-toast"
+import { toKebabCase } from "@/lib/responsibility-mapper"
 
 
 interface PositionLoginModalProps {
@@ -150,14 +151,20 @@ export function PositionLoginModal({
         // Redirect based on authentication result
         const user = await PositionAuthService.getCurrentUser()
         if (user?.role === 'admin') {
-          // Admin always goes to dashboard regardless of modal type
           router.push('/admin')
-        } else if (modalType === "checklist" && checklistPositionId) {
-          // From checklist button, go to that specific checklist
-          router.push(`/checklist?position=${checklistPositionId}`)
+        } else if (modalType === "checklist" && checklistTitle) {
+          // From checklist button, go to that role checklist page
+          const role = toKebabCase(checklistTitle)
+          router.push(`/checklist/${role}`)
         } else {
-          // From general login, go to their own position checklist
-          router.push(`/checklist?position=${selectedPosition}`)
+          // From general login, derive role from user's display name
+          const role = user?.displayName ? toKebabCase(user.displayName) : ''
+          if (role) {
+            router.push(`/checklist/${role}`)
+          } else {
+            // Fallback: go to role selection page
+            router.push('/')
+          }
         }
       } else {
         toastError("Login Failed", signInError || "Invalid position or password")

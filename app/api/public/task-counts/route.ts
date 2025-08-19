@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { getSearchOptions, filterTasksByResponsibility } from '@/lib/responsibility-mapper'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
@@ -45,51 +46,40 @@ export async function GET(request: NextRequest) {
       // Continue with normal processing
     }
 
+    // Virtual model: compute counts directly from master_tasks using recurrence engine
+    // Build base query for master_tasks
+    const searchRoles = responsibility ? getSearchOptions(responsibility) : null
+
     let query = supabaseAdmin
-      .from('task_instances')
+      .from('master_tasks')
       .select(`
         id,
-        status,
+        title,
+        position_id,
+        responsibility,
+        publish_status,
+        publish_delay,
         due_time,
         created_at,
-        completed_at,
-        master_tasks!inner (
-          id,
-          title,
-          position_id,
-          responsibility,
-          publish_status
-        )
+        frequency_rules,
+        start_date,
+        end_date
       `)
-      .eq('due_date', date)
+      .eq('publish_status', 'active')
+      .or(`publish_delay.is.null,publish_delay.lte.${date}`)
 
-    // Filter by position if provided
     if (positionId) {
-      query = query.eq('master_tasks.position_id', positionId)
+      query = query.eq('position_id', positionId)
     }
 
-    // Filter by responsibility if provided
-    if (responsibility) {
-      // Use overlaps to check if any of the values in the responsibility array match
-      // Include both legacy format and new kebab-case format
-      query = query.overlaps('master_tasks.responsibility', [
-        responsibility, 
-        'shared-inc-pharmacist', 
-        'shared-exc-pharmacist',
-        // Legacy format for backward compatibility
-        'Shared (inc. Pharmacist)', 
-        'Shared (exc. Pharmacist)'
-      ])
+    if (searchRoles) {
+      query = query.overlaps('responsibility', searchRoles)
     }
 
-    // Only show published tasks
-    query = query.eq('master_tasks.publish_status', 'active')
-
-    const { data: taskInstances, error } = await query
+    const { data: masterTasks, error } = await query
 
     if (error) {
-      console.error('Error fetching task instances:', error)
-      // Return empty counts instead of error for public API
+      console.error('Error fetching master tasks:', error)
       return NextResponse.json({
         success: true,
         data: {
@@ -103,72 +93,68 @@ export async function GET(request: NextRequest) {
         }
       })
     }
-    
-    // Filter tasks based on responsibility rules
-    const filteredTaskInstances = responsibility ? taskInstances.filter((task: any) => {
-      const taskResponsibility = task.master_tasks?.responsibility || [];
-      
-      // Check if the task is directly assigned to this role
-      if (taskResponsibility.includes(responsibility)) {
-        return true;
-      }
-      
-      // Handle shared responsibilities (both legacy and new format)
-      const isPharmacistRole = responsibility.toLowerCase().includes('pharmacist');
-      
-      // If task is shared including pharmacists, only show to pharmacist roles
-      if (taskResponsibility.includes('shared-inc-pharmacist') || 
-          taskResponsibility.includes('Shared (inc. Pharmacist)')) {
-        return isPharmacistRole;
-      }
-      
-      // If task is shared excluding pharmacists, only show to non-pharmacist roles
-      if (taskResponsibility.includes('shared-exc-pharmacist') || 
-          taskResponsibility.includes('Shared (exc. Pharmacist)')) {
-        return !isPharmacistRole;
-      }
-      
-      return false;
-    }) : taskInstances;
 
-    // Calculate counts
+    // Post-filter tasks based on responsibility rules (handles shared-inc/exc-pharmacist)
+    const roleFiltered = responsibility 
+      ? filterTasksByResponsibility(
+          (masterTasks || []).map((t: any) => ({ ...t, responsibility: t.responsibility || [] })),
+          responsibility
+        )
+      : (masterTasks || [])
+
+    // Fetch holidays and create recurrence engine
+    const { data: holidays } = await supabaseAdmin
+      .from('public_holidays')
+      .select('*')
+      .order('date', { ascending: true })
+
+    const { createRecurrenceEngine } = await import('@/lib/recurrence-engine')
+    const { createHolidayHelper } = await import('@/lib/public-holidays')
+    const holidayHelper = createHolidayHelper(holidays || [])
+    const recurrenceEngine = createRecurrenceEngine(holidayHelper)
+
+    // Determine which tasks are due today via recurrence rules
+    const dateObj = new Date(date)
+    const dueTodayTasks = roleFiltered.filter((task: any) => {
+      try {
+        const taskForRecurrence = {
+          id: task.id,
+          frequency_rules: task.frequency_rules || {},
+          start_date: task.start_date || task.created_at?.split('T')[0],
+          end_date: task.end_date
+        }
+        return recurrenceEngine.isDueOnDate(taskForRecurrence, dateObj)
+      } catch (e) {
+        console.warn('Recurrence check failed for task', task.id, e)
+        return false
+      }
+    })
+
+    // Calculate counts (virtual model, no persisted completion yet)
     const now = new Date()
-    const nineAM = new Date()
-    nineAM.setHours(9, 0, 0, 0)
-    
+    const nineAM = new Date(`${date}T09:00:00`)
+
     const counts = {
-      total: filteredTaskInstances?.length || 0,
+      total: dueTodayTasks.length,
       newSinceNine: 0,
-      dueToday: 0,
+      dueToday: dueTodayTasks.length,
       overdue: 0,
       completed: 0,
       isHoliday: false,
       holidayName: null
     }
 
-    filteredTaskInstances?.forEach((task: any) => {
-      // Count completed tasks
-      if (task.status === 'done') {
-        counts.completed++
+    dueTodayTasks.forEach((task: any) => {
+      // Overdue: has due_time and now past due time (for today)
+      if (task.due_time) {
+        const dueTime = new Date(`${date}T${task.due_time}`)
+        if (now > dueTime) counts.overdue++
       }
-      
-      // Count tasks due today (not completed)
-      if (task.status !== 'done') {
-        counts.dueToday++
-        
-        // Check if overdue (past due time on today's date)
-        if (task.due_time) {
-          const dueTime = new Date(`${date}T${task.due_time}`)
-          if (now > dueTime) {
-            counts.overdue++
-          }
-        }
-        
-        // Count new tasks since 9 AM (created or appeared after 9 AM)
-        const taskCreatedAt = new Date(task.created_at)
-        if (taskCreatedAt > nineAM) {
-          counts.newSinceNine++
-        }
+
+      // Approximate "new since 9AM": created_after_9am OR publish_delay equals today
+      const createdAt = task.created_at ? new Date(task.created_at) : null
+      if ((createdAt && createdAt >= nineAM) || task.publish_delay === date) {
+        counts.newSinceNine++
       }
     })
 

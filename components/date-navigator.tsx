@@ -61,7 +61,7 @@ export function DateNavigator({ currentDate, onDateChange }: DateNavigatorProps)
             variant="default"
             size="sm"
             onClick={() => onDateChange(today)}
-            className="bg-[var(--color-primary)] hover:bg-[var(--color-primary)]/90"
+            className="bg-[var(--color-primary)] hover:bg-[var(--color-primary)]/90 text-white"
           >
             Today
           </Button>

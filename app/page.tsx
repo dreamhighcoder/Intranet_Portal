@@ -12,6 +12,7 @@ import { Users, Stethoscope, Package, Building } from "lucide-react"
 import { PositionAuthService } from "@/lib/position-auth"
 import { useRouter } from "next/navigation"
 import { useEffect } from "react"
+import { toKebabCase } from "@/lib/responsibility-mapper"
 
 export default function HomePage() {
   const { user, isLoading } = usePositionAuth()
@@ -27,7 +28,13 @@ export default function HomePage() {
       if (user.role === 'admin') {
         router.push('/admin')
       } else {
-        router.push(`/checklist?position=${user.id}`)
+        // Redirect to role-based checklist route
+        const role = toKebabCase(user.displayName || '')
+        if (role) {
+          router.push(`/checklist/${role}`)
+        } else {
+          router.push('/checklist')
+        }
       }
     }
   }, [user, isLoading, router])
@@ -56,18 +63,9 @@ export default function HomePage() {
     return descriptions[displayName] || `${displayName} tasks and responsibilities`
   }
   
-  // Map position names to responsibility values
+  // Map position names to responsibility values using our utility
   const getResponsibilityValue = (displayName: string): string => {
-    const mapping: Record<string, string> = {
-      "Pharmacist (Primary)": "pharmacist-primary",
-      "Pharmacist (Supporting)": "pharmacist-supporting",
-      "Pharmacy Assistants": "pharmacy-assistants",
-      "Dispensary Technicians": "dispensary-technicians",
-      "DAA Packers": "daa-packers",
-      "Operational/Managerial": "operational-managerial"
-    }
-    
-    return mapping[displayName] || displayName.toLowerCase().replace(/\s+/g, '-')
+    return toKebabCase(displayName)
   }
 
   // Load positions from database - always show all positions
@@ -114,14 +112,26 @@ export default function HomePage() {
         loadPositions()
       }
     }
-    window.addEventListener('positions-updated', onPositionsUpdated)
+    
+    // Listen for the custom event from ChecklistCard
+    const handleOpenChecklistLogin = (event: CustomEvent<{ positionId: string; roleDisplayName: string }>) => {
+      const { positionId, roleDisplayName } = event.detail;
+      setModalType("checklist");
+      setSelectedChecklistPositionId(positionId);
+      setSelectedChecklistTitle(roleDisplayName);
+      setIsLoginModalOpen(true);
+    };
+    
+    window.addEventListener('positions-updated', onPositionsUpdated);
+    window.addEventListener('open-checklist-login', handleOpenChecklistLogin);
     
     if (!isLoading && !user) {
       loadPositions()
     }
 
     return () => {
-      window.removeEventListener('positions-updated', onPositionsUpdated)
+      window.removeEventListener('positions-updated', onPositionsUpdated);
+      window.removeEventListener('open-checklist-login', handleOpenChecklistLogin);
     }
   }, [isLoading, user])
 
@@ -166,6 +176,8 @@ export default function HomePage() {
     setIsLoginModalOpen(true)
   }
 
+  // This function is no longer used since we're using the custom event approach
+  // Keeping it for reference or future use
   const handleChecklistClick = (checklist: typeof staffChecklists[0]) => {
     setModalType("checklist")
     setSelectedChecklistPositionId(checklist.positionId)

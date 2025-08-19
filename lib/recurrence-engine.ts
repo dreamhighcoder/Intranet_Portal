@@ -103,58 +103,93 @@ export class RecurrenceEngine {
    */
   isDueOnDate(task: Task, date: Date): boolean {
     try {
+      console.log('Checking if task is due:', task.id, 'on date:', date.toISOString().split('T')[0])
+      
       // Check if task is within active period
       if (task.start_date && date < new Date(task.start_date)) {
+        console.log('Task not due: before start date', task.start_date)
         return false
       }
       
       if (task.end_date && date > new Date(task.end_date)) {
+        console.log('Task not due: after end date', task.end_date)
         return false
       }
 
       const frequencyRules = task.frequency_rules
+      console.log('Frequency rules:', frequencyRules)
+      
+      // Handle missing or invalid frequency type
+      if (!frequencyRules || !frequencyRules.type) {
+        console.log('Task has no frequency rules or type, defaulting to daily')
+        return true // Default to daily if no frequency rules
+      }
+      
+      let result = false
       
       switch (frequencyRules.type) {
         case FrequencyType.ONCE_OFF:
-          return this.isOnceOffDue(task as Task & { frequency_rules: OnceOffFrequencyRule }, date)
+          result = this.isOnceOffDue(task as Task & { frequency_rules: OnceOffFrequencyRule }, date)
+          console.log('ONCE_OFF result:', result)
+          return result
         
         case FrequencyType.ONCE_OFF_STICKY:
-          return this.isOnceOffStickyDue(task as Task & { frequency_rules: OnceOffStickyFrequencyRule }, date)
+          result = this.isOnceOffStickyDue(task as Task & { frequency_rules: OnceOffStickyFrequencyRule }, date)
+          console.log('ONCE_OFF_STICKY result:', result)
+          return result
         
         case FrequencyType.DAILY:
-          return this.isDailyDue(task as Task & { frequency_rules: DailyFrequencyRule }, date)
+          result = this.isDailyDue(task as Task & { frequency_rules: DailyFrequencyRule }, date)
+          console.log('DAILY result:', result)
+          return result
         
         case FrequencyType.WEEKLY:
-          return this.isWeeklyDue(task as Task & { frequency_rules: WeeklyFrequencyRule }, date)
+          result = this.isWeeklyDue(task as Task & { frequency_rules: WeeklyFrequencyRule }, date)
+          console.log('WEEKLY result:', result)
+          return result
         
         case FrequencyType.SPECIFIC_WEEKDAYS:
-          return this.isSpecificWeekdaysDue(task as Task & { frequency_rules: SpecificWeekdaysFrequencyRule }, date)
+          result = this.isSpecificWeekdaysDue(task as Task & { frequency_rules: SpecificWeekdaysFrequencyRule }, date)
+          console.log('SPECIFIC_WEEKDAYS result:', result)
+          return result
         
         case FrequencyType.START_OF_MONTH:
-          return this.isStartOfMonthDue(task as Task & { frequency_rules: StartOfMonthFrequencyRule }, date)
+          result = this.isStartOfMonthDue(task as Task & { frequency_rules: StartOfMonthFrequencyRule }, date)
+          console.log('START_OF_MONTH result:', result)
+          return result
         
         case FrequencyType.START_CERTAIN_MONTHS:
-          return this.isStartCertainMonthsDue(task as Task & { frequency_rules: StartCertainMonthsFrequencyRule }, date)
+          result = this.isStartCertainMonthsDue(task as Task & { frequency_rules: StartCertainMonthsFrequencyRule }, date)
+          console.log('START_CERTAIN_MONTHS result:', result)
+          return result
         
         case FrequencyType.EVERY_MONTH:
-          return this.isEveryMonthDue(task as Task & { frequency_rules: EveryMonthFrequencyRule }, date)
+          result = this.isEveryMonthDue(task as Task & { frequency_rules: EveryMonthFrequencyRule }, date)
+          console.log('EVERY_MONTH result:', result)
+          return result
         
         case FrequencyType.CERTAIN_MONTHS:
-          return this.isCertainMonthsDue(task as Task & { frequency_rules: CertainMonthsFrequencyRule }, date)
+          result = this.isCertainMonthsDue(task as Task & { frequency_rules: CertainMonthsFrequencyRule }, date)
+          console.log('CERTAIN_MONTHS result:', result)
+          return result
         
         case FrequencyType.END_OF_MONTH:
-          return this.isEndOfMonthDue(task as Task & { frequency_rules: EndOfMonthFrequencyRule }, date)
+          result = this.isEndOfMonthDue(task as Task & { frequency_rules: EndOfMonthFrequencyRule }, date)
+          console.log('END_OF_MONTH result:', result)
+          return result
         
         case FrequencyType.END_CERTAIN_MONTHS:
-          return this.isEndCertainMonthsDue(task as Task & { frequency_rules: EndCertainMonthsFrequencyRule }, date)
+          result = this.isEndCertainMonthsDue(task as Task & { frequency_rules: EndCertainMonthsFrequencyRule }, date)
+          console.log('END_CERTAIN_MONTHS result:', result)
+          return result
         
         default:
-          console.warn(`Unknown frequency type: ${frequencyRules.type}`)
-          return false
+          console.warn(`Unknown frequency type: ${frequencyRules.type}, defaulting to true`)
+          return true // Default to true for unknown types to ensure tasks show up
       }
     } catch (error) {
       console.error('Error checking if task is due:', error)
-      return false
+      return true // Default to true on error to ensure tasks show up
     }
   }
 
@@ -286,9 +321,18 @@ export class RecurrenceEngine {
    * Check if daily task is due
    */
   private isDailyDue(task: Task & { frequency_rules: DailyFrequencyRule }, date: Date): boolean {
-    const { every_n_days, business_days_only } = task.frequency_rules
+    // Handle missing or incomplete frequency rules
+    const every_n_days = task.frequency_rules?.every_n_days || 1
+    const business_days_only = task.frequency_rules?.business_days_only || false
+    
+    console.log('Daily frequency check:', {
+      every_n_days,
+      business_days_only,
+      date: date.toISOString().split('T')[0]
+    })
     
     if (business_days_only && !this.holidayChecker.isBusinessDay(date)) {
+      console.log('Not a business day, task not due')
       return false
     }
     
@@ -296,7 +340,18 @@ export class RecurrenceEngine {
     const startDate = task.start_date ? new Date(task.start_date) : new Date(0)
     const daysSinceStart = Math.floor((date.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24))
     
-    return daysSinceStart >= 0 && daysSinceStart % every_n_days === 0
+    console.log('Days since start:', daysSinceStart, 'Start date:', startDate.toISOString().split('T')[0])
+    
+    // For daily tasks (most common case), always return true
+    if (every_n_days === 1) {
+      console.log('Every day task, is due')
+      return true
+    }
+    
+    const isDue = daysSinceStart >= 0 && daysSinceStart % every_n_days === 0
+    console.log('Is task due:', isDue)
+    
+    return isDue
   }
 
   /**

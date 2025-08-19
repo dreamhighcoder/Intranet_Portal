@@ -1,6 +1,7 @@
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { supabase } from '@/lib/supabase'
 import { NextRequest } from 'next/server'
+import type { PositionAuthUser } from '@/lib/position-auth'
 
 export interface AuthUser {
   id: string

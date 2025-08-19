@@ -1,11 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/auth-middleware'
-import { supabase } from '@/lib/supabase'
-import { getTasksForRoleOnDate } from '@/lib/db'
+import { createClient } from '@supabase/supabase-js'
 import { createRecurrenceEngine } from '@/lib/recurrence-engine'
 import { createHolidayHelper } from '@/lib/public-holidays'
 import { ChecklistQuerySchema } from '@/lib/validation-schemas'
+import { toKebabCase } from '@/lib/responsibility-mapper'
 import type { ChecklistInstanceStatus } from '@/types/checklist'
+
+// Use service role key to bypass RLS for server-side reads
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
+const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
+const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey)
 
 export async function GET(request: NextRequest) {
   try {
@@ -28,17 +33,79 @@ export async function GET(request: NextRequest) {
     
     const { role: validatedRole, date: validatedDate } = validationResult.data
     
-    // Get tasks for the role on the specified date
-    const { data: tasks, error } = await getTasksForRoleOnDate(validatedRole, validatedDate)
+    // Normalize role to kebab-case format for consistent handling
+    const normalizedRole = toKebabCase(validatedRole)
+    console.log('Normalized role:', normalizedRole)
+
+    // Virtual model: query master_tasks for this role and date
+    const { getSearchOptions, filterTasksByResponsibility } = await import('@/lib/responsibility-mapper')
+
+    const searchRoles = getSearchOptions(normalizedRole)
+    console.log('Search roles:', searchRoles)
+
+    // First, let's check if there are any master tasks at all
+    const { data: allTasks, error: allTasksError } = await supabaseAdmin
+      .from('master_tasks')
+      .select('id, title, responsibility')
+      .limit(10)
     
-    if (error) {
-      console.error('Error fetching tasks for role:', error)
+    console.log('All tasks (sample):', allTasks || 'No tasks found')
+    
+    if (allTasksError) {
+      console.error('Error fetching all tasks:', allTasksError)
+    }
+
+    // Base query to fetch active tasks visible by publish_delay
+    let taskQuery = supabaseAdmin
+      .from('master_tasks')
+      .select(`
+        id,
+        title,
+        description,
+        timing,
+        due_time,
+        responsibility,
+        categories,
+        frequency_rules,
+        publish_status,
+        publish_delay,
+        created_at,
+        start_date,
+        end_date
+      `)
+      .eq('publish_status', 'active')
+      .or(`publish_delay.is.null,publish_delay.lte.${validatedDate}`)
+      
+    // Log the query we're about to execute
+    console.log('Executing query with searchRoles:', searchRoles)
+    
+    // Add the responsibility filter
+    taskQuery = taskQuery.overlaps('responsibility', searchRoles)
+
+    const { data: masterTasks, error: tasksError } = await taskQuery
+    console.log('Master tasks found:', masterTasks?.length || 0)
+
+    if (tasksError) {
+      console.error('Error fetching master tasks for role:', tasksError)
       return NextResponse.json({ error: 'Failed to fetch tasks' }, { status: 500 })
     }
+
+    // Post-filter based on shared-inc/exc rules
+    console.log('Master tasks before filtering:', masterTasks?.map(t => ({
+      id: t.id,
+      title: t.title,
+      responsibility: t.responsibility
+    })) || 'No tasks found')
     
+    const roleFiltered = filterTasksByResponsibility(
+      (masterTasks || []).map((t: any) => ({ ...t, responsibility: t.responsibility || [] })),
+      normalizedRole
+    )
+    
+    console.log('Tasks after responsibility filtering:', roleFiltered.length)
+
     // Create holiday helper and recurrence engine for filtering
-    // Fetch holidays from database and create helper
-    const { data: holidays, error: holidaysError } = await supabase
+    const { data: holidays, error: holidaysError } = await supabaseAdmin
       .from('public_holidays')
       .select('*')
       .order('date', { ascending: true })
@@ -51,49 +118,105 @@ export async function GET(request: NextRequest) {
     const recurrenceEngine = createRecurrenceEngine(holidayHelper)
     
     // Filter tasks based on recurrence rules and date
-    const filteredTasks = tasks.filter(task => {
+    console.log('Checking recurrence for date:', validatedDate)
+    
+    const filteredTasks = roleFiltered.filter(task => {
       try {
-        // Check if the task is due on the specified date using recurrence engine
         const taskForRecurrence = {
-          id: task.master_task_id,
-          frequency_rules: task.master_tasks?.frequency_rules || {},
-          start_date: task.master_tasks?.start_date,
-          end_date: task.master_tasks?.end_date
+          id: task.id,
+          frequency_rules: task.frequency_rules || {},
+          start_date: task.start_date || task.created_at?.split('T')[0],
+          end_date: task.end_date
         }
         
-        return recurrenceEngine.isDueOnDate(taskForRecurrence, new Date(validatedDate))
+        console.log('Checking recurrence for task:', {
+          id: task.id,
+          title: task.title,
+          frequency_rules: task.frequency_rules,
+          start_date: task.start_date || task.created_at?.split('T')[0],
+          end_date: task.end_date
+        })
+        
+        const isDue = recurrenceEngine.isDueOnDate(taskForRecurrence, new Date(validatedDate))
+        console.log('Task is due:', isDue)
+        
+        return isDue
       } catch (error) {
         console.error('Error checking task recurrence:', error)
-        // If there's an error with recurrence calculation, include the task
-        return true
+        return false
       }
     })
     
-    // Transform the data to match the expected checklist format
-    const checklistData = filteredTasks.map(task => ({
-      id: task.id,
-      master_task_id: task.master_task_id,
-      date: task.date,
-      role: task.role,
-      status: task.status as ChecklistInstanceStatus,
-      completed_by: task.completed_by,
-      completed_at: task.completed_at,
-      payload: task.payload,
-      notes: task.notes,
-      created_at: task.created_at,
-      updated_at: task.updated_at,
-      master_task: {
-        id: task.master_tasks?.id || task.master_task_id,
-        title: task.master_tasks?.title || 'Unknown Task',
-        description: task.master_tasks?.description,
-        timing: task.master_tasks?.timing || 'anytime',
-        due_time: task.master_tasks?.due_time,
-        responsibility: task.master_tasks?.responsibility || [role],
-        categories: task.master_tasks?.categories || ['general'],
-        frequency_rules: task.master_tasks?.frequency_rules || { type: 'daily' },
-        category: task.master_tasks?.category // Include legacy category field for backward compatibility
+    // Check for existing task instances to get completion status
+    const masterTaskIds = filteredTasks.map(task => task.id)
+    const { data: existingInstances, error: instancesError } = await supabaseAdmin
+      .from('task_instances')
+      .select('master_task_id, status, completed_by, completed_at')
+      .in('master_task_id', masterTaskIds)
+      .eq('instance_date', validatedDate)
+    
+    if (instancesError) {
+      console.error('Error fetching existing instances:', instancesError)
+    }
+    
+    // Create a map for quick lookup
+    const instanceMap = new Map()
+    if (existingInstances) {
+      existingInstances.forEach(instance => {
+        instanceMap.set(instance.master_task_id, instance)
+      })
+    }
+    
+    // Transform to virtual checklist instances expected by UI
+    const now = new Date()
+    const checklistData = filteredTasks.map(task => {
+      const existingInstance = instanceMap.get(task.id)
+      const dueTime = task.due_time ? new Date(`${validatedDate}T${task.due_time}`) : null
+      const isOverdue = dueTime ? now > dueTime : false
+      
+      // Determine status based on existing instance or default logic
+      let status: ChecklistInstanceStatus = 'pending'
+      if (existingInstance) {
+        // Map database status to UI status
+        const dbStatus = existingInstance.status
+        if (dbStatus === 'done') {
+          status = 'completed'
+        } else if (dbStatus === 'due_today') {
+          status = 'pending'
+        } else if (dbStatus === 'overdue') {
+          status = 'overdue'
+        } else {
+          status = 'pending'
+        }
+      } else if (isOverdue) {
+        status = 'overdue'
       }
-    }))
+
+      return {
+        id: `${task.id}:${validatedDate}`, // virtual instance id
+        master_task_id: task.id,
+        date: validatedDate,
+        role: normalizedRole,
+        status,
+        completed_by: existingInstance?.completed_by,
+        completed_at: existingInstance?.completed_at,
+        payload: {},
+        notes: undefined,
+        created_at: task.created_at,
+        updated_at: task.created_at,
+        master_task: {
+          id: task.id,
+          title: task.title || 'Unknown Task',
+          description: task.description,
+          timing: task.timing || 'anytime_during_day',
+          due_time: task.due_time,
+          responsibility: task.responsibility || [normalizedRole],
+          categories: task.categories || ['general'],
+          frequency_rules: task.frequency_rules || { type: 'daily' },
+          category: task.category
+        }
+      }
+    })
     
     return NextResponse.json({
       success: true,

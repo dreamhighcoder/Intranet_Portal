@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase'
 import { requireAuth } from '@/lib/auth-middleware'
+import { toKebabCase, getSearchOptions, filterTasksByResponsibility } from '@/lib/responsibility-mapper'
+import { createRecurrenceEngine } from '@/lib/recurrence-engine'
+import { createHolidayHelper } from '@/lib/public-holidays'
 
 export async function GET(request: NextRequest) {
   try {
@@ -40,135 +43,128 @@ export async function GET(request: NextRequest) {
     const startDateStr = startDate.toISOString().split('T')[0]
     const endDateStr = endDate.toISOString().split('T')[0]
 
-    // Build query for task instances in the date range
-    let query = supabase
-      .from('task_instances')
-      .select(`
-        id,
-        due_date,
-        status,
-        master_tasks (
-          id,
-          title,
-          category,
-          position_id,
-          positions (
-            id,
-            name
-          )
-        )
-      `)
-      .gte('due_date', startDateStr)
-      .lte('due_date', endDateStr)
-
+    // Determine responsibility filter
+    let responsibility: string | null = null
     if (positionId) {
-      query = query.eq('master_tasks.position_id', positionId)
+      // Fetch position to map to responsibility
+      const { data: position } = await supabase
+        .from('positions')
+        .select('name, display_name')
+        .eq('id', positionId)
+        .maybeSingle()
+      if (position) {
+        responsibility = toKebabCase(position.display_name || position.name)
+      }
+    } else if (user.role !== 'admin') {
+      responsibility = toKebabCase(user.display_name || '')
     }
 
-    const { data: tasks, error } = await query
+    // Get holidays
+    const { data: holidays } = await supabase
+      .from('public_holidays')
+      .select('*')
+      .gte('date', startDateStr)
+      .lte('date', endDateStr)
 
-    if (error) {
-      console.error('Error fetching calendar tasks:', error)
+    const holidayHelper = createHolidayHelper(holidays || [])
+    const recurrenceEngine = createRecurrenceEngine(holidayHelper)
+
+    // Build master_tasks query
+    let taskQuery = supabase
+      .from('master_tasks')
+      .select(`
+        id,
+        title,
+        description,
+        responsibility,
+        categories,
+        publish_status,
+        publish_delay,
+        start_date,
+        end_date,
+        due_time,
+        frequency_rules
+      `)
+      .eq('publish_status', 'active')
+
+    // Publish delay condition across range: visible if publish_delay is null or <= end of range
+    taskQuery = taskQuery.or(`publish_delay.is.null,publish_delay.lte.${endDateStr}`)
+
+    if (responsibility) {
+      const searchRoles = getSearchOptions(responsibility)
+      taskQuery = taskQuery.overlaps('responsibility', searchRoles)
+    }
+
+    const { data: masterTasks, error: tasksError } = await taskQuery
+    if (tasksError) {
+      console.error('Calendar: error fetching master tasks', tasksError)
       return NextResponse.json({ error: 'Failed to fetch calendar data' }, { status: 500 })
     }
 
-    // Group tasks by date and calculate counts
-    const calendarData = (tasks || []).reduce((acc: any, task) => {
-      const date = task.due_date
-      
-      if (!acc[date]) {
-        acc[date] = {
-          date,
-          total: 0,
-          completed: 0,
-          pending: 0,
-          overdue: 0,
-          missed: 0,
-          tasks: []
-        }
-      }
+    const roleFiltered = responsibility 
+      ? filterTasksByResponsibility((masterTasks || []).map(t => ({ ...t, responsibility: t.responsibility || [] })), responsibility)
+      : (masterTasks || [])
 
-      acc[date].total++
-      acc[date].tasks.push({
-        id: task.id,
-        title: task.master_tasks?.title,
-        category: task.master_tasks?.category,
-        position: task.master_tasks?.positions?.name,
-        status: task.status
-      })
-
-      // Count by status
-      switch (task.status) {
-        case 'done':
-          acc[date].completed++
-          break
-        case 'overdue':
-          acc[date].overdue++
-          break
-        case 'missed':
-          acc[date].missed++
-          break
-        default:
-          acc[date].pending++
-      }
-
-      return acc
-    }, {})
-
-    // Convert to array and fill in missing dates with zero counts
-    const calendarArray = []
-    const currentDate = new Date(startDate)
-
-    while (currentDate <= endDate) {
-      const dateStr = currentDate.toISOString().split('T')[0]
-      
-      calendarArray.push(calendarData[dateStr] || {
-        date: dateStr,
+    // Build calendar map
+    const calendarMap: Record<string, any> = {}
+    const cur = new Date(startDate)
+    while (cur <= endDate) {
+      const ds = cur.toISOString().split('T')[0]
+      calendarMap[ds] = {
+        date: ds,
         total: 0,
         completed: 0,
         pending: 0,
         overdue: 0,
         missed: 0,
-        tasks: []
-      })
-
-      currentDate.setDate(currentDate.getDate() + 1)
+        tasks: [] as any[],
+      }
+      cur.setDate(cur.getDate() + 1)
     }
 
-    // Get public holidays for the date range
-    const { data: holidays } = await supabase
-      .from('public_holidays')
-      .select('date, name')
-      .gte('date', startDateStr)
-      .lte('date', endDateStr)
-
-    const holidayMap = (holidays || []).reduce((acc: any, holiday) => {
-      acc[holiday.date] = holiday.name
-      return acc
-    }, {})
-
-    // Add holiday information to calendar data
-    calendarArray.forEach(day => {
-      if (holidayMap[day.date]) {
-        day.holiday = holidayMap[day.date]
+    // Fill occurrences
+    const now = new Date()
+    for (const task of roleFiltered) {
+      // iterate across range and add when due
+      const iter = new Date(startDate)
+      while (iter <= endDate) {
+        const isDue = recurrenceEngine.isDueOnDate({
+          id: task.id,
+          frequency_rules: task.frequency_rules || {},
+          start_date: task.start_date || task.created_at?.split('T')[0],
+          end_date: task.end_date
+        }, iter)
+        if (isDue) {
+          const ds = iter.toISOString().split('T')[0]
+          const day = calendarMap[ds]
+          day.total++
+          const dueTime = task.due_time ? new Date(`${ds}T${task.due_time}`) : null
+          const status = dueTime && now > dueTime ? 'overdue' : 'pending'
+          day.tasks.push({ id: `${task.id}:${ds}`, title: task.title, category: task.category, position: '', status })
+          if (status === 'overdue') day.overdue++
+          else day.pending++
+        }
+        iter.setDate(iter.getDate() + 1)
       }
+    }
+
+    const calendarArray = Object.values(calendarMap)
+
+    // Holidays overlay
+    const holidayMap = (holidays || []).reduce((acc: any, h: any) => { acc[h.date] = h.name; return acc }, {})
+    calendarArray.forEach((day: any) => {
+      if (holidayMap[day.date]) day.holiday = holidayMap[day.date]
     })
 
-    // Calculate summary statistics
-    const summary = calendarArray.reduce((acc, day) => {
+    // Summary
+    const summary = calendarArray.reduce((acc: any, day: any) => {
       acc.totalTasks += day.total
       acc.completedTasks += day.completed
       acc.pendingTasks += day.pending
       acc.overdueTasks += day.overdue
       acc.missedTasks += day.missed
       return acc
-    }, {
-      totalTasks: 0,
-      completedTasks: 0,
-      pendingTasks: 0,
-      overdueTasks: 0,
-      missedTasks: 0
-    })
+    }, { totalTasks: 0, completedTasks: 0, pendingTasks: 0, overdueTasks: 0, missedTasks: 0 })
 
     const completionRate = summary.totalTasks > 0 
       ? Math.round((summary.completedTasks / summary.totalTasks) * 100 * 100) / 100
@@ -176,10 +172,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({
       calendar: calendarArray,
-      summary: {
-        ...summary,
-        completionRate
-      },
+      summary: { ...summary, completionRate },
       metadata: {
         view,
         year,
@@ -188,7 +181,7 @@ export async function GET(request: NextRequest) {
         endDate: endDateStr,
         positionId,
         totalDays: calendarArray.length,
-        daysWithTasks: calendarArray.filter(day => day.total > 0).length
+        daysWithTasks: calendarArray.filter((d: any) => d.total > 0).length
       }
     })
 
@@ -218,9 +211,6 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Date and tasks array are required' }, { status: 400 })
     }
 
-    // This could be used for creating ad-hoc tasks for specific dates
-    // Implementation would depend on specific requirements
-    
     return NextResponse.json({ 
       message: 'Calendar event creation not yet implemented',
       received: { date, taskCount: tasks.length }
