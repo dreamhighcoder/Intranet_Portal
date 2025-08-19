@@ -158,7 +158,7 @@ const renderTruncatedArray = (
   }
 
   return (
-    <div className="flex flex-wrap gap-1 max-w-[200px]">
+    <div className="flex flex-wrap gap-1 w-full">
       {visibleItems.map((item, index) => {
         const displayName = getDisplayName(item)
         const badgeClass = getBadgeClass(item, type)
@@ -167,7 +167,7 @@ const renderTruncatedArray = (
           <Badge 
             key={index} 
             variant={variant} 
-            className={`text-xs whitespace-nowrap ${badgeClass}`}
+            className={`text-xs truncate ${badgeClass}`}
             title={displayName}
           >
             {displayName}
@@ -180,7 +180,7 @@ const renderTruncatedArray = (
           className="text-xs bg-gray-100" 
           title={`${remainingCount} more: ${items.slice(maxVisible).map(item => getDisplayName(item)).join(', ')}`}
         >
-          +{remainingCount} more
+          + {remainingCount}
         </Badge>
       )}
     </div>
@@ -348,18 +348,19 @@ const renderFrequencyWithDetails = (task: MasterTask) => {
   }
   
   return (
-    <div className="space-y-1">
+    <div className="space-y-1 w-full flex flex-col">
       <Badge 
         variant="outline" 
-        className={`text-xs ${getFrequencyBadgeColor(task.frequency)}`}
+        className={`text-xs truncate w-3/5 text-center ${getFrequencyBadgeColor(task.frequency)}`}
+        title={baseFrequency}
       >
         {baseFrequency}
       </Badge>
       
       {details.length > 0 && (
-        <div className="text-xs text-gray-600 space-y-1">
+        <div className="text-xs text-gray-600 space-y-1 w-full">
           {details.map((detail, index) => (
-            <div key={index} className="truncate max-w-[180px]" title={detail}>
+            <div key={index} className="truncate w-full" title={detail}>
               {detail}
             </div>
           ))}
@@ -1188,7 +1189,7 @@ export default function AdminMasterTasksPage() {
     <div className="min-h-screen bg-[var(--color-background)]">
       <Navigation />
 
-      <main className="max-w-screen-2xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <main className="max-w-content-lg mx-auto px-4 sm:px-6 lg:px-18 py-6 sm:py-8">
         {/* Header */}
         <div className="mb-6 lg:mb-8">
           <div className="pharmacy-gradient rounded-lg p-4 lg:p-6 text-white">
@@ -1286,7 +1287,7 @@ export default function AdminMasterTasksPage() {
                 {/* Status Filter */}
                 <div className="flex justify-start w-full">
                   <Select value={filterStatus} onValueChange={setFilterStatus}>
-                    <SelectTrigger className="w-[100px]">
+                    <SelectTrigger className="w-full">
                       <SelectValue placeholder="All Statuses" />
                     </SelectTrigger>
                     <SelectContent>
@@ -1347,7 +1348,7 @@ export default function AdminMasterTasksPage() {
         </Card>
 
         {/* Tasks Table */}
-        <Card className="card-surface">
+        <Card className="card-surface w-full gap-0">
           <CardHeader>
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between space-y-2 sm:space-y-0">
               <CardTitle className="text-lg lg:text-xl">
@@ -1355,7 +1356,7 @@ export default function AdminMasterTasksPage() {
               </CardTitle>
             </div>
           </CardHeader>
-          <CardContent>
+          <CardContent className="w-full p-0 sm:p-6">
             {loading ? (
               <div className="text-center py-8">
                 <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
@@ -1364,90 +1365,98 @@ export default function AdminMasterTasksPage() {
             ) : (
               <>
                 {/* Desktop Table */}
-                <div className="hidden lg:block overflow-x-auto">
-                  <Table>
+                <div className="hidden lg:block w-full">
+                  <Table className="table-fixed w-full">
                     <TableHeader>
                       <TableRow>
-                        <TableHead>Task</TableHead>
-                        <TableHead>Responsibilities</TableHead>
-                        <TableHead>Frequencies</TableHead>
-                        <TableHead>Categories</TableHead>
-                        <TableHead className="text-center">Status</TableHead>
-                        <TableHead className="text-center">Due Time</TableHead>
-                        <TableHead className="text-center">Actions</TableHead>
+                        <TableHead className="w-[25%] py-3 bg-gray-50">Task</TableHead>
+                        <TableHead className="w-[15%] py-3 bg-gray-50">Responsibilities</TableHead>
+                        <TableHead className="w-[15%] py-3 bg-gray-50">Frequencies</TableHead>
+                        <TableHead className="w-[15%] py-3 bg-gray-50">Categories</TableHead>
+                        <TableHead className="w-[10%] py-3 bg-gray-50 text-center">Status</TableHead>
+                        <TableHead className="w-[10%] py-3 bg-gray-50 text-center">Due Time</TableHead>
+                        <TableHead className="w-[10%] py-3 bg-gray-50 text-center">Actions</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
                       {filteredTasks.map((task) => (
-                        <TableRow key={task.id}>
-                          <TableCell>
-                            <div>
-                              <div className="font-medium">{task.title}</div>
+                        <TableRow key={task.id} className="hover:bg-gray-50">
+                          <TableCell className="py-3">
+                            <div className="max-w-full">
+                              <div className="font-medium truncate">{task.title}</div>
                               {task.description && (
-                                <div className="text-sm text-gray-600 truncate max-w-xs">
+                                <div className="text-sm text-gray-600 truncate">
                                   {task.description}
                                 </div>
                               )}
                             </div>
                           </TableCell>
-                          <TableCell>
-                            {task.responsibility && task.responsibility.length > 0 ? (
-                              renderTruncatedArray(task.responsibility, 2, "secondary", "responsibility")
-                            ) : task.positions?.name || task.position?.name ? (
-                              <div>
-                                <Badge variant="secondary" className="text-xs">{task.positions?.name || task.position?.name}</Badge>
-                                <div className="text-xs text-red-500 mt-1">Legacy data - needs migration</div>
-                              </div>
-                            ) : (
-                              <span className="text-gray-400 text-xs">None</span>
-                            )}
+                          <TableCell className="py-3">
+                            <div className="max-w-full overflow-hidden">
+                              {task.responsibility && task.responsibility.length > 0 ? (
+                                renderTruncatedArray(task.responsibility, 2, "secondary", "responsibility")
+                              ) : task.positions?.name || task.position?.name ? (
+                                <div>
+                                  <Badge variant="secondary" className="text-xs truncate max-w-full">{task.positions?.name || task.position?.name}</Badge>
+                                  <div className="text-xs text-red-500 mt-1 truncate">Legacy data</div>
+                                </div>
+                              ) : (
+                                <span className="text-gray-400 text-xs">None</span>
+                              )}
+                            </div>
                           </TableCell>
-                          <TableCell>
-                            {renderFrequencyWithDetails(task)}
+                          <TableCell className="py-3">
+                            <div className="max-w-full overflow-hidden">
+                              {renderFrequencyWithDetails(task)}
+                            </div>
                           </TableCell>
-                          <TableCell>
-                            {task.categories && task.categories.length > 0 ? (
-                              renderTruncatedArray(task.categories, 2, "outline", "category")
-                            ) : task.category ? (
-                              <div>
-                                <Badge variant="outline" className="text-xs">{getCategoryDisplayName(task.category)}</Badge>
-                                <div className="text-xs text-red-500 mt-1">Legacy data - needs migration</div>
-                              </div>
-                            ) : (
-                              <span className="text-gray-400 text-xs">None</span>
-                            )}
+                          <TableCell className="py-3">
+                            <div className="max-w-full overflow-hidden">
+                              {task.categories && task.categories.length > 0 ? (
+                                renderTruncatedArray(task.categories, 2, "outline", "category")
+                              ) : task.category ? (
+                                <div>
+                                  <Badge variant="outline" className="text-xs truncate max-w-full">{getCategoryDisplayName(task.category)}</Badge>
+                                  <div className="text-xs text-red-500 mt-1 truncate">Legacy data</div>
+                                </div>
+                              ) : (
+                                <span className="text-gray-400 text-xs">None</span>
+                              )}
+                            </div>
                           </TableCell>
-                          <TableCell>
-                            <Select
-                              value={task.publish_status}
-                              onValueChange={(value: 'draft' | 'active' | 'inactive') => 
-                                handleStatusChange(task.id, value)
-                              }
-                            >
-                              <SelectTrigger className="w-32">
-                                <SelectValue />
-                              </SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="draft">Draft</SelectItem>
-                                <SelectItem value="active">Active</SelectItem>
-                                <SelectItem value="inactive">Inactive</SelectItem>
-                              </SelectContent>
-                            </Select>
+                          <TableCell className="text-center">
+                            <div className="flex justify-center">
+                              <Select
+                                value={task.publish_status}
+                                onValueChange={(value: 'draft' | 'active' | 'inactive') => 
+                                  handleStatusChange(task.id, value)
+                                }
+                              >
+                                <SelectTrigger className="w-26">
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="draft">Draft</SelectItem>
+                                  <SelectItem value="active">Active</SelectItem>
+                                  <SelectItem value="inactive">Inactive</SelectItem>
+                                </SelectContent>
+                              </Select>
+                            </div>
                           </TableCell>
-                          <TableCell>
-                            <div className="flex items-center text-sm">
+                          <TableCell className="text-center">
+                            <div className="flex items-center justify-center text-sm">
                               <Clock className="w-3 h-3 mr-1 text-gray-400" />
                               {(task as any).default_due_time || '17:00'}
                             </div>
                           </TableCell>
-                          <TableCell>
-                            <div className="flex space-x-1">
+                          <TableCell className="text-center">
+                            <div className="flex justify-center space-x-1">
                               <Dialog>
                                 <DialogTrigger asChild>
                                   <Button
                                     size="sm"
                                     variant="outline"
-                                    className="h-8 w-8 p-0"
+                                    className="h-7 w-7 p-0"
                                     title="View task details"
                                   >
                                     <Eye className="w-3 h-3" />
@@ -1461,7 +1470,7 @@ export default function AdminMasterTasksPage() {
                                 onClick={() => handleGenerateInstances(task.id)}
                                 disabled={generatingInstancesId === task.id}
                                 title="Generate instances for this task"
-                                className="h-8 w-8 p-0"
+                                className="h-7 w-7 p-0"
                               >
                                 {generatingInstancesId === task.id ? (
                                   <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-blue-600"></div>
@@ -1476,7 +1485,8 @@ export default function AdminMasterTasksPage() {
                                   setEditingTask(task)
                                   setIsTaskDialogOpen(true)
                                 }}
-                                className="h-8 w-8 p-0"
+                                className="h-7 w-7 p-0"
+                                title="Edit task"
                               >
                                 <Edit className="w-3 h-3" />
                               </Button>
@@ -1485,7 +1495,8 @@ export default function AdminMasterTasksPage() {
                                 variant="outline"
                                 onClick={() => handleDeleteTask(task.id)}
                                 disabled={deletingTaskId === task.id}
-                                className="text-red-600 hover:text-red-700"
+                                className="h-7 w-7 p-0 text-red-600 hover:text-red-700"
+                                title="Delete task"
                               >
                                 {deletingTaskId === task.id ? (
                                   <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-red-600"></div>
@@ -1502,11 +1513,11 @@ export default function AdminMasterTasksPage() {
                 </div>
 
                 {/* Mobile Card Layout */}
-                <div className="lg:hidden space-y-4">
+                <div className="lg:hidden space-y-4 w-full px-4 sm:px-6">
                   {filteredTasks.map((task) => (
-                    <Card key={task.id} className="border border-gray-200">
+                    <Card key={task.id} className="border border-gray-200 w-full">
                       <CardContent className="mobile-card p-4">
-                        <div className="space-y-3">
+                        <div className="space-y-3 w-full">
                           {/* Title and Description */}
                           <div>
                             <h3 className="font-medium text-base">{task.title}</h3>

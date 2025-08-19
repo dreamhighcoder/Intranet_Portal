@@ -177,12 +177,12 @@ export default function HomePage() {
     <div className="min-h-screen" style={{ backgroundColor: "var(--color-bg)" }}>
       <PublicNavigation onLoginClick={handleLoginClick} />
 
-      <main className="max-w-screen-2xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <main className="max-w-content-lg mx-auto px-4 sm:px-6 lg:px-18 py-6 sm:py-8">
         {/* Welcome Banner */}
         <div className="mb-8">
-          <div className="pharmacy-gradient rounded-lg p-6" style={{ color: "var(--color-primary-on)" }}>
-            <h1 className="text-3xl font-bold mb-2">Welcome to Richmond Pharmacy</h1>
-            <p className="opacity-90">
+          <div className="pharmacy-gradient rounded-lg p-4 sm:p-6" style={{ color: "var(--color-primary-on)" }}>
+            <h1 className="text-2xl sm:text-3xl font-bold mb-2">Welcome to Richmond Pharmacy</h1>
+            <p className="opacity-90 text-sm sm:text-base">
               Access your position-specific checklist to manage daily tasks and responsibilities
             </p>
           </div>
@@ -190,10 +190,10 @@ export default function HomePage() {
 
         {/* Staff Checklists Section */}
         <div className="mb-8">
-          <h2 className="text-2xl font-bold mb-6" style={{ color: "var(--color-text)" }}>
+          <h2 className="text-xl sm:text-2xl font-bold mb-4 sm:mb-6" style={{ color: "var(--color-text)" }}>
             Staff Checklists
           </h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
             {staffChecklists.map((checklist) => {
               const IconComponent = checklist.icon
               return (

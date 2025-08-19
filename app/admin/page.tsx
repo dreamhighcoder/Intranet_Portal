@@ -149,18 +149,18 @@ export default function AdminDashboard() {
     <div className="min-h-screen bg-[var(--color-background)]">
       <Navigation />
 
-      <main className="max-w-screen-2xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <main className="max-w-content-lg mx-auto px-4 sm:px-6 lg:px-18 py-6 sm:py-8">
         {/* Header */}
-        <div className="mb-8">
-          <div className="pharmacy-gradient rounded-lg p-6 text-white">
-            <div className="flex items-center justify-between">
+        <div className="mb-6 sm:mb-8">
+          <div className="pharmacy-gradient rounded-lg p-4 sm:p-6 text-white">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
               <div>
-                <h1 className="text-3xl font-bold mb-2">Admin Dashboard</h1>
-                <p className="text-white/90">
+                <h1 className="text-2xl sm:text-3xl font-bold mb-2">Admin Dashboard</h1>
+                <p className="text-white/90 text-sm sm:text-base">
                   Monitor task completion and manage pharmacy operations
                 </p>
                 {diagnostics && (
-                  <div className="text-sm text-white/80 mt-2">
+                  <div className="text-xs sm:text-sm text-white/80 mt-2">
                     Database: {diagnostics.masterTasks} master tasks • {diagnostics.taskInstances} task instances • {diagnostics.positions} positions
                   </div>
                 )}
@@ -169,7 +169,7 @@ export default function AdminDashboard() {
                 onClick={handleGenerateTaskInstances}
                 disabled={isGenerating}
                 variant="outline"
-                className="bg-white/10 border-white/20 text-white hover:bg-white/20 flex items-center space-x-2"
+                className="bg-white/10 border-white/20 text-white hover:bg-white/20 flex items-center space-x-2 w-full sm:w-auto"
               >
                 {isGenerating ? (
                   <RefreshCw className="w-4 h-4 animate-spin" />
@@ -183,35 +183,35 @@ export default function AdminDashboard() {
         </div>
 
         {/* KPI Widgets */}
-        <div className="mb-8">
+        <div className="mb-6 sm:mb-8">
           <KPIWidgets />
         </div>
 
         {/* Quick Actions Grid */}
-        <div className="mb-8">
-          <h2 className="text-2xl font-bold mb-6 text-[var(--color-text)]">Quick Actions</h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div className="mb-6 sm:mb-8">
+          <h2 className="text-xl sm:text-2xl font-bold mb-4 sm:mb-6 text-[var(--color-text)]">Quick Actions</h2>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
             {quickActions.map((action) => {
               const IconComponent = action.icon
               return (
                 <Card key={action.title} className="card-surface hover:shadow-lg transition-shadow">
-                  <CardHeader className="pb-3">
+                  <CardHeader className="pb-2 sm:pb-3">
                     <div className="flex items-center justify-between">
-                      <CardTitle className="text-lg text-[var(--color-text)]">
+                      <CardTitle className="text-base sm:text-lg text-[var(--color-text)]">
                         {action.title}
                       </CardTitle>
                       <div className={`p-2 rounded-lg ${action.bgColor}`}>
-                        <IconComponent className={`w-5 h-5 ${action.color}`} />
+                        <IconComponent className={`w-4 h-4 sm:w-5 sm:h-5 ${action.color}`} />
                       </div>
                     </div>
                   </CardHeader>
                   <CardContent>
-                    <p className="text-sm text-[var(--color-text-secondary)] mb-4">
+                    <p className="text-xs sm:text-sm text-[var(--color-text-secondary)] mb-3 sm:mb-4">
                       {action.description}
                     </p>
                     <Button 
                       asChild
-                      className="w-full bg-[var(--color-primary)] hover:bg-[var(--color-primary)]/90 text-[var(--color-primary-on)]"
+                      className="w-full bg-[var(--color-primary)] hover:bg-[var(--color-primary)]/90 text-[var(--color-primary-on)] text-sm"
                     >
                       <Link href={action.href}>
                         Manage
@@ -226,7 +226,7 @@ export default function AdminDashboard() {
 
         {/* Recent Missed Tasks */}
         <div>
-          <h2 className="text-2xl font-bold mb-6 text-[var(--color-text)]">Recent Issues</h2>
+          <h2 className="text-xl sm:text-2xl font-bold mb-4 sm:mb-6 text-[var(--color-text)]">Recent Issues</h2>
           <RecentMissedTasks />
         </div>
       </main>

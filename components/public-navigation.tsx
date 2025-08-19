@@ -16,7 +16,7 @@ export function PublicNavigation({ onLoginClick }: PublicNavigationProps) {
         color: "var(--color-primary-on)",
       }}
     >
-      <div className="max-w-screen-2xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div className="max-w-content-lg mx-auto px-4 sm:px-6 lg:px-18">
         <div className="flex justify-between items-center h-20">
           {/* Logo and Title */}
           <div className="flex items-center space-x-3">
