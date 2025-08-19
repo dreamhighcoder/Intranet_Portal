@@ -123,7 +123,7 @@ const getBadgeClass = (item: string, type: string) => {
       'pharmacy-services': 'bg-purple-50 text-purple-700 border-purple-100',
       'fos-operations': 'bg-amber-50 text-amber-700 border-amber-100',
       'dispensary-operations': 'bg-teal-50 text-teal-700 border-teal-100',
-      'general-pharmacy-operations': 'bg-gray-50 text-gray-700 border-gray-100',
+      'general-pharmacy-operations': 'bg-cyan-50 text-cyan-700 border-cyan-100',
       'business-management': 'bg-indigo-50 text-indigo-700 border-indigo-100'
     }
     return colorMap[item] || ''
@@ -243,26 +243,58 @@ const formatFrequencyRules = (frequencyRules: any) => {
   return rules.length > 0 ? rules : ['No specific rules defined']
 }
 
+// Helper function to get frequency badge color
+const getFrequencyBadgeColor = (frequency: string) => {
+  const colorMap: Record<string, string> = {
+    'once_off': 'bg-purple-100 text-purple-800 border-purple-200',
+    'once_off_sticky': 'bg-purple-100 text-purple-800 border-purple-200',
+    'every_day': 'bg-blue-100 text-blue-800 border-blue-200',
+    'weekly': 'bg-green-100 text-green-800 border-green-200',
+    'specific_weekdays': 'bg-green-100 text-green-800 border-green-200',
+    'monday': 'bg-green-100 text-green-800 border-green-200',
+    'tuesday': 'bg-green-100 text-green-800 border-green-200',
+    'wednesday': 'bg-green-100 text-green-800 border-green-200',
+    'thursday': 'bg-green-100 text-green-800 border-green-200',
+    'friday': 'bg-green-100 text-green-800 border-green-200',
+    'saturday': 'bg-green-100 text-green-800 border-green-200',
+    'once_weekly': 'bg-green-100 text-green-800 border-green-200',
+    'start_every_month': 'bg-amber-100 text-amber-800 border-amber-200',
+    'start_certain_months': 'bg-amber-100 text-amber-800 border-amber-200',
+    'start_of_month_jan': 'bg-amber-100 text-amber-800 border-amber-200',
+    'start_of_month_feb': 'bg-amber-100 text-amber-800 border-amber-200',
+    'start_of_month_mar': 'bg-amber-100 text-amber-800 border-amber-200',
+    'start_of_month_apr': 'bg-amber-100 text-amber-800 border-amber-200',
+    'start_of_month_may': 'bg-amber-100 text-amber-800 border-amber-200',
+    'start_of_month_jun': 'bg-amber-100 text-amber-800 border-amber-200',
+    'start_of_month_jul': 'bg-amber-100 text-amber-800 border-amber-200',
+    'start_of_month_aug': 'bg-amber-100 text-amber-800 border-amber-200',
+    'start_of_month_sep': 'bg-amber-100 text-amber-800 border-amber-200',
+    'start_of_month_oct': 'bg-amber-100 text-amber-800 border-amber-200',
+    'start_of_month_nov': 'bg-amber-100 text-amber-800 border-amber-200',
+    'start_of_month_dec': 'bg-amber-100 text-amber-800 border-amber-200',
+    'every_month': 'bg-orange-100 text-orange-800 border-orange-200',
+    'certain_months': 'bg-orange-100 text-orange-800 border-orange-200',
+    'once_monthly': 'bg-orange-100 text-orange-800 border-orange-200',
+    'end_every_month': 'bg-red-100 text-red-800 border-red-200',
+    'end_certain_months': 'bg-red-100 text-red-800 border-red-200',
+    'end_of_month_jan': 'bg-red-100 text-red-800 border-red-200',
+    'end_of_month_feb': 'bg-red-100 text-red-800 border-red-200',
+    'end_of_month_mar': 'bg-red-100 text-red-800 border-red-200',
+    'end_of_month_apr': 'bg-red-100 text-red-800 border-red-200',
+    'end_of_month_may': 'bg-red-100 text-red-800 border-red-200',
+    'end_of_month_jun': 'bg-red-100 text-red-800 border-red-200',
+    'end_of_month_jul': 'bg-red-100 text-red-800 border-red-200',
+    'end_of_month_aug': 'bg-red-100 text-red-800 border-red-200',
+    'end_of_month_sep': 'bg-red-100 text-red-800 border-red-200',
+    'end_of_month_oct': 'bg-red-100 text-red-800 border-red-200',
+    'end_of_month_nov': 'bg-red-100 text-red-800 border-red-200',
+    'end_of_month_dec': 'bg-red-100 text-red-800 border-red-200'
+  }
+  return colorMap[frequency] || 'bg-indigo-100 text-indigo-800 border-indigo-200'
+}
+
 // Helper function to render frequency with additional details
 const renderFrequencyWithDetails = (task: MasterTask) => {
-  // Get the base frequency display name
-  const getFrequencyBadgeColor = (frequency: string) => {
-    const colorMap: Record<string, string> = {
-      'once_off': 'bg-purple-100 text-purple-800 border-purple-200',
-      'once_off_sticky': 'bg-purple-100 text-purple-800 border-purple-200',
-      'every_day': 'bg-blue-100 text-blue-800 border-blue-200',
-      'weekly': 'bg-green-100 text-green-800 border-green-200',
-      'specific_weekdays': 'bg-green-100 text-green-800 border-green-200',
-      'start_every_month': 'bg-amber-100 text-amber-800 border-amber-200',
-      'start_certain_months': 'bg-amber-100 text-amber-800 border-amber-200',
-      'every_month': 'bg-orange-100 text-orange-800 border-orange-200',
-      'certain_months': 'bg-orange-100 text-orange-800 border-orange-200',
-      'end_every_month': 'bg-red-100 text-red-800 border-red-200',
-      'end_certain_months': 'bg-red-100 text-red-800 border-red-200'
-    }
-    return colorMap[frequency] || 'bg-gray-100 text-gray-800 border-gray-200'
-  }
-  
   const baseFrequency = formatFrequency(task.frequency)
   const details = []
   
@@ -368,9 +400,9 @@ const TaskDetailsModal = ({ task, positions }: { task: MasterTask, positions: Po
             <div>
               <label className="text-sm font-medium text-gray-600">Status</label>
               <div className="mt-1">
-                <Badge className={task.publish_status === 'active' ? 'bg-green-100 text-green-800' : 
-                                task.publish_status === 'draft' ? 'bg-yellow-100 text-yellow-800' : 
-                                'bg-gray-100 text-gray-800'}>
+                <Badge className={task.publish_status === 'active' ? 'bg-green-100 text-green-800 border border-green-200' : 
+                                task.publish_status === 'draft' ? 'bg-yellow-100 text-yellow-800 border border-yellow-200' : 
+                                'bg-gray-100 text-gray-800 border border-gray-200'}>
                   {task.publish_status}
                 </Badge>
               </div>
@@ -450,12 +482,24 @@ const TaskDetailsModal = ({ task, positions }: { task: MasterTask, positions: Po
             <div>
               <label className="text-sm font-medium text-gray-600">Frequency</label>
               <p className="text-sm mt-1">
-                <Badge variant="outline">{formatFrequency(task.frequency)}</Badge>
+                <Badge variant="outline" className={getFrequencyBadgeColor(task.frequency)}>{formatFrequency(task.frequency)}</Badge>
               </p>
             </div>
             <div>
               <label className="text-sm font-medium text-gray-600">Timing</label>
-              <p className="text-sm mt-1">{task.timing || 'Not specified'}</p>
+              <p className="text-sm mt-1">
+                {task.timing ? (
+                  <Badge variant="outline" className={`
+                    ${task.timing === 'opening' ? 'bg-blue-100 text-blue-800 border-blue-200' : 
+                      task.timing === 'anytime' ? 'bg-purple-100 text-purple-800 border-purple-200' : 
+                      task.timing === 'before_order_cutoff' ? 'bg-amber-100 text-amber-800 border-amber-200' : 
+                      task.timing === 'closing' ? 'bg-indigo-100 text-indigo-800 border-indigo-200' : 
+                      'bg-gray-100 text-gray-800 border-gray-200'}
+                  `}>
+                    {task.timing.charAt(0).toUpperCase() + task.timing.slice(1).replace(/_/g, ' ')}
+                  </Badge>
+                ) : 'Not specified'}
+              </p>
             </div>
             <div>
               <label className="text-sm font-medium text-gray-600">Due Time</label>
@@ -1242,7 +1286,7 @@ export default function AdminMasterTasksPage() {
                 {/* Status Filter */}
                 <div className="flex justify-start w-full">
                   <Select value={filterStatus} onValueChange={setFilterStatus}>
-                    <SelectTrigger className="w-full">
+                    <SelectTrigger className="w-[100px]">
                       <SelectValue placeholder="All Statuses" />
                     </SelectTrigger>
                     <SelectContent>
@@ -1380,7 +1424,7 @@ export default function AdminMasterTasksPage() {
                                 handleStatusChange(task.id, value)
                               }
                             >
-                              <SelectTrigger className="w-28">
+                              <SelectTrigger className="w-32">
                                 <SelectValue />
                               </SelectTrigger>
                               <SelectContent>
@@ -1529,7 +1573,7 @@ export default function AdminMasterTasksPage() {
                                     handleStatusChange(task.id, value)
                                   }
                                 >
-                                  <SelectTrigger className="w-28 h-8">
+                                  <SelectTrigger className="w-32 h-8">
                                     <SelectValue />
                                   </SelectTrigger>
                                   <SelectContent>

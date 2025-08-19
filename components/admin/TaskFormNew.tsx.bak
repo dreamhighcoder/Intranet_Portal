@@ -30,7 +30,7 @@ const taskFormSchema = z.object({
   publish_status: z.enum(['active', 'inactive', 'draft']),
   publish_delay: z.string().optional(),
   frequency: z.enum([
-    'once_off', 'every_day', 'once_weekly', 'monday', 'tuesday', 'wednesday',
+    'once_off', 'every_day', 'once_weekly', 'monday', 'tuesday', 'wednesday', 
     'thursday', 'friday', 'saturday', 'once_monthly', 'start_of_month_jan',
     'start_of_month_feb', 'start_of_month_mar', 'start_of_month_apr',
     'start_of_month_may', 'start_of_month_jun', 'start_of_month_jul',
@@ -55,7 +55,7 @@ interface TaskFormProps {
 
 export default function TaskFormNew({ task, onSubmit, onCancel }: TaskFormProps) {
   const [showConfirmModal, setShowConfirmModal] = useState(false)
-
+  
   const isEditing = !!task
 
   const form = useForm<TaskFormData>({
@@ -99,20 +99,20 @@ export default function TaskFormNew({ task, onSubmit, onCancel }: TaskFormProps)
       publish_status: data.publish_status,
       frequency: data.frequency
     }
-
+    
     // Only add date fields if they have valid values
     if (data.due_date && data.due_date.trim() !== '') {
       taskData.due_date = data.due_date
     }
-
+    
     if (data.publish_delay && data.publish_delay.trim() !== '') {
       taskData.publish_delay = data.publish_delay
     }
-
+    
     if (data.start_date && data.start_date.trim() !== '') {
       taskData.start_date = data.start_date
     }
-
+    
     if (data.end_date && data.end_date.trim() !== '') {
       taskData.end_date = data.end_date
     }
@@ -125,7 +125,7 @@ export default function TaskFormNew({ task, onSubmit, onCancel }: TaskFormProps)
   const handleCreateClick = async () => {
     // Trigger validation for all fields
     const result = await form.trigger()
-
+    
     if (!result) {
       // If validation fails, scroll to the first error
       const firstError = Object.keys(form.formState.errors)[0]
@@ -135,7 +135,7 @@ export default function TaskFormNew({ task, onSubmit, onCancel }: TaskFormProps)
       }
       return
     }
-
+    
     // Check for required array fields specifically
     const formData = form.getValues()
     const arrayFields = ['responsibility', 'categories']
@@ -143,7 +143,7 @@ export default function TaskFormNew({ task, onSubmit, onCancel }: TaskFormProps)
       const value = formData[field as keyof TaskFormData]
       return !value || (Array.isArray(value) && value.length === 0)
     })
-
+    
     if (missingArrayFields.length > 0) {
       // Set errors for missing array fields
       missingArrayFields.forEach(field => {
@@ -152,7 +152,7 @@ export default function TaskFormNew({ task, onSubmit, onCancel }: TaskFormProps)
           message: `At least one ${field} is required`
         })
       })
-
+      
       // Scroll to the first error
       const firstError = missingArrayFields[0]
       const errorElement = document.getElementById(firstError)
@@ -206,9 +206,9 @@ export default function TaskFormNew({ task, onSubmit, onCancel }: TaskFormProps)
           </div>
         </div>
       )}
-
+      
       <form onSubmit={form.handleSubmit(handleSubmit)} className="flex-1 space-y-4 sm:space-y-6 pb-4">
-
+        
         {/* Basic Information */}
         <Card>
           <CardHeader>
@@ -218,7 +218,7 @@ export default function TaskFormNew({ task, onSubmit, onCancel }: TaskFormProps)
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="grid flex grid-cols-1 lg:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
               <div className="space-y-3">
                 <Label htmlFor="title">Title *</Label>
                 <Input
@@ -230,6 +230,29 @@ export default function TaskFormNew({ task, onSubmit, onCancel }: TaskFormProps)
                   <p className="text-sm text-red-500">{errors.title.message}</p>
                 )}
               </div>
+            </div>
+            
+            <div className="space-y-3">
+              <div className="flex justify-between items-center">
+                <Label htmlFor="description">Task Description *</Label>
+                <span className="text-xs text-muted-foreground">
+                  {form.watch('description')?.length || 0}/200 characters
+                </span>
+              </div>
+              <Textarea
+                id="description"
+                {...form.register('description')}
+                placeholder="Enter task description"
+                rows={3}
+                className={errors.description ? "border-red-500" : ""}
+                maxLength={200}
+              />
+              {errors.description && (
+                <p className="text-sm text-red-500">{errors.description.message}</p>
+              )}
+            </div>
+            
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-3">
                   <Label htmlFor="timing">Timing *</Label>
@@ -250,49 +273,25 @@ export default function TaskFormNew({ task, onSubmit, onCancel }: TaskFormProps)
                   </Select>
                 </div>
 
-
+                <div className="space-y-3">
+                  <Label htmlFor="due_time">Due Time</Label>
+                  <div className="relative">
+                    <Clock className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      id="due_time"
+                      type="time"
+                      {...form.register('due_time')}
+                      className="pl-10"
+                    />
+                  </div>
+                </div>
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground mt-8">
+                  Due time is auto-filled based on timing selection.
+                </p>
               </div>
             </div>
-
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-              <div className="space-y-3">
-                <div className="flex justify-between items-center">
-                  <Label htmlFor="description">Task Description *</Label>
-                  <span className="text-xs text-muted-foreground">
-                    {form.watch('description')?.length || 0}/200 characters
-                  </span>
-                </div>
-                <Textarea
-                  id="description"
-                  {...form.register('description')}
-                  placeholder="Enter task description"
-                  rows={3}
-                  className={errors.description ? "border-red-500" : ""}
-                  maxLength={200}
-                />
-                {errors.description && (
-                  <p className="text-sm text-red-500">{errors.description.message}</p>
-                )}
-              </div>
-              <div className="space-y-3">
-                <Label htmlFor="due_time">Due Time</Label>
-                <div className="relative">
-                  <Clock className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                  <Input
-                    id="due_time"
-                    type="time"
-                    {...form.register('due_time')}
-                    className="pl-10"
-                  />
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    Due time is auto-filled based on timing selection.
-                  </p>
-                </div>
-              </div>
-            </div>
-
           </CardContent>
         </Card>
 
@@ -305,15 +304,15 @@ export default function TaskFormNew({ task, onSubmit, onCancel }: TaskFormProps)
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-6">
-
+            
             {/* Responsibilities Section */}
             <div className="space-y-3">
               <div className="flex items-center justify-between">
                 <Label>Responsibilities * (Multi-select)</Label>
                 <Popover>
                   <PopoverTrigger asChild>
-                    <Button
-                      variant="outline"
+                    <Button 
+                      variant="outline" 
                       size="sm"
                       className="w-auto"
                       type="button"
@@ -349,25 +348,25 @@ export default function TaskFormNew({ task, onSubmit, onCancel }: TaskFormProps)
                   </PopoverContent>
                 </Popover>
               </div>
-
+              
               <div>
                 <span className="text-xs text-muted-foreground mb-2 block">
                   {form.watch('responsibility')?.length || 0} selected
                 </span>
-
+                
                 {/* Selected Responsibilities */}
                 <div className="flex flex-wrap gap-2 min-h-[2rem]">
                   {form.watch('responsibility')?.map(responsibility => {
                     const responsibilityObj = RESPONSIBILITY_OPTIONS.find(r => r.value === responsibility);
                     return (
-                      <Badge
-                        key={responsibility}
+                      <Badge 
+                        key={responsibility} 
                         className="bg-blue-600 text-white hover:bg-blue-700 px-3 py-1 flex items-center gap-2"
                       >
                         {responsibilityObj?.label || responsibility}
-                        <button
+                        <button 
                           type="button"
-                          className="hover:bg-blue-800 rounded-full p-0.5"
+                          className="hover:bg-blue-800 rounded-full p-0.5" 
                           onClick={() => removeArrayItem('responsibility', responsibility)}
                         >
                           <XIcon className="h-3 w-3" />
@@ -388,8 +387,8 @@ export default function TaskFormNew({ task, onSubmit, onCancel }: TaskFormProps)
                 <Label>Categories * (Multi-select)</Label>
                 <Popover>
                   <PopoverTrigger asChild>
-                    <Button
-                      variant="outline"
+                    <Button 
+                      variant="outline" 
                       size="sm"
                       className="w-auto"
                       type="button"
@@ -425,25 +424,25 @@ export default function TaskFormNew({ task, onSubmit, onCancel }: TaskFormProps)
                   </PopoverContent>
                 </Popover>
               </div>
-
+              
               <div>
                 <span className="text-xs text-muted-foreground mb-2 block">
                   {form.watch('categories')?.length || 0} selected
                 </span>
-
+                
                 {/* Selected Categories */}
                 <div className="flex flex-wrap gap-2 min-h-[2rem]">
                   {form.watch('categories')?.map(category => {
                     const categoryObj = TASK_CATEGORIES.find(c => c.value === category);
                     return (
-                      <Badge
-                        key={category}
+                      <Badge 
+                        key={category} 
                         className="bg-green-600 text-white hover:bg-green-700 px-3 py-1 flex items-center gap-2"
                       >
                         {categoryObj?.label || category}
-                        <button
+                        <button 
                           type="button"
-                          className="hover:bg-green-800 rounded-full p-0.5"
+                          className="hover:bg-green-800 rounded-full p-0.5" 
                           onClick={() => removeArrayItem('categories', category)}
                         >
                           <XIcon className="h-3 w-3" />
@@ -469,7 +468,7 @@ export default function TaskFormNew({ task, onSubmit, onCancel }: TaskFormProps)
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-1">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-3">
                   <Label>Frequency *</Label>
@@ -511,11 +510,11 @@ export default function TaskFormNew({ task, onSubmit, onCancel }: TaskFormProps)
               {frequency !== 'once_off' && (
                 <div></div>
               )}
-              <div>
-                <p className="text-xs text-muted-foreground">
-                  For once-off tasks, manually enter the due date.
-                </p>
-              </div>
+                  <p className="text-xs text-muted-foreground">
+                    For once-off tasks, manually enter the due date.
+                  </p>
+                </div>
+              )}
             </div>
           </CardContent>
         </Card>
@@ -552,6 +551,7 @@ export default function TaskFormNew({ task, onSubmit, onCancel }: TaskFormProps)
                   <p className="text-sm text-red-500">{errors.publish_status.message}</p>
                 )}
               </div>
+
               <div className="space-y-3">
                 <Label htmlFor="publish_delay">Publishing Delay</Label>
                 <div className="relative">
