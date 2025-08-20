@@ -190,6 +190,23 @@ export default function CalendarPage() {
     }
   }
 
+  const handleDayClick = (date: string) => {
+    // Navigate to the checklist page for the selected date
+    // If user has a specific position, navigate to their checklist
+    // Otherwise, navigate to a default role (pharmacist-in-charge)
+    let targetRole = 'pharmacist-in-charge' // default role
+    
+    if (user?.position?.name) {
+      // Convert position name to kebab-case for URL
+      targetRole = user.position.name
+        .toLowerCase()
+        .replace(/\s+/g, '-')
+        .replace(/[^a-z0-9-]/g, '')
+    }
+    
+    router.push(`/checklist/${targetRole}?date=${date}`)
+  }
+
   const renderCalendarGrid = () => {
     if (!calendarData) return null
 
@@ -211,9 +228,10 @@ export default function CalendarPage() {
             return (
               <div
                 key={day.date}
-                className={`min-h-32 p-2 border border-gray-200 ${
-                  isToday ? 'bg-blue-50 border-blue-300' : 'bg-white'
-                } ${day.holiday ? 'bg-yellow-50' : ''}`}
+                onClick={() => handleDayClick(day.date)}
+                className={`min-h-32 p-2 border border-gray-200 cursor-pointer transition-all duration-200 hover:shadow-md hover:scale-[1.02] hover:border-blue-300 ${
+                  isToday ? 'bg-blue-50 border-blue-300' : 'bg-white hover:bg-blue-50'
+                } ${day.holiday ? 'bg-yellow-50 hover:bg-yellow-100' : ''}`}
               >
                 <div className="flex items-center justify-between mb-2">
                   <span className={`text-sm font-medium ${isToday ? 'text-blue-600' : 'text-gray-900'}`}>
@@ -294,10 +312,17 @@ export default function CalendarPage() {
         {days.map((day, index) => (
           <div
             key={index}
-            className={`min-h-24 p-1 border border-gray-200 ${
+            onClick={() => day.isCurrentMonth ? handleDayClick(day.date) : null}
+            className={`min-h-24 p-1 border border-gray-200 transition-all duration-200 ${
+              day.isCurrentMonth ? 'cursor-pointer hover:shadow-md hover:scale-[1.02] hover:border-blue-300' : 'cursor-not-allowed'
+            } ${
               day.isToday ? 'bg-blue-50 border-blue-300' : 'bg-white'
-            } ${!day.isCurrentMonth ? 'bg-gray-50 text-gray-400' : ''} ${
-              day.data.holiday ? 'bg-yellow-50' : ''
+            } ${
+              day.isCurrentMonth && !day.isToday ? 'hover:bg-blue-50' : ''
+            } ${
+              !day.isCurrentMonth ? 'bg-gray-50 text-gray-400' : ''
+            } ${
+              day.data.holiday && day.isCurrentMonth ? 'bg-yellow-50 hover:bg-yellow-100' : ''
             }`}
           >
             <div className="flex items-center justify-between mb-1">

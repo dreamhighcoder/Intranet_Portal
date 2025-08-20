@@ -25,47 +25,104 @@ export function DateNavigator({ currentDate, onDateChange }: DateNavigatorProps)
   }
 
   return (
-    <div className="flex items-center justify-between bg-white rounded-lg border border-[var(--color-border)] p-4">
-      <div className="flex items-center space-x-4">
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => onDateChange(previous)}
-          className="flex items-center space-x-1"
-        >
-          <ChevronLeft className="w-4 h-4" />
-          <span>Previous</span>
-        </Button>
+    <div className="bg-white rounded-lg border border-[var(--color-border)] p-4">
+      {/* Mobile Layout */}
+      <div className="flex flex-col space-y-3 sm:hidden">
+        <div className="flex items-center justify-between">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => onDateChange(previous)}
+            className="flex items-center space-x-1 flex-1 mr-2"
+          >
+            <ChevronLeft className="w-4 h-4" />
+            <span className="hidden xs:inline">Previous</span>
+            <span className="xs:hidden">Prev</span>
+          </Button>
 
-        <Popover open={isCalendarOpen} onOpenChange={setIsCalendarOpen}>
-          <PopoverTrigger asChild>
-            <Button variant="outline" className="flex items-center space-x-2 bg-transparent">
-              <CalendarIcon className="w-4 h-4" />
-              <span className="font-medium">{formatDate(currentDate)}</span>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => onDateChange(next)}
+            className="flex items-center space-x-1 flex-1 ml-2"
+          >
+            <span className="hidden xs:inline">Next</span>
+            <span className="xs:hidden">Next</span>
+            <ChevronRight className="w-4 h-4" />
+          </Button>
+        </div>
+
+        <div className="flex items-center justify-center">
+          <Popover open={isCalendarOpen} onOpenChange={setIsCalendarOpen}>
+            <PopoverTrigger asChild>
+              <Button variant="outline" className="flex items-center space-x-2 bg-transparent w-full justify-center">
+                <CalendarIcon className="w-4 h-4" />
+                <span className="font-medium text-sm sm:text-base">{formatDate(currentDate)}</span>
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-auto p-0" align="center">
+              <Calendar mode="single" selected={new Date(currentDate)} onSelect={handleDateSelect} initialFocus />
+            </PopoverContent>
+          </Popover>
+        </div>
+
+        {!isToday && (
+          <div className="flex justify-center">
+            <Button
+              variant="default"
+              size="sm"
+              onClick={() => onDateChange(today)}
+              className="bg-[var(--color-primary)] hover:bg-[var(--color-primary)]/90 text-white px-6"
+            >
+              Today
             </Button>
-          </PopoverTrigger>
-          <PopoverContent className="w-auto p-0" align="start">
-            <Calendar mode="single" selected={new Date(currentDate)} onSelect={handleDateSelect} initialFocus />
-          </PopoverContent>
-        </Popover>
-
-        <Button variant="outline" size="sm" onClick={() => onDateChange(next)} className="flex items-center space-x-1">
-          <span>Next</span>
-          <ChevronRight className="w-4 h-4" />
-        </Button>
+          </div>
+        )}
       </div>
 
-      <div className="flex items-center space-x-2">
-        {!isToday && (
+      {/* Desktop Layout */}
+      <div className="hidden sm:flex items-center justify-between">
+        <div className="flex items-center space-x-4">
           <Button
-            variant="default"
+            variant="outline"
             size="sm"
-            onClick={() => onDateChange(today)}
-            className="bg-[var(--color-primary)] hover:bg-[var(--color-primary)]/90 text-white"
+            onClick={() => onDateChange(previous)}
+            className="flex items-center space-x-1"
           >
-            Today
+            <ChevronLeft className="w-4 h-4" />
+            <span>Previous</span>
           </Button>
-        )}
+
+          <Popover open={isCalendarOpen} onOpenChange={setIsCalendarOpen}>
+            <PopoverTrigger asChild>
+              <Button variant="outline" className="flex items-center space-x-2 bg-transparent">
+                <CalendarIcon className="w-4 h-4" />
+                <span className="font-medium">{formatDate(currentDate)}</span>
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-auto p-0" align="start">
+              <Calendar mode="single" selected={new Date(currentDate)} onSelect={handleDateSelect} initialFocus />
+            </PopoverContent>
+          </Popover>
+
+          <Button variant="outline" size="sm" onClick={() => onDateChange(next)} className="flex items-center space-x-1">
+            <span>Next</span>
+            <ChevronRight className="w-4 h-4" />
+          </Button>
+        </div>
+
+        <div className="flex items-center space-x-2">
+          {!isToday && (
+            <Button
+              variant="default"
+              size="sm"
+              onClick={() => onDateChange(today)}
+              className="bg-[var(--color-primary)] hover:bg-[var(--color-primary)]/90 text-white"
+            >
+              Today
+            </Button>
+          )}
+        </div>
       </div>
     </div>
   )
