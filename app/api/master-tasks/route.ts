@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/auth-middleware'
 import { createClient } from '@supabase/supabase-js'
+import { RESPONSIBILITY_OPTIONS } from '@/lib/constants'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
@@ -35,18 +36,22 @@ export async function GET(request: NextRequest) {
 
     let query = supabase
       .from('master_tasks')
-      .select(`
-        *,
-        positions (
-          id,
-          name
-        )
-      `)
+      .select(`*`)
 
-    // Filter by position if provided
+    // Legacy: support filter by position by matching responsibility label
     if (positionId) {
-      console.log('Master tasks GET - Filtering by position_id:', positionId)
-      query = query.eq('position_id', positionId)
+      console.log('Master tasks GET - Filtering by responsibility for position_id:', positionId)
+      // Fetch position name and filter where responsibility contains it
+      const { data: pos, error: posErr } = await supabase
+        .from('positions')
+        .select('name')
+        .eq('id', positionId)
+        .single()
+
+      if (!posErr && pos?.name) {
+        // Since responsibility field doesn't exist in current schema, filter by position_id instead
+        query = query.eq('position_id', positionId)
+      }
     }
 
     // Filter by publish status if provided
@@ -134,6 +139,7 @@ export async function POST(request: NextRequest) {
       responsibility = [],
       categories = [],
       frequency,
+      frequencies = [],
       timing,
       due_time,
       due_date,
@@ -168,8 +174,9 @@ export async function POST(request: NextRequest) {
     if (!categories || categories.length === 0) {
       return NextResponse.json({ error: 'At least one category is required' }, { status: 400 })
     }
-    if (!frequency) {
-      return NextResponse.json({ error: 'Frequency is required' }, { status: 400 })
+    // Allow either single frequency or frequencies[] (at least one required)
+    if ((!frequency || String(frequency).trim() === '') && (!frequencies || frequencies.length === 0)) {
+      return NextResponse.json({ error: 'At least one frequency is required (frequency or frequencies[])' }, { status: 400 })
     }
     if (!timing) {
       return NextResponse.json({ error: 'Timing is required' }, { status: 400 })
@@ -246,54 +253,41 @@ export async function POST(request: NextRequest) {
     // Timing values are now stored directly as per new schema
     // No mapping needed - use the values directly from the form
 
-    console.log('Master task POST - Creating task:', title, 'for position:', mappedPositionId)
+    // Block Administrator responsibility at API level as well (defense-in-depth)
+    if (responsibility.some((r: string) => r.toLowerCase().includes('administrator'))) {
+      return NextResponse.json({ error: 'Administrator cannot be assigned as a responsibility' }, { status: 400 })
+    }
+
+    console.log('Master task POST - Creating task:', title)
     
-    // Prepare data for insertion using new database schema
+    // Prepare data for insertion using actual database schema
     const insertData: any = {
       title,
       description,
-      position_id: mappedPositionId, // Keep for backward compatibility
-      frequency: frequency,
+      position_id: mappedPositionId,
+      frequency: frequency || 'every_day',
       timing: timing,
-      due_time: due_time || '09:00:00',
-      category: categories && categories.length > 0 ? categories[0] : 'general-pharmacy-operations', // Legacy field
-      responsibility: responsibility || [],
-      categories: categories || [],
+      default_due_time: due_time || '09:00:00',
+      category: categories && categories.length > 0 ? categories[0] : 'general-pharmacy-operations',
       publish_status: publish_status || 'draft',
       sticky_once_off: sticky_once_off || false,
       allow_edit_when_locked: allow_edit_when_locked || false
     }
     
-    // Only add date fields if they have valid values
-    if (due_date && due_date.trim() !== '') {
-      insertData.due_date = due_date
-    }
-    
+    // Only add publish_delay_date if it has valid value (this field exists in schema)
     if (publish_delay && publish_delay.trim() !== '') {
-      insertData.publish_delay = publish_delay
+      insertData.publish_delay_date = publish_delay
     }
 
-    // Only add start_date and end_date if they have valid values
-    if (start_date && start_date.trim() !== '') {
-      insertData.start_date = start_date
-    }
-    if (end_date && end_date.trim() !== '') {
-      insertData.end_date = end_date
-    }
-
-    // Handle weekdays from frequency_rules or legacy
-    if (frequency_rules && frequency_rules.weekdays) {
-      insertData.weekdays = frequency_rules.weekdays
-    } else if (weekdays && weekdays.length > 0) {
+    // Handle weekdays (frequency_rules field doesn't exist in schema)
+    if (weekdays && weekdays.length > 0) {
       insertData.weekdays = weekdays
     } else if (frequency === 'specific_weekdays') {
       insertData.weekdays = [1, 2, 3, 4, 5] // Default to weekdays
     }
 
-    // Handle months from frequency_rules or legacy
-    if (frequency_rules && frequency_rules.months) {
-      insertData.months = frequency_rules.months
-    } else if (months && months.length > 0) {
+    // Handle months
+    if (months && months.length > 0) {
       insertData.months = months
     }
 

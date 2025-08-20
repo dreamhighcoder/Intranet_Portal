@@ -36,6 +36,11 @@ export default function AdminDashboard() {
   }, [user, isAdmin, isLoading])
 
   const loadDiagnostics = async () => {
+    if (!user || !user.isAuthenticated || user.role !== 'admin') {
+      console.log('AdminDashboard: Skipping diagnostics - user not authenticated or not admin')
+      return
+    }
+    
     try {
       console.log('AdminDashboard: Loading diagnostics...')
       const [masterTasksData, taskInstancesData, positionsData] = await Promise.all([

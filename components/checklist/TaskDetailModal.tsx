@@ -15,44 +15,46 @@ interface TaskDetailModalProps {
   onTaskUpdate?: () => void
 }
 
-interface AuditLogEntry {
+interface CompletionLogEntry {
   id: string
-  user_name: string
   action: string
-  old_status?: string
-  new_status?: string
-  timestamp: string
-  metadata?: any
+  completion_time: string
+  time_to_complete?: string
+  notes?: string
+  created_at: string
+  user_profiles?: {
+    display_name: string
+  }
 }
 
-export default function TaskDetailModal({ 
-  isOpen, 
-  onClose, 
-  task, 
-  onTaskUpdate 
+export default function TaskDetailModal({
+  isOpen,
+  onClose,
+  task,
+  onTaskUpdate
 }: TaskDetailModalProps) {
-  const [auditLog, setAuditLog] = useState<AuditLogEntry[]>([])
+  const [completionLog, setCompletionLog] = useState<CompletionLogEntry[]>([])
   const [loading, setLoading] = useState(false)
 
   useEffect(() => {
     if (isOpen && task?.id) {
-      loadAuditLog()
+      loadCompletionLog()
     }
   }, [isOpen, task?.id])
 
-  const loadAuditLog = async () => {
+  const loadCompletionLog = async () => {
     try {
       setLoading(true)
       const response = await fetch(`/api/audit/task-completion?task_instance_id=${task.id}`)
-      
+
       if (response.ok) {
         const data = await response.json()
         if (data.success) {
-          setAuditLog(data.data || [])
+          setCompletionLog(data.data || [])
         }
       }
     } catch (error) {
-      console.error('Error loading audit log:', error)
+      console.error('Error loading completion log:', error)
     } finally {
       setLoading(false)
     }
@@ -114,10 +116,117 @@ export default function TaskDetailModal({
     }
   }
 
+  // Helper function to format frequency rules as readable badges
+  const formatFrequencyRules = (frequencyRules: any) => {
+    if (!frequencyRules || typeof frequencyRules !== 'object') return []
+
+    const badges = []
+    const { type, ...attributes } = frequencyRules
+
+    // Add main type badge
+    if (type) {
+      const typeLabel = type.replace(/_/g, ' ').replace(/\b\w/g, (l: string) => l.toUpperCase())
+      badges.push({
+        label: typeLabel,
+        color: 'bg-blue-100 text-blue-800 border-blue-200',
+        isMain: true
+      })
+    }
+
+    // Add attribute badges based on the frequency type
+    Object.entries(attributes).forEach(([key, value]) => {
+      if (value === null || value === undefined) return
+
+      let label = ''
+      let color = 'bg-gray-100 text-gray-800 border-gray-200'
+
+      switch (key) {
+        case 'every_n_days':
+          label = `Every ${value} day${value > 1 ? 's' : ''}`
+          color = 'bg-green-100 text-green-800 border-green-200'
+          break
+        case 'every_n_weeks':
+          label = `Every ${value} week${value > 1 ? 's' : ''}`
+          color = 'bg-purple-100 text-purple-800 border-purple-200'
+          break
+        case 'every_n_months':
+          label = `Every ${value} month${value > 1 ? 's' : ''}`
+          color = 'bg-orange-100 text-orange-800 border-orange-200'
+          break
+        case 'business_days_only':
+          if (value) {
+            label = 'Business Days Only'
+            color = 'bg-yellow-100 text-yellow-800 border-yellow-200'
+          }
+          break
+        case 'exclude_holidays':
+          if (value) {
+            label = 'Exclude Holidays'
+            color = 'bg-red-100 text-red-800 border-red-200'
+          }
+          break
+        case 'weekdays':
+          if (Array.isArray(value) && value.length > 0) {
+            const weekdayNames = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
+            const days = value.map(day => weekdayNames[day - 1]).join(', ')
+            label = `Weekdays: ${days}`
+            color = 'bg-indigo-100 text-indigo-800 border-indigo-200'
+          }
+          break
+        case 'months':
+          if (Array.isArray(value) && value.length > 0) {
+            const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+            const months = value.map(month => monthNames[month - 1]).join(', ')
+            label = `Months: ${months}`
+            color = 'bg-pink-100 text-pink-800 border-pink-200'
+          }
+          break
+        case 'day_offset':
+          label = `Day ${value + 1} of month`
+          color = 'bg-teal-100 text-teal-800 border-teal-200'
+          break
+        case 'days_from_end':
+          label = value === 0 ? 'Last day of month' : `${value} day${value > 1 ? 's' : ''} from end`
+          color = 'bg-cyan-100 text-cyan-800 border-cyan-200'
+          break
+        case 'start_date':
+          label = `Start: ${new Date(value).toLocaleDateString('en-AU')}`
+          color = 'bg-emerald-100 text-emerald-800 border-emerald-200'
+          break
+        case 'end_date':
+          label = `End: ${new Date(value).toLocaleDateString('en-AU')}`
+          color = 'bg-rose-100 text-rose-800 border-rose-200'
+          break
+        case 'due_date':
+          label = `Due: ${new Date(value).toLocaleDateString('en-AU')}`
+          color = 'bg-amber-100 text-amber-800 border-amber-200'
+          break
+        case 'start_day':
+          const weekdayNames = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
+          label = `Start: ${weekdayNames[value - 1]}`
+          color = 'bg-violet-100 text-violet-800 border-violet-200'
+          break
+        default:
+          if (typeof value === 'boolean' && value) {
+            label = key.replace(/_/g, ' ').replace(/\b\w/g, (l: string) => l.toUpperCase())
+          } else if (typeof value === 'string' || typeof value === 'number') {
+            label = `${key.replace(/_/g, ' ').replace(/\b\w/g, (l: string) => l.toUpperCase())}: ${value}`
+          }
+          break
+      }
+
+      if (label) {
+        badges.push({ label, color, isMain: false })
+      }
+    })
+
+    return badges
+  }
+
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="overflow-y-auto max-w-4xl w-full max-h-[90vh] p-0">
-        <div className="p-6">
+      <DialogContent className="overflow-y-auto max-w-[95vw] sm:max-w-6xl w-full max-h-[90vh] p-0">
+        <div className="p-4 sm:p-6">
           <DialogHeader className="mb-6">
             <DialogTitle className="flex items-center space-x-2 text-xl">
               <FileText className="h-5 w-5 text-blue-600" />
@@ -128,11 +237,11 @@ export default function TaskDetailModal({
           <div className="space-y-6">
             {/* Task Information */}
             <Card className="border-l-4 border-l-blue-500">
-              <CardHeader className="pb-3">
+              <CardHeader className="pb-0">
                 <CardTitle className="text-xl text-gray-900 flex items-start justify-between">
                   <span className="flex-1">{task.master_task?.title}</span>
                   <Badge className={
-                    task.status === 'completed' 
+                    task.status === 'completed'
                       ? 'bg-green-100 text-green-800 border-green-200 ml-2'
                       : 'bg-orange-100 text-orange-800 border-orange-200 ml-2'
                   }>
@@ -143,23 +252,23 @@ export default function TaskDetailModal({
               <CardContent className="space-y-6">
                 {/* Description */}
                 {task.master_task?.description && (
-                  <div className="bg-gray-50 p-4 rounded-lg">
+                  <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
                     <div className="flex items-center space-x-2 mb-2">
-                      <FileText className="h-4 w-4 text-gray-600" />
-                      <span className="font-medium text-gray-700">Description</span>
+                      <FileText className="h-4 w-4 text-blue-600" />
+                      <span className="font-medium text-blue-800">Description</span>
                     </div>
-                    <p className="text-gray-700 leading-relaxed">{task.master_task.description}</p>
+                    <p className="text-blue-700 leading-relaxed">{task.master_task.description}</p>
                   </div>
                 )}
-                
+
                 {/* Basic Information Grid */}
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                  <div className="bg-purple-50 p-4 rounded-lg border border-purple-200">
                     <div className="flex items-center space-x-2 mb-1">
-                      <Calendar className="h-4 w-4 text-blue-600" />
-                      <span className="font-medium text-blue-800">Task Date</span>
+                      <Calendar className="h-4 w-4 text-purple-600" />
+                      <span className="font-medium text-purple-800">Task Date</span>
                     </div>
-                    <p className="text-blue-700 font-semibold">
+                    <p className="text-purple-700 font-semibold">
                       {new Date(task.date).toLocaleDateString('en-AU', {
                         weekday: 'long',
                         year: 'numeric',
@@ -168,7 +277,15 @@ export default function TaskDetailModal({
                       })}
                     </p>
                   </div>
-                  
+                  <div className="bg-purple-50 p-4 rounded-lg border border-purple-200">
+                    <div className="flex items-center space-x-2 mb-1">
+                      <Clock className="h-4 w-4 text-purple-600" />
+                      <span className="font-medium text-purple-800">Timing</span>
+                    </div>
+                    <p className="text-purple-700 font-semibold">
+                      {task.master_task?.timing?.replace(/_/g, ' ').replace(/\b\w/g, (l: string) => l.toUpperCase()) || 'Not specified'}
+                    </p>
+                  </div>
                   <div className="bg-purple-50 p-4 rounded-lg border border-purple-200">
                     <div className="flex items-center space-x-2 mb-1">
                       <Clock className="h-4 w-4 text-purple-600" />
@@ -178,95 +295,68 @@ export default function TaskDetailModal({
                       {task.master_task?.due_time || 'No specific time'}
                     </p>
                   </div>
-                  
-                  <div className="bg-green-50 p-4 rounded-lg border border-green-200">
-                    <div className="flex items-center space-x-2 mb-1">
-                      <User className="h-4 w-4 text-green-600" />
-                      <span className="font-medium text-green-800">Responsibility</span>
-                    </div>
-                    <p className="text-green-700 font-semibold capitalize">
-                      {task.role?.replace(/-/g, ' ')}
-                    </p>
-                  </div>
                 </div>
 
-                {/* Task Metadata */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="bg-gray-50 p-4 rounded-lg">
-                    <div className="flex items-center space-x-2 mb-2">
-                      <Hash className="h-4 w-4 text-gray-600" />
-                      <span className="font-medium text-gray-700">Task IDs</span>
-                    </div>
-                    <div className="space-y-1 text-sm">
-                      <p><span className="text-gray-500">Instance ID:</span> <code className="bg-white px-2 py-1 rounded text-xs">{task.id}</code></p>
-                      <p><span className="text-gray-500">Master Task ID:</span> <code className="bg-white px-2 py-1 rounded text-xs">{task.master_task_id}</code></p>
-                    </div>
-                  </div>
-
-                  <div className="bg-gray-50 p-4 rounded-lg">
-                    <div className="flex items-center space-x-2 mb-2">
-                      <Settings className="h-4 w-4 text-gray-600" />
-                      <span className="font-medium text-gray-700">Task Configuration</span>
-                    </div>
-                    <div className="space-y-1 text-sm">
-                      <p><span className="text-gray-500">Timing:</span> <span className="font-medium">{task.master_task?.timing || 'Not specified'}</span></p>
-                      <p><span className="text-gray-500">Created:</span> <span className="font-medium">{formatTimestamp(task.created_at)}</span></p>
-                      <p><span className="text-gray-500">Updated:</span> <span className="font-medium">{formatTimestamp(task.updated_at)}</span></p>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Categories */}
-                {task.master_task?.categories && task.master_task.categories.length > 0 && (
-                  <div className="bg-indigo-50 p-4 rounded-lg border border-indigo-200">
-                    <div className="flex items-center space-x-2 mb-3">
-                      <Tag className="h-4 w-4 text-indigo-600" />
-                      <span className="font-medium text-indigo-800">Categories</span>
-                    </div>
-                    <div className="flex flex-wrap gap-2">
-                      {task.master_task.categories.map((category: string, index: number) => {
-                        const config = getCategoryConfig(category)
-                        return (
-                          <Badge key={index} className={`${config.color} border`}>
-                            {config.label}
+                {/* Categories and Responsibilities - Side by side with reduced width */}
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+                  {/* Frequency Rules */}
+                  {task.master_task?.frequency_rules && Object.keys(task.master_task.frequency_rules).length > 0 && (
+                    <div className="bg-indigo-50 p-4 rounded-lg border border-indigo-200">
+                      <div className="flex items-center space-x-2 mb-3">
+                        <Settings className="h-4 w-4 text-indigo-600" />
+                        <span className="font-medium text-indigo-800">Frequency Rules</span>
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        {formatFrequencyRules(task.master_task.frequency_rules).map((badge, index) => (
+                          <Badge
+                            key={index}
+                            // className="bg-white border-indigo-200 text-indigo-800"
+                            className={`${badge.color} border ${badge.isMain ? 'border-indigo-200 text-indigo-800' : 'text-indigo-800'}`}
+                          >
+                            {badge.label}
                           </Badge>
-                        )
-                      })}
+                        ))}
+                      </div>
                     </div>
-                  </div>
-                )}
+                  )}
 
-                {/* Responsibilities */}
-                {task.master_task?.responsibility && task.master_task.responsibility.length > 0 && (
-                  <div className="bg-yellow-50 p-4 rounded-lg border border-yellow-200">
-                    <div className="flex items-center space-x-2 mb-3">
-                      <User className="h-4 w-4 text-yellow-600" />
-                      <span className="font-medium text-yellow-800">All Responsibilities</span>
+                  {/* Categories */}
+                  {task.master_task?.categories && task.master_task.categories.length > 0 && (
+                    <div className="bg-indigo-50 p-4 rounded-lg border border-indigo-200">
+                      <div className="flex items-center space-x-2 mb-3">
+                        <Tag className="h-4 w-4 text-indigo-600" />
+                        <span className="font-medium text-indigo-800">Categories</span>
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        {task.master_task.categories.map((category: string, index: number) => {
+                          const config = getCategoryConfig(category)
+                          return (
+                            <Badge key={index} className="bg-white border-indigo-200 text-indigo-800">
+                              {config.label}
+                            </Badge>
+                          )
+                        })}
+                      </div>
                     </div>
-                    <div className="flex flex-wrap gap-2">
-                      {task.master_task.responsibility.map((resp: string, index: number) => (
-                        <Badge key={index} variant="outline" className="bg-white border-yellow-300 text-yellow-800">
-                          {resp.replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
-                        </Badge>
-                      ))}
-                    </div>
-                  </div>
-                )}
+                  )}
 
-                {/* Frequency Rules */}
-                {task.master_task?.frequency_rules && Object.keys(task.master_task.frequency_rules).length > 0 && (
-                  <div className="bg-teal-50 p-4 rounded-lg border border-teal-200">
-                    <div className="flex items-center space-x-2 mb-3">
-                      <Settings className="h-4 w-4 text-teal-600" />
-                      <span className="font-medium text-teal-800">Frequency Rules</span>
+                  {/* Responsibilities */}
+                  {task.master_task?.responsibility && task.master_task.responsibility.length > 0 && (
+                    <div className="bg-indigo-50 p-4 rounded-lg border border-indigo-200">
+                      <div className="flex items-center space-x-2 mb-3">
+                        <User className="h-4 w-4 text-indigo-600" />
+                        <span className="font-medium text-indigo-800">All Responsibilities</span>
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        {task.master_task.responsibility.map((resp: string, index: number) => (
+                          <Badge key={index} variant="outline" className="bg-white border-indigo-200 text-indigo-800">
+                            {resp.replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
+                          </Badge>
+                        ))}
+                      </div>
                     </div>
-                    <div className="bg-white p-3 rounded border">
-                      <pre className="text-sm text-gray-700 whitespace-pre-wrap">
-                        {JSON.stringify(task.master_task.frequency_rules, null, 2)}
-                      </pre>
-                    </div>
-                  </div>
-                )}
+                  )}
+                </div>
 
                 {/* Task Payload */}
                 {task.payload && Object.keys(task.payload).length > 0 && (
@@ -294,14 +384,37 @@ export default function TaskDetailModal({
                   </div>
                 )}
 
-                {/* Current completion info */}
-                {task.status === 'completed' && task.completed_at && (
-                  <div className="bg-green-50 p-4 rounded-lg border border-green-200">
-                    <div className="flex items-center space-x-2 text-green-800 mb-2">
-                      <CheckCircle className="h-5 w-5" />
-                      <span className="font-semibold text-lg">Task Completed</span>
-                    </div>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+              </CardContent>
+            </Card>
+
+            {/* Completion History */}
+            <Card className="border-l-4 border-l-indigo-500">
+              <CardHeader>
+                <CardTitle className="text-lg flex items-center space-x-2">
+                  <Clock className="h-5 w-5 text-indigo-600" />
+                  <span>Completion History</span>
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                {/* Current Status Summary */}
+                <div className={`p-4 rounded-lg border mb-6 ${task.status === 'completed'
+                  ? 'bg-green-50 border-green-200'
+                  : 'bg-orange-50 border-orange-200'
+                  }`}>
+                  <div className="flex items-center space-x-2 mb-3">
+                    {task.status === 'completed' ? (
+                      <CheckCircle className="h-5 w-5 text-green-600" />
+                    ) : (
+                      <Clock className="h-5 w-5 text-orange-600" />
+                    )}
+                    <span className={`font-semibold text-lg ${task.status === 'completed' ? 'text-green-800' : 'text-orange-800'
+                      }`}>
+                      Current Status: {task.status === 'completed' ? 'Completed' : 'Pending'}
+                    </span>
+                  </div>
+
+                  {task.status === 'completed' && task.completed_at && (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
                       <div>
                         <span className="text-green-600 font-medium">Completed At:</span>
                         <p className="text-green-700 font-semibold">
@@ -317,77 +430,82 @@ export default function TaskDetailModal({
                         </div>
                       )}
                     </div>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
+                  )}
 
-            {/* Audit Trail */}
-            <Card className="border-l-4 border-l-indigo-500">
-              <CardHeader>
-                <CardTitle className="text-lg flex items-center space-x-2">
-                  <Clock className="h-5 w-5 text-indigo-600" />
-                  <span>Completion History</span>
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
+                  {task.status !== 'completed' && (
+                    <p className="text-orange-700 text-sm">
+                      This task is currently pending completion.
+                    </p>
+                  )}
+                </div>
+
+                {/* Task Completion History */}
                 {loading ? (
                   <div className="flex items-center justify-center py-8">
                     <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600"></div>
-                    <span className="ml-3 text-gray-600">Loading history...</span>
+                    <span className="ml-3 text-gray-600">Loading completion history...</span>
                   </div>
-                ) : auditLog.length > 0 ? (
-                  <div className="space-y-4">
-                    {auditLog.map((entry, index) => (
-                      <div key={entry.id} className="bg-gray-50 p-4 rounded-lg border">
-                        <div className="flex items-start space-x-3">
-                          <div className="flex-shrink-0 mt-1">
-                            {getActionIcon(entry.action)}
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center space-x-2 mb-2">
-                              <Badge className={`text-xs ${getActionColor(entry.action)}`}>
-                                {entry.action === 'completed' ? 'Completed' : 'Reopened'}
-                              </Badge>
-                              <span className="text-sm font-medium text-gray-700">
-                                by {entry.user_name}
-                              </span>
+                ) : completionLog.length > 0 ? (
+                  <div>
+                    <h4 className="font-medium text-gray-700 mb-4 flex items-center space-x-2">
+                      <Clock className="h-4 w-4" />
+                      <span>Task Completion History</span>
+                    </h4>
+                    <div className="space-y-4">
+                      {completionLog.map((entry, index) => (
+                        <div key={entry.id} className="bg-gray-50 p-4 rounded-lg border">
+                          <div className="flex items-start space-x-3">
+                            <div className="flex-shrink-0 mt-1">
+                              {getActionIcon(entry.action)}
                             </div>
-                            <p className="text-sm text-gray-600 mb-1">
-                              {formatTimestamp(entry.timestamp)}
-                            </p>
-                            {entry.old_status && entry.new_status && (
-                              <div className="flex items-center space-x-2 text-xs text-gray-500">
-                                <span className="bg-gray-200 px-2 py-1 rounded">{entry.old_status}</span>
-                                <span>→</span>
-                                <span className="bg-gray-200 px-2 py-1 rounded">{entry.new_status}</span>
+                            <div className="flex-1 min-w-0">
+                              <div className="flex flex-col sm:flex-row sm:items-center sm:space-x-2 mb-2">
+                                <Badge className={`text-xs ${getActionColor(entry.action)} mb-1 sm:mb-0`}>
+                                  {entry.action === 'completed' ? 'Task Completed' : 'Task Reopened'}
+                                </Badge>
+                                <span className="text-sm font-medium text-gray-700">
+                                  by {entry.user_profiles?.display_name || 'Unknown User'}
+                                </span>
                               </div>
-                            )}
-                            {entry.metadata && Object.keys(entry.metadata).length > 0 && (
-                              <div className="mt-2 p-2 bg-white rounded border">
-                                <span className="text-xs text-gray-500 font-medium">Additional Details:</span>
-                                <pre className="text-xs text-gray-600 mt-1 whitespace-pre-wrap">
-                                  {JSON.stringify(entry.metadata, null, 2)}
-                                </pre>
-                              </div>
-                            )}
+                              <p className="text-sm text-gray-600 mb-1">
+                                {formatTimestamp(entry.completion_time)}
+                              </p>
+                              {entry.time_to_complete && (
+                                <div className="flex items-center space-x-2 text-xs text-gray-500 mb-2">
+                                  <Clock className="h-3 w-3" />
+                                  <span>Time to complete: {entry.time_to_complete}</span>
+                                </div>
+                              )}
+                              {entry.notes && (
+                                <div className="mt-2 p-2 bg-white rounded border">
+                                  <span className="text-xs text-gray-500 font-medium">Notes:</span>
+                                  <p className="text-xs text-gray-600 mt-1">{entry.notes}</p>
+                                </div>
+                              )}
+                            </div>
                           </div>
                         </div>
-                      </div>
-                    ))}
+                      ))}
+                    </div>
                   </div>
                 ) : (
-                  <div className="text-center py-8">
-                    <Clock className="h-12 w-12 text-gray-300 mx-auto mb-3" />
-                    <p className="text-gray-500">No completion history available.</p>
-                    <p className="text-sm text-gray-400 mt-1">Task actions will appear here once performed.</p>
+                  <div>
+                    <h4 className="font-medium text-gray-700 mb-4 flex items-center space-x-2">
+                      <Clock className="h-4 w-4" />
+                      <span>Task Completion History</span>
+                    </h4>
+                    <div className="text-center py-8">
+                      <Clock className="h-12 w-12 text-gray-300 mx-auto mb-3" />
+                      <p className="text-gray-500">No completion history available.</p>
+                      <p className="text-sm text-gray-400 mt-1">Task completion and reopening actions will appear here once the task is marked as completed.</p>
+                    </div>
                   </div>
                 )}
               </CardContent>
             </Card>
           </div>
 
-          <div className="flex justify-end space-x-3 pt-6 border-t bg-gray-50 -mx-6 -mb-6 px-6 py-4 rounded-b-lg">
+          <div className="flex justify-end space-x-3 pt-6 border-t bg-gray-50 -mx-4 sm:-mx-6 -mb-4 sm:-mb-6 px-4 sm:px-6 py-4 rounded-b-lg">
             <Button variant="outline" onClick={onClose} className="px-6">
               Close
             </Button>

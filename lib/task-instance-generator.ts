@@ -12,6 +12,7 @@
 
 import { supabase } from './db'
 import { createRecurrenceEngine } from './recurrence-engine'
+import { createSimpleFrequencyHandler } from './simple-frequency-handler'
 import { createHolidayHelper } from './public-holidays'
 import type { 
   TaskRow, 
@@ -19,6 +20,7 @@ import type {
   CreateChecklistInstanceRequest 
 } from './db'
 import type { Task } from './recurrence-engine'
+import type { SimpleTask } from './simple-frequency-handler'
 import type { PublicHoliday } from './public-holidays'
 
 // ========================================
@@ -107,11 +109,13 @@ export interface BulkGenerationResult {
  */
 export class TaskInstanceGenerator {
   private recurrenceEngine: ReturnType<typeof createRecurrenceEngine>
+  private simpleFrequencyHandler: ReturnType<typeof createSimpleFrequencyHandler>
   private logLevel: 'silent' | 'info' | 'debug'
 
   constructor(publicHolidays: PublicHoliday[] = [], logLevel: 'silent' | 'info' | 'debug' = 'info') {
     const holidayHelper = createHolidayHelper(publicHolidays)
     this.recurrenceEngine = createRecurrenceEngine(holidayHelper)
+    this.simpleFrequencyHandler = createSimpleFrequencyHandler({ holidayChecker: holidayHelper })
     this.logLevel = logLevel
   }
 
@@ -363,14 +367,6 @@ export class TaskInstanceGenerator {
     dryRun: boolean
   ): Promise<TaskGenerationResult> {
     try {
-      // Convert database row to recurrence engine task format
-      const task: Task = {
-        id: masterTask.id,
-        frequency_rules: masterTask.frequency_rules,
-        start_date: masterTask.created_at,
-        end_date: undefined // No end date for now
-      }
-
       // Check if task is due on this date
       const checkDate = new Date(date)
       
@@ -387,8 +383,31 @@ export class TaskInstanceGenerator {
         }
       }
       
-      // Then check if the task is due on this date based on recurrence rules
-      const isDue = this.recurrenceEngine.isDueOnDate(task, checkDate)
+      let isDue = false
+      
+      // Check using new frequencies array if available
+      if (masterTask.frequencies && masterTask.frequencies.length > 0) {
+        const simpleTask: SimpleTask = {
+          id: masterTask.id,
+          frequencies: masterTask.frequencies,
+          due_date: masterTask.due_date,
+          start_date: masterTask.start_date,
+          end_date: masterTask.end_date
+        }
+        
+        isDue = this.simpleFrequencyHandler.isTaskDue(simpleTask, date)
+      }
+      // Fall back to legacy frequency_rules if no frequencies array
+      else if (masterTask.frequency_rules) {
+        const task: Task = {
+          id: masterTask.id,
+          frequency_rules: masterTask.frequency_rules,
+          start_date: masterTask.created_at,
+          end_date: undefined // No end date for now
+        }
+        
+        isDue = this.recurrenceEngine.isDueOnDate(task, checkDate)
+      }
 
       if (!isDue) {
         return {

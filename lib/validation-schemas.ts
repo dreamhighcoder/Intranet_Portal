@@ -120,15 +120,33 @@ export const CreateMasterTaskSchema = z.object({
   position_id: z.string().uuid('Invalid position ID').optional(),
   responsibility: z.array(z.string()).min(1, 'At least one responsibility is required'),
   categories: z.array(z.string()).min(1, 'At least one category is required'),
-  frequency_rules: FrequencyRuleSchema,
+  frequency_rules: FrequencyRuleSchema.optional(), // Legacy field - optional for backward compatibility
+  frequencies: z.array(z.enum([
+    'once_off', 'every_day', 'once_weekly', 'monday', 'tuesday', 'wednesday',
+    'thursday', 'friday', 'saturday', 'once_monthly', 'start_of_every_month',
+    'start_of_month_jan', 'start_of_month_feb', 'start_of_month_mar', 'start_of_month_apr',
+    'start_of_month_may', 'start_of_month_jun', 'start_of_month_jul',
+    'start_of_month_aug', 'start_of_month_sep', 'start_of_month_oct',
+    'start_of_month_nov', 'start_of_month_dec', 'end_of_every_month',
+    'end_of_month_jan', 'end_of_month_feb', 'end_of_month_mar', 'end_of_month_apr',
+    'end_of_month_may', 'end_of_month_jun', 'end_of_month_jul',
+    'end_of_month_aug', 'end_of_month_sep', 'end_of_month_oct',
+    'end_of_month_nov', 'end_of_month_dec'
+  ])).min(1, 'At least one frequency is required').optional(),
   timing: z.nativeEnum(TaskTiming),
-  due_date: z.string().datetime().optional(),
+  due_date: z.string().optional(), // Changed from datetime to allow date strings
   due_time: z.string().regex(/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/, 'Invalid time format (HH:MM)').optional(),
   publish_status: z.nativeEnum(PublishStatus).default(PublishStatus.DRAFT),
-  publish_delay: z.string().datetime().optional(),
+  publish_delay: z.string().optional(), // Changed from datetime to allow date strings
   sticky_once_off: z.boolean().default(false),
   allow_edit_when_locked: z.boolean().default(false)
-})
+}).refine(
+  (data) => data.frequency_rules || data.frequencies,
+  {
+    message: "Either frequency_rules or frequencies must be provided",
+    path: ["frequencies"]
+  }
+)
 
 /**
  * Zod schema for updating master checklist tasks

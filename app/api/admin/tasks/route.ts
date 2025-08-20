@@ -53,6 +53,7 @@ export async function POST(request: NextRequest) {
         responsibility: validatedData.responsibility,
         categories: validatedData.categories,
         frequency_rules: validatedData.frequency_rules,
+        frequencies: validatedData.frequencies,
         timing: validatedData.timing,
         due_date: validatedData.due_date,
         due_time: validatedData.due_time,

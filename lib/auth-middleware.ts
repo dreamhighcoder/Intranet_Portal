@@ -16,8 +16,12 @@ export async function getAuthUser(request: NextRequest): Promise<AuthUser | null
     const authHeader = request.headers.get('authorization')
     const positionAuthHeader = request.headers.get('x-position-auth')
     
-    // Handle position-based authentication first
-    if (positionAuthHeader === 'true') {
+    // Handle position-based authentication first (tolerate missing X-Position-Auth flag)
+    if (positionAuthHeader === 'true' || (
+      request.headers.get('x-position-user-id') &&
+      request.headers.get('x-position-user-role') &&
+      request.headers.get('x-position-display-name')
+    )) {
       const userId = request.headers.get('x-position-user-id')
       const userRole = request.headers.get('x-position-user-role') as 'admin' | 'viewer'
       const displayName = request.headers.get('x-position-display-name')

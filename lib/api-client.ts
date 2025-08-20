@@ -12,34 +12,31 @@ export async function authenticatedFetch(url: string, options: RequestInit = {})
     ...options.headers,
   }
   
-  // Try to get Supabase session first
+  // Get both Supabase session and position-based auth
   const { data: { session } } = await supabase.auth.getSession()
+  const positionUser = await PositionAuthService.getCurrentUser()
   
   console.log('API Client - Supabase session:', !!session?.access_token)
+  console.log('API Client - Position user:', positionUser ? {
+    id: positionUser.id,
+    role: positionUser.role,
+    displayName: positionUser.displayName,
+    isAuthenticated: positionUser.isAuthenticated
+  } : 'None')
   
+  // Always include position-based auth if available
+  if (positionUser && positionUser.isAuthenticated) {
+    headers['X-Position-Auth'] = 'true'
+    headers['X-Position-User-Id'] = positionUser.id
+    headers['X-Position-User-Role'] = positionUser.role
+    headers['X-Position-Display-Name'] = positionUser.displayName
+    console.log('API Client - Using position-based auth for:', positionUser.displayName)
+  }
+  
+  // Include Supabase auth if present as well
   if (session?.access_token) {
     headers.Authorization = `Bearer ${session.access_token}`
-    console.log('API Client - Using Supabase auth')
-  } else {
-    // Check for position-based auth
-    const positionUser = await PositionAuthService.getCurrentUser()
-    console.log('API Client - Position user:', positionUser ? {
-      id: positionUser.id,
-      role: positionUser.role,
-      displayName: positionUser.displayName,
-      isAuthenticated: positionUser.isAuthenticated
-    } : 'None')
-    
-    if (positionUser && positionUser.isAuthenticated) {
-      // For position-based auth, send the position data as headers
-      headers['X-Position-Auth'] = 'true'
-      headers['X-Position-User-Id'] = positionUser.id
-      headers['X-Position-User-Role'] = positionUser.role
-      headers['X-Position-Display-Name'] = positionUser.displayName
-      console.log('API Client - Using position-based auth for:', positionUser.displayName)
-    } else {
-      console.log('API Client - No authentication available')
-    }
+    console.log('API Client - Including Supabase auth token')
   }
   
   console.log('API Client - Final headers:', Object.fromEntries(Object.entries(headers)))

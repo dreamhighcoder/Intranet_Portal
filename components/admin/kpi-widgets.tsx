@@ -21,7 +21,15 @@ export function KPIWidgets() {
 
   useEffect(() => {
     async function fetchDashboardStats() {
-      if (authLoading || !user) {
+      if (authLoading || !user || !user.isAuthenticated) {
+        console.log('KPIWidgets: Skipping fetch - user not authenticated:', { authLoading, hasUser: !!user, isAuthenticated: user?.isAuthenticated })
+        setIsLoading(false)
+        return
+      }
+      
+      // Additional check for admin role
+      if (user.role !== 'admin') {
+        console.log('KPIWidgets: Skipping fetch - user is not admin:', user.role)
         setIsLoading(false)
         return
       }

@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { authenticatedGet } from "@/lib/api-client"
+import { usePositionAuth } from "@/lib/position-auth-context"
 
 interface DashboardStats {
   newSince9am: number
@@ -14,9 +15,16 @@ interface DashboardStats {
 export function DashboardStats() {
   const [stats, setStats] = useState<DashboardStats | null>(null)
   const [isLoading, setIsLoading] = useState(true)
+  const { user, isLoading: authLoading } = usePositionAuth()
 
   useEffect(() => {
     async function fetchDashboardStats() {
+      if (authLoading || !user || !user.isAuthenticated) {
+        console.log('DashboardStats: Skipping fetch - user not authenticated:', { authLoading, hasUser: !!user, isAuthenticated: user?.isAuthenticated })
+        setIsLoading(false)
+        return
+      }
+      
       try {
         const data = await authenticatedGet('/api/dashboard')
         if (data) {
@@ -35,7 +43,7 @@ export function DashboardStats() {
     }
 
     fetchDashboardStats()
-  }, [])
+  }, [user, authLoading])
 
   const statCards = [
     {

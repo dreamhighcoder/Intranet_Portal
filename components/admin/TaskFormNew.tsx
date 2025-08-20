@@ -29,18 +29,18 @@ const taskFormSchema = z.object({
   due_date: z.string().optional(),
   publish_status: z.enum(['active', 'inactive', 'draft']),
   publish_delay: z.string().optional(),
-  frequency: z.enum([
+  frequencies: z.array(z.enum([
     'once_off', 'every_day', 'once_weekly', 'monday', 'tuesday', 'wednesday',
-    'thursday', 'friday', 'saturday', 'once_monthly', 'start_of_month_jan',
-    'start_of_month_feb', 'start_of_month_mar', 'start_of_month_apr',
+    'thursday', 'friday', 'saturday', 'once_monthly', 'start_of_every_month',
+    'start_of_month_jan', 'start_of_month_feb', 'start_of_month_mar', 'start_of_month_apr',
     'start_of_month_may', 'start_of_month_jun', 'start_of_month_jul',
     'start_of_month_aug', 'start_of_month_sep', 'start_of_month_oct',
-    'start_of_month_nov', 'start_of_month_dec', 'end_of_month_jan',
-    'end_of_month_feb', 'end_of_month_mar', 'end_of_month_apr',
+    'start_of_month_nov', 'start_of_month_dec', 'end_of_every_month',
+    'end_of_month_jan', 'end_of_month_feb', 'end_of_month_mar', 'end_of_month_apr',
     'end_of_month_may', 'end_of_month_jun', 'end_of_month_jul',
     'end_of_month_aug', 'end_of_month_sep', 'end_of_month_oct',
     'end_of_month_nov', 'end_of_month_dec'
-  ]),
+  ])).min(1, 'At least one frequency is required'),
   start_date: z.string().optional(),
   end_date: z.string().optional()
 })
@@ -70,14 +70,14 @@ export default function TaskFormNew({ task, onSubmit, onCancel }: TaskFormProps)
       due_date: task?.due_date || undefined,
       publish_status: task?.publish_status || 'draft',
       publish_delay: task?.publish_delay || undefined,
-      frequency: task?.frequency || 'every_day',
+      frequencies: task?.frequencies || (task?.frequency ? [task.frequency] : ['every_day']),
       start_date: task?.start_date || new Date().toISOString().split('T')[0],
       end_date: task?.end_date || undefined
     }
   })
 
   const { watch, setValue, formState: { errors, isValid } } = form
-  const frequency = watch('frequency')
+  const frequencies = watch('frequencies')
   const timing = watch('timing')
 
   // Auto-fill due_time based on timing selection
@@ -97,7 +97,7 @@ export default function TaskFormNew({ task, onSubmit, onCancel }: TaskFormProps)
       timing: data.timing,
       due_time: data.due_time,
       publish_status: data.publish_status,
-      frequency: data.frequency
+      frequencies: data.frequencies
     }
 
     // Only add date fields if they have valid values
@@ -138,7 +138,7 @@ export default function TaskFormNew({ task, onSubmit, onCancel }: TaskFormProps)
 
     // Check for required array fields specifically
     const formData = form.getValues()
-    const arrayFields = ['responsibility', 'categories']
+    const arrayFields = ['responsibility', 'categories', 'frequencies']
     const missingArrayFields = arrayFields.filter(field => {
       const value = formData[field as keyof TaskFormData]
       return !value || (Array.isArray(value) && value.length === 0)
@@ -230,7 +230,7 @@ export default function TaskFormNew({ task, onSubmit, onCancel }: TaskFormProps)
                   <p className="text-sm text-red-500">{errors.title.message}</p>
                 )}
               </div>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 gap-4">
                 <div className="space-y-3">
                   <Label htmlFor="timing">Timing *</Label>
                   <Select
@@ -322,7 +322,14 @@ export default function TaskFormNew({ task, onSubmit, onCancel }: TaskFormProps)
                       Add Responsibility
                     </Button>
                   </PopoverTrigger>
-                  <PopoverContent className="w-80 p-2" align="start">
+                  <PopoverContent 
+                    className="w-80 p-2" 
+                    align="start"
+                    onWheel={(e) => {
+                      // Allow wheel scrolling within the popover
+                      e.stopPropagation();
+                    }}
+                  >
                     <div className="space-y-2">
                       {RESPONSIBILITY_OPTIONS.map(responsibility => (
                         <div
@@ -398,7 +405,14 @@ export default function TaskFormNew({ task, onSubmit, onCancel }: TaskFormProps)
                       Add Category
                     </Button>
                   </PopoverTrigger>
-                  <PopoverContent className="w-80 p-2" align="start">
+                  <PopoverContent 
+                    className="w-80 p-2" 
+                    align="start"
+                    onWheel={(e) => {
+                      // Allow wheel scrolling within the popover
+                      e.stopPropagation();
+                    }}
+                  >
                     <div className="space-y-2">
                       {TASK_CATEGORIES.map(category => (
                         <div
@@ -460,6 +474,7 @@ export default function TaskFormNew({ task, onSubmit, onCancel }: TaskFormProps)
           </CardContent>
         </Card>
 
+        {/* <div className="grid grid-cols-1 md:grid-cols-2 gap-6"> */}
         {/* Frequency */}
         <Card>
           <CardHeader>
@@ -469,53 +484,117 @@ export default function TaskFormNew({ task, onSubmit, onCancel }: TaskFormProps)
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-1">
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-3">
-                  <Label>Frequency *</Label>
-                  <Select
-                    value={frequency}
-                    onValueChange={(value) => form.setValue('frequency', value as any)}
-                  >
-                    <SelectTrigger className="w-full">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {TASK_FREQUENCIES.map(freq => (
-                        <SelectItem key={freq.value} value={freq.value}>
-                          {freq.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+            <div className="grid grid-cols-1 md:grid-cols-1 gap-6">
+              {/* <div className="grid grid-cols-2 gap-4"> */}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <Label>Frequencies * (Multi-select)</Label>
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="w-auto"
+                        type="button"
+                      >
+                        <Plus className="mr-2 h-4 w-4" />
+                        Add Frequency
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent 
+                      className="w-80 p-2 max-h-80 overflow-y-auto" 
+                      align="start"
+                      onWheel={(e) => {
+                        // Allow wheel scrolling within the popover
+                        e.stopPropagation();
+                      }}
+                    >
+                      <div className="space-y-2">
+                        {TASK_FREQUENCIES.map(frequency => (
+                          <div
+                            key={frequency.value}
+                            className="flex items-center space-x-2 p-2 hover:bg-gray-50 rounded cursor-pointer"
+                            onClick={() => {
+                              const currentValues = form.watch('frequencies') || [];
+                              if (currentValues.includes(frequency.value)) {
+                                removeArrayItem('frequencies', frequency.value);
+                              } else {
+                                addArrayItem('frequencies', frequency.value);
+                              }
+                            }}
+                          >
+                            <Checkbox
+                              checked={form.watch('frequencies')?.includes(frequency.value)}
+                              readOnly
+                              className="data-[state=checked]:bg-blue-500 data-[state=checked]:border-blue-500 data-[state=checked]:text-white"
+                            />
+                            <span className="text-sm">{frequency.label}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </PopoverContent>
+                  </Popover>
                 </div>
 
-                {/* Show due date field only for once_off frequency */}
-                {frequency === 'once_off' && (
-                  <div className="space-y-3">
-                    <Label htmlFor="due_date_once_off">Due Date *</Label>
-                    <div className="relative">
-                      <Calendar className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                      <Input
-                        id="due_date_once_off"
-                        type="date"
-                        {...form.register('due_date')}
-                        className="pl-10"
-                      />
-                    </div>
-                  </div>
-                )}
-              </div>
+                <div>
+                  <span className="text-xs text-muted-foreground mb-2 block">
+                    {form.watch('frequencies')?.length || 0} selected
+                  </span>
 
+                  {/* Selected Frequencies */}
+                  <div className="flex flex-wrap gap-2 min-h-[2rem]">
+                    {form.watch('frequencies')?.map(frequency => {
+                      const frequencyObj = TASK_FREQUENCIES.find(f => f.value === frequency);
+                      return (
+                        <Badge
+                          key={frequency}
+                          className="bg-green-600 text-white hover:bg-green-700 px-3 py-1 flex items-center gap-2"
+                        >
+                          {frequencyObj?.label || frequency}
+                          <button
+                            type="button"
+                            className="hover:bg-green-800 rounded-full p-0.5"
+                            onClick={() => removeArrayItem('frequencies', frequency)}
+                          >
+                            <XIcon className="h-3 w-3" />
+                          </button>
+                        </Badge>
+                      );
+                    })}
+                  </div>
+                </div>
+                {errors.frequencies && (
+                  <p className="text-sm text-red-500">{errors.frequencies.message}</p>
+                )}
+                <div>
+                  <p className="text-xs text-muted-foreground">
+                    For once-off tasks, manually enter the due date. Multiple frequencies can be applied to a single task.
+                  </p>
+                </div>
+              </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {/* Show due date field only for once_off frequency */}
+              {frequencies?.includes('once_off') && (
+                <div className="space-y-3">
+                  <Label htmlFor="due_date_once_off">Due Date *</Label>
+                  <div className="relative">
+                    <Calendar className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      id="due_date_once_off"
+                      type="date"
+                      {...form.register('due_date')}
+                      className="pl-10"
+                    />
+                  </div>
+                </div>
+              )}
+              {/* </div> */}
+</div>
               {/* Empty div for layout when no due date */}
-              {frequency !== 'once_off' && (
+              {!frequencies?.includes('once_off') && (
                 <div></div>
               )}
-              <div>
-                <p className="text-xs text-muted-foreground">
-                  For once-off tasks, manually enter the due date.
-                </p>
-              </div>
+
             </div>
           </CardContent>
         </Card>
@@ -570,6 +649,7 @@ export default function TaskFormNew({ task, onSubmit, onCancel }: TaskFormProps)
             </div>
           </CardContent>
         </Card>
+        {/* </div> */}
 
         {/* Form Actions */}
         <div className="flex justify-end space-x-4 pt-4 border-t">

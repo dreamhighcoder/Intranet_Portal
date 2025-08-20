@@ -193,7 +193,10 @@ const renderTruncatedArray = (
 }
 
 // Helper function to format frequency for display
-const formatFrequency = (frequency: string) => {
+const formatFrequency = (frequency: string | null | undefined) => {
+  if (!frequency) {
+    return 'Not set'
+  }
   return frequency.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())
 }
 
@@ -249,7 +252,11 @@ const formatFrequencyRules = (frequencyRules: any) => {
 }
 
 // Helper function to get frequency badge color
-const getFrequencyBadgeColor = (frequency: string) => {
+const getFrequencyBadgeColor = (frequency: string | null | undefined) => {
+  if (!frequency) {
+    return 'bg-gray-100 text-gray-800 border-gray-200'
+  }
+  
   const colorMap: Record<string, string> = {
     'once_off': 'bg-purple-100 text-purple-800 border-purple-200',
     'once_off_sticky': 'bg-purple-100 text-purple-800 border-purple-200',
@@ -264,6 +271,7 @@ const getFrequencyBadgeColor = (frequency: string) => {
     'saturday': 'bg-green-100 text-green-800 border-green-200',
     'once_weekly': 'bg-green-100 text-green-800 border-green-200',
     'start_every_month': 'bg-amber-100 text-amber-800 border-amber-200',
+    'start_of_every_month': 'bg-amber-100 text-amber-800 border-amber-200',
     'start_certain_months': 'bg-amber-100 text-amber-800 border-amber-200',
     'start_of_month_jan': 'bg-amber-100 text-amber-800 border-amber-200',
     'start_of_month_feb': 'bg-amber-100 text-amber-800 border-amber-200',
@@ -281,6 +289,7 @@ const getFrequencyBadgeColor = (frequency: string) => {
     'certain_months': 'bg-orange-100 text-orange-800 border-orange-200',
     'once_monthly': 'bg-orange-100 text-orange-800 border-orange-200',
     'end_every_month': 'bg-red-100 text-red-800 border-red-200',
+    'end_of_every_month': 'bg-red-100 text-red-800 border-red-200',
     'end_certain_months': 'bg-red-100 text-red-800 border-red-200',
     'end_of_month_jan': 'bg-red-100 text-red-800 border-red-200',
     'end_of_month_feb': 'bg-red-100 text-red-800 border-red-200',
@@ -300,7 +309,41 @@ const getFrequencyBadgeColor = (frequency: string) => {
 
 // Helper function to render frequency with additional details
 const renderFrequencyWithDetails = (task: MasterTask) => {
-  const baseFrequency = formatFrequency(task.frequency)
+  // Use frequencies array if available, otherwise fall back to single frequency
+  const frequencies = task.frequencies || (task.frequency ? [task.frequency] : [])
+  
+  if (frequencies.length === 0) {
+    return <span className="text-gray-400 text-xs">No frequency set</span>
+  }
+
+  // If multiple frequencies, show them as badges
+  if (frequencies.length > 1) {
+    return (
+      <div className="flex flex-wrap gap-1">
+        {frequencies.slice(0, 2).map((freq, index) => (
+          <Badge
+            key={index}
+            className={`text-xs ${getFrequencyBadgeColor(freq)}`}
+          >
+            {formatFrequency(freq)}
+          </Badge>
+        ))}
+        {frequencies.length > 2 && (
+          <Badge 
+            variant="outline" 
+            className="text-xs bg-gray-100" 
+            title={`${frequencies.length - 2} more: ${frequencies.slice(2).map(f => formatFrequency(f)).join(', ')}`}
+          >
+            +{frequencies.length - 2}
+          </Badge>
+        )}
+      </div>
+    )
+  }
+
+  // Single frequency - show with details
+  const frequency = frequencies[0]
+  const baseFrequency = formatFrequency(frequency)
   const details = []
   
   // Add weekdays if applicable
@@ -332,7 +375,7 @@ const renderFrequencyWithDetails = (task: MasterTask) => {
   }
   
   // Add due date for once-off tasks
-  if (task.frequency === 'once_off' && task.due_date) {
+  if ((frequency === 'once_off' || frequencies.includes('once_off')) && task.due_date) {
     const dueDate = new Date(task.due_date).toLocaleDateString('en-US', {
       month: 'short',
       day: 'numeric',
@@ -356,7 +399,7 @@ const renderFrequencyWithDetails = (task: MasterTask) => {
     <div className="space-y-1 w-full flex flex-col">
       <Badge 
         variant="outline" 
-        className={`text-xs truncate w-3/5 text-center ${getFrequencyBadgeColor(task.frequency)}`}
+        className={`text-xs truncate w-3/5 text-center ${getFrequencyBadgeColor(frequency)}`}
         title={baseFrequency}
       >
         {baseFrequency}

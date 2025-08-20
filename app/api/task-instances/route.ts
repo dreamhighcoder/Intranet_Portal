@@ -29,24 +29,14 @@ export async function GET(request: NextRequest) {
           description,
           frequency,
           timing,
-          category,
           categories,
           responsibility,
-          position_id,
-          due_time,
-          frequency_rules,
+          default_due_time,
           publish_status,
           sticky_once_off,
-          allow_edit_when_locked,
-          positions!inner (
-            id,
-            name
-          )
+          allow_edit_when_locked
         )
       `)
-
-    // For non-admins, force restrict to their position
-    const effectivePositionId = user.role === 'admin' ? positionIdParam : (positionIdParam || user.position_id || null)
 
     // Filter by date or date range
     if (date) {
@@ -59,20 +49,29 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // Filter by position if provided/effective
-    if (effectivePositionId) {
-      query = query.eq('master_tasks.position_id', effectivePositionId)
+    // Filter by responsibility if provided (since position_id doesn't exist)
+    if (positionIdParam && user.role === 'admin') {
+      // For admin users, try to filter by responsibility based on position name
+      const { data: position } = await supabaseAdmin
+        .from('positions')
+        .select('name')
+        .eq('id', positionIdParam)
+        .single()
+      
+      if (position?.name) {
+        query = query.contains('master_tasks.responsibility', [position.name])
+      }
     }
 
     // Filter by responsibility if provided (for new responsibility-based filtering)
-    if (responsibility) {
-      // Use overlaps to check if any of the values in the responsibility array match
-      query = query.overlaps('master_tasks.responsibility', [
-        responsibility, 
-        'Shared (inc. Pharmacist)', 
-        'Shared (exc. Pharmacist)'
-      ])
-    }
+    // Note: responsibility field doesn't exist in current schema, so skip this filter
+    // if (responsibility) {
+    //   query = query.overlaps('master_tasks.responsibility', [
+    //     responsibility, 
+    //     'Shared (inc. Pharmacist)', 
+    //     'Shared (exc. Pharmacist)'
+    //   ])
+    // }
 
     // Filter by status if provided
     if (status && status !== 'all') {
@@ -81,8 +80,8 @@ export async function GET(request: NextRequest) {
 
     // Filter by category if provided
     if (category && category !== 'all') {
-      // Check both legacy category field and new categories array
-      query = query.or(`master_tasks.category.eq.${category},master_tasks.categories.cs.{${category}}`)
+      // Use the categories array field
+      query = query.contains('master_tasks.categories', [category])
     }
 
     // Default ordering - due date first, then time
@@ -95,6 +94,15 @@ export async function GET(request: NextRequest) {
       console.error('Error fetching task instances:', error)
       return NextResponse.json({ error: 'Failed to fetch task instances' }, { status: 500 })
     }
+
+    // Handle case when there are no task instances
+    if (!taskInstances || taskInstances.length === 0) {
+      console.log('No task instances found, returning empty array')
+      return NextResponse.json([])
+    }
+
+    // Since position_id doesn't exist in the actual database, we'll use responsibility instead
+    // No need to fetch position data separately for now
 
     // Transform data to match frontend expectations
     const transformedData = taskInstances?.map(instance => ({
@@ -116,18 +124,15 @@ export async function GET(request: NextRequest) {
         description: instance.master_tasks.description,
         frequency: instance.master_tasks.frequency,
         timing: instance.master_tasks.timing,
-        category: instance.master_tasks.category,
         categories: instance.master_tasks.categories,
         responsibility: instance.master_tasks.responsibility,
-        position_id: instance.master_tasks.position_id,
-        due_time: instance.master_tasks.due_time,
-        frequency_rules: instance.master_tasks.frequency_rules,
+        default_due_time: instance.master_tasks.default_due_time,
         publish_status: instance.master_tasks.publish_status,
         sticky_once_off: instance.master_tasks.sticky_once_off,
         allow_edit_when_locked: instance.master_tasks.allow_edit_when_locked,
-        position: {
-          id: instance.master_tasks.positions.id,
-          name: instance.master_tasks.positions.name
+        position: { 
+          id: null, 
+          name: instance.master_tasks.responsibility?.[0] || 'Unknown' 
         }
       }
     })) || []
