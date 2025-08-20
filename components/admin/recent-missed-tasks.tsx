@@ -4,6 +4,7 @@ import { useState, useEffect } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { taskInstancesApi } from "@/lib/api-client"
+import { usePositionAuth } from "@/lib/position-auth-context"
 
 interface TaskInstance {
   id: string
@@ -21,10 +22,29 @@ interface TaskInstance {
 export function RecentMissedTasks() {
   const [recentMissedTasks, setRecentMissedTasks] = useState<TaskInstance[]>([])
   const [isLoading, setIsLoading] = useState(true)
+  const { user, isLoading: authLoading } = usePositionAuth()
 
   useEffect(() => {
     async function fetchRecentMissedTasks() {
+      // Wait for auth to complete loading
+      if (authLoading) {
+        console.log('RecentMissedTasks: Auth still loading, waiting...')
+        return
+      }
+      
+      // Check if user is authenticated
+      if (!user || !user.isAuthenticated) {
+        console.log('RecentMissedTasks: Skipping fetch - user not authenticated:', { hasUser: !!user, isAuthenticated: user?.isAuthenticated })
+        setIsLoading(false)
+        return
+      }
+      
+      // Add a small delay to ensure authentication context is fully ready
+      await new Promise(resolve => setTimeout(resolve, 100))
+      
       try {
+        console.log('RecentMissedTasks: Fetching data for authenticated user:', user.displayName)
+        
         // Get date range for last 7 days
         const endDate = new Date()
         const startDate = new Date()
@@ -45,14 +65,15 @@ export function RecentMissedTasks() {
         
         setRecentMissedTasks(allTasks)
       } catch (error) {
-        console.error('Error fetching recent missed tasks:', error)
+        console.error('RecentMissedTasks: Error fetching recent missed tasks:', error)
+        setRecentMissedTasks([])
       } finally {
         setIsLoading(false)
       }
     }
 
     fetchRecentMissedTasks()
-  }, [])
+  }, [user, authLoading])
 
   return (
     <Card className="card-surface">

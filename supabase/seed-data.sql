@@ -9,47 +9,44 @@ INSERT INTO positions (id, name, description) VALUES
 
 -- Insert some sample Master Tasks
 INSERT INTO master_tasks (
-  title, description, position_id, frequency, timing, default_due_time, 
-  category, publish_status, sticky_once_off, allow_edit_when_locked
+  title, description, responsibility, categories, frequencies, timing, due_time, 
+  publish_status
 ) VALUES
   -- Daily tasks for Pharmacist Primary
   ('Daily Register Check', 'Verify controlled substances register is complete and accurate', 
-   '550e8400-e29b-41d4-a716-446655440001', 'every_day', 'Morning', '09:00:00', 
-   'Compliance', 'active', false, false),
+   ARRAY['pharmacist-primary'], ARRAY['compliance'], ARRAY['every_day'], 'opening', '09:00:00', 
+   'active'),
    
   ('Daily Temperature Log', 'Record and verify refrigeration temperatures', 
-   '550e8400-e29b-41d4-a716-446655440001', 'every_day', 'Morning', '08:30:00', 
-   'Safety', 'active', false, false),
+   ARRAY['pharmacist-primary'], ARRAY['pharmacy-services'], ARRAY['every_day'], 'opening', '08:30:00', 
+   'active'),
    
   -- Weekly tasks
   ('Weekly Safety Review', 'Review weekly safety incidents and near misses', 
-   '550e8400-e29b-41d4-a716-446655440001', 'weekly', 'Morning', '09:30:00', 
-   'Safety', 'active', false, false),
+   ARRAY['pharmacist-primary'], ARRAY['compliance'], ARRAY['once_weekly'], 'opening', '09:30:00', 
+   'active'),
    
   -- Monthly tasks for all positions
   ('Monthly Inventory Count', 'Complete monthly inventory count for assigned areas', 
-   '550e8400-e29b-41d4-a716-446655440004', 'start_every_month', 'Morning', '08:00:00', 
-   'Inventory', 'active', false, false),
+   ARRAY['dispensary-technicians'], ARRAY['stock-control'], ARRAY['start_of_every_month'], 'opening', '08:00:00', 
+   'active'),
    
   -- Once-off sticky task
   ('Annual CPR Training', 'Complete mandatory CPR training certification', 
-   '550e8400-e29b-41d4-a716-446655440001', 'once_off_sticky', 'Any Time', '17:00:00', 
-   'Training', 'active', true, true),
+   ARRAY['pharmacist-primary'], ARRAY['compliance'], ARRAY['once_off'], 'anytime_during_day', '17:00:00', 
+   'active'),
    
   -- Specific weekdays (Monday, Wednesday, Friday)
   ('Delivery Schedule Check', 'Review and confirm upcoming delivery schedules', 
-   '550e8400-e29b-41d4-a716-446655440006', 'specific_weekdays', 'Morning', '08:15:00', 
-   'Operations', 'active', false, false),
+   ARRAY['operational-managerial'], ARRAY['business-management'], ARRAY['monday', 'wednesday', 'friday'], 'opening', '08:15:00', 
+   'active'),
    
   -- End of month task
   ('Monthly P&L Review', 'Review monthly profit and loss statements', 
-   '550e8400-e29b-41d4-a716-446655440006', 'end_every_month', 'Before Close', '16:00:00', 
-   'Finance', 'active', false, false);
+   ARRAY['operational-managerial'], ARRAY['business-management'], ARRAY['end_of_every_month'], 'closing', '16:00:00', 
+   'active');
 
--- Update specific weekdays task to have Monday, Wednesday, Friday (1, 3, 5)
-UPDATE master_tasks 
-SET weekdays = ARRAY[1, 3, 5] 
-WHERE title = 'Delivery Schedule Check';
+-- Note: Weekdays are now handled through the frequencies array
 
 -- Insert some sample public holidays for Australia
 INSERT INTO public_holidays (date, name, region, source) VALUES

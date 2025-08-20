@@ -16,6 +16,7 @@ export async function authenticatedFetch(url: string, options: RequestInit = {})
   const { data: { session } } = await supabase.auth.getSession()
   const positionUser = await PositionAuthService.getCurrentUser()
   
+  console.log('API Client - Authentication check for:', url)
   console.log('API Client - Supabase session:', !!session?.access_token)
   console.log('API Client - Position user:', positionUser ? {
     id: positionUser.id,
@@ -23,6 +24,12 @@ export async function authenticatedFetch(url: string, options: RequestInit = {})
     displayName: positionUser.displayName,
     isAuthenticated: positionUser.isAuthenticated
   } : 'None')
+  
+  // Check if we have any authentication method available
+  const hasAuth = (positionUser && positionUser.isAuthenticated) || !!session?.access_token
+  if (!hasAuth) {
+    console.warn('API Client - No authentication available for:', url)
+  }
   
   // Always include position-based auth if available
   if (positionUser && positionUser.isAuthenticated) {
@@ -39,7 +46,7 @@ export async function authenticatedFetch(url: string, options: RequestInit = {})
     console.log('API Client - Including Supabase auth token')
   }
   
-  console.log('API Client - Final headers:', Object.fromEntries(Object.entries(headers)))
+  console.log('API Client - Final headers for', url, ':', Object.fromEntries(Object.entries(headers)))
 
   return fetch(url, {
     ...options,
@@ -49,8 +56,11 @@ export async function authenticatedFetch(url: string, options: RequestInit = {})
 
 /**
  * Utility function to make authenticated GET requests and return JSON
+ * Includes retry logic for authentication race conditions
  */
-export async function authenticatedGet<T = any>(url: string): Promise<T | null> {
+export async function authenticatedGet<T = any>(url: string, retryCount = 0): Promise<T | null> {
+  const maxRetries = 2
+  
   try {
     const response = await authenticatedFetch(url)
     if (response.ok) {
@@ -60,15 +70,23 @@ export async function authenticatedGet<T = any>(url: string): Promise<T | null> 
       console.error(`Failed to fetch ${url}:`, {
         status: response.status,
         statusText: response.statusText,
-        errorBody: errorText
+        errorBody: errorText,
+        attempt: retryCount + 1
       })
       
-      // If it's an authentication error, provide more context
+      // If it's an authentication error, provide more context and potentially retry
       if (response.status === 401) {
         console.warn('Authentication failed for:', url)
         const positionUser = await PositionAuthService.getCurrentUser()
         console.log('Current position user:', positionUser ? 
           `${positionUser.displayName} (${positionUser.role})` : 'None')
+        
+        // Retry once if we have a user but got 401 (might be a race condition)
+        if (positionUser && positionUser.isAuthenticated && retryCount < maxRetries) {
+          console.log(`Retrying ${url} due to potential race condition (attempt ${retryCount + 2}/${maxRetries + 1})`)
+          await new Promise(resolve => setTimeout(resolve, 500)) // Wait 500ms before retry
+          return authenticatedGet<T>(url, retryCount + 1)
+        }
       }
       
       return null

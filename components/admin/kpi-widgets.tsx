@@ -21,8 +21,15 @@ export function KPIWidgets() {
 
   useEffect(() => {
     async function fetchDashboardStats() {
-      if (authLoading || !user || !user.isAuthenticated) {
-        console.log('KPIWidgets: Skipping fetch - user not authenticated:', { authLoading, hasUser: !!user, isAuthenticated: user?.isAuthenticated })
+      // Wait for auth to complete loading
+      if (authLoading) {
+        console.log('KPIWidgets: Auth still loading, waiting...')
+        return
+      }
+      
+      // Check if user is authenticated
+      if (!user || !user.isAuthenticated) {
+        console.log('KPIWidgets: Skipping fetch - user not authenticated:', { hasUser: !!user, isAuthenticated: user?.isAuthenticated })
         setIsLoading(false)
         return
       }
@@ -34,8 +41,11 @@ export function KPIWidgets() {
         return
       }
       
+      // Add a small delay to ensure authentication context is fully ready
+      await new Promise(resolve => setTimeout(resolve, 100))
+      
       try {
-        console.log('KPIWidgets: Fetching dashboard data...')
+        console.log('KPIWidgets: Fetching dashboard data for authenticated admin user:', user.displayName)
         const data = await authenticatedGet('/api/dashboard')
         console.log('KPIWidgets: Dashboard data received:', data)
         

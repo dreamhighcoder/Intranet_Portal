@@ -19,13 +19,24 @@ export function DashboardStats() {
 
   useEffect(() => {
     async function fetchDashboardStats() {
-      if (authLoading || !user || !user.isAuthenticated) {
-        console.log('DashboardStats: Skipping fetch - user not authenticated:', { authLoading, hasUser: !!user, isAuthenticated: user?.isAuthenticated })
+      // Wait for auth to complete loading
+      if (authLoading) {
+        console.log('DashboardStats: Auth still loading, waiting...')
+        return
+      }
+      
+      // Check if user is authenticated
+      if (!user || !user.isAuthenticated) {
+        console.log('DashboardStats: Skipping fetch - user not authenticated:', { hasUser: !!user, isAuthenticated: user?.isAuthenticated })
         setIsLoading(false)
         return
       }
       
+      // Add a small delay to ensure authentication context is fully ready
+      await new Promise(resolve => setTimeout(resolve, 100))
+      
       try {
+        console.log('DashboardStats: Fetching dashboard data for authenticated user:', user.displayName)
         const data = await authenticatedGet('/api/dashboard')
         if (data) {
           setStats({
@@ -36,7 +47,14 @@ export function DashboardStats() {
           })
         }
       } catch (error) {
-        console.error('Error fetching dashboard stats:', error)
+        console.error('DashboardStats: Error fetching dashboard stats:', error)
+        // Set fallback stats if request fails
+        setStats({
+          newSince9am: 0,
+          dueToday: 0,
+          overdue: 0,
+          missed: 0,
+        })
       } finally {
         setIsLoading(false)
       }

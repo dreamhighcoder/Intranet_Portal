@@ -7,12 +7,33 @@ const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
 const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey)
 
+// Helper function to map position ID to responsibility value
+async function getResponsibilityFromPositionId(positionId: string): Promise<string | null> {
+  const { data: position } = await supabaseAdmin
+    .from('positions')
+    .select('name')
+    .eq('id', positionId)
+    .single()
+  
+  if (!position) return null
+  
+  // The responsibility values in the database are the display names, not the value keys
+  // So we return the position name directly
+  return position.name
+}
+
 export async function GET(request: NextRequest) {
   try {
+    console.log('Dashboard API: Starting request')
+    
     const user = await requireAuth(request)
+    console.log('Dashboard API: Authenticated user:', { id: user.id, role: user.role })
+    
     const searchParams = request.nextUrl.searchParams
     const positionId = searchParams.get('position_id')
     const dateRange = searchParams.get('date_range') || '7' // days
+    
+    console.log('Dashboard API: Query params:', { positionId, dateRange })
 
     // Calculate date range
     const endDate = new Date()
@@ -33,7 +54,37 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // Get all relevant task instances for the date range
+    // First, get master tasks that should have instances in the date range
+    let masterTasksQuery = supabaseAdmin
+      .from('master_tasks')
+      .select(`
+        id,
+        title,
+        categories,
+        responsibility,
+        publish_status
+      `)
+      .eq('publish_status', 'active')
+
+    if (positionId) {
+      const responsibilityValue = await getResponsibilityFromPositionId(positionId)
+      if (responsibilityValue) {
+        // Filter by responsibility array containing the mapped value
+        masterTasksQuery = masterTasksQuery.contains('responsibility', [responsibilityValue])
+      }
+    }
+
+    const { data: masterTasks, error: masterTasksError } = await masterTasksQuery
+
+    if (masterTasksError) {
+      console.error('Dashboard API: Error fetching master tasks:', masterTasksError)
+      return NextResponse.json({ 
+        error: 'Failed to fetch master tasks', 
+        details: masterTasksError
+      }, { status: 500 })
+    }
+
+    // Then get task instances for these master tasks in the date range
     let tasksQuery = baseQuery
       .select(`
         id,
@@ -41,33 +92,89 @@ export async function GET(request: NextRequest) {
         due_date,
         completed_at,
         created_at,
-        master_tasks (
-          id,
-          title,
-          category,
-          position_id,
-          positions (
-            id,
-            name
-          )
-        )
+        master_task_id
       `)
       .gte('due_date', startDateStr)
       .lte('due_date', endDateStr)
 
-    if (positionId) {
-      tasksQuery = tasksQuery.eq('master_tasks.position_id', positionId)
+    if (masterTasks && masterTasks.length > 0) {
+      const masterTaskIds = masterTasks.map(mt => mt.id)
+      tasksQuery = tasksQuery.in('master_task_id', masterTaskIds)
+    } else {
+      // No master tasks found, return empty results
+      tasksQuery = tasksQuery.eq('id', 'non-existent-id') // This will return no results
     }
 
+    console.log('Dashboard API: Executing tasks query...')
     const { data: tasks, error: tasksError } = await tasksQuery
 
     if (tasksError) {
-      console.error('Error fetching tasks:', tasksError)
-      return NextResponse.json({ error: 'Failed to fetch dashboard data' }, { status: 500 })
+      console.error('Dashboard API: Error fetching tasks:', {
+        message: tasksError.message,
+        details: tasksError.details,
+        hint: tasksError.hint,
+        code: tasksError.code
+      })
+      return NextResponse.json({ 
+        error: 'Failed to fetch dashboard data', 
+        details: {
+          message: tasksError.message,
+          code: tasksError.code,
+          hint: tasksError.hint
+        }
+      }, { status: 500 })
+    }
+    
+    // Handle case where no tasks exist
+    if (!tasks || tasks.length === 0) {
+      console.log('Dashboard API: No tasks found, returning empty dashboard data')
+      return NextResponse.json({
+        summary: {
+          totalTasks: 0,
+          completedTasks: 0,
+          onTimeCompletionRate: 0,
+          avgTimeToCompleteHours: 0,
+          newSince9am: 0,
+          missedLast7Days: 0,
+          overdueTasks: 0
+        },
+        today: {
+          total: 0,
+          completed: 0,
+          pending: 0,
+          overdue: 0
+        },
+        categoryStats: {},
+        recentActivity: [],
+        upcomingTasks: [],
+        trends: [],
+        dateRange: {
+          start: startDateStr,
+          end: endDateStr,
+          days: parseInt(dateRange)
+        },
+        generatedAt: new Date().toISOString()
+      })
+    }
+    
+    console.log('Dashboard API: Tasks fetched successfully:', tasks?.length || 0, 'tasks')
+
+    // Create a map of master tasks for easy lookup
+    const masterTasksMap = new Map()
+    if (masterTasks) {
+      masterTasks.forEach(mt => {
+        masterTasksMap.set(mt.id, mt)
+      })
     }
 
+    // Enhance task instances with master task data
+    const enhancedTasks = (tasks || []).map(task => ({
+      ...task,
+      master_tasks: masterTasksMap.get(task.master_task_id)
+    }))
+
     // Calculate KPIs
-    const allTasks = tasks || []
+    const allTasks = enhancedTasks
     const todayTasks = allTasks.filter(task => task.due_date === todayStr)
     const completedTasks = allTasks.filter(task => task.status === 'done')
     const overdueTasks = allTasks.filter(task => task.status === 'overdue')
@@ -116,22 +223,35 @@ export async function GET(request: NextRequest) {
     let missedByPosition = {}
     if (user.role === 'admin') {
       missedByPosition = missedTasks.reduce((acc: any, task) => {
-        const positionName = task.master_tasks?.positions?.name || 'Unassigned'
-        acc[positionName] = (acc[positionName] || 0) + 1
+        // Use responsibility array or fallback to 'Unassigned'
+        const responsibilities = task.master_tasks?.responsibility || []
+        if (responsibilities.length > 0) {
+          responsibilities.forEach((resp: string) => {
+            acc[resp] = (acc[resp] || 0) + 1
+          })
+        } else {
+          acc['Unassigned'] = (acc['Unassigned'] || 0) + 1
+        }
         return acc
       }, {})
     }
 
     // Category breakdown
     const categoryStats = allTasks.reduce((acc: any, task) => {
-      const category = task.master_tasks?.category || 'Uncategorized'
-      if (!acc[category]) {
-        acc[category] = { total: 0, completed: 0, missed: 0, overdue: 0 }
-      }
-      acc[category].total++
-      if (task.status === 'done') acc[category].completed++
-      if (task.status === 'missed') acc[category].missed++
-      if (task.status === 'overdue') acc[category].overdue++
+      const categories = task.master_tasks?.categories || ['Uncategorized']
+      // Handle both array and single string for backward compatibility
+      const categoryArray = Array.isArray(categories) ? categories : [categories]
+      
+      categoryArray.forEach(category => {
+        const categoryName = category || 'Uncategorized'
+        if (!acc[categoryName]) {
+          acc[categoryName] = { total: 0, completed: 0, missed: 0, overdue: 0 }
+        }
+        acc[categoryName].total++
+        if (task.status === 'done') acc[categoryName].completed++
+        if (task.status === 'missed') acc[categoryName].missed++
+        if (task.status === 'overdue') acc[categoryName].overdue++
+      })
       return acc
     }, {})
 
@@ -142,9 +262,9 @@ export async function GET(request: NextRequest) {
       .map(task => ({
         id: task.id,
         title: task.master_tasks?.title,
-        position: task.master_tasks?.positions?.name,
+        responsibilities: task.master_tasks?.responsibility || [],
         completed_at: task.completed_at,
-        category: task.master_tasks?.category
+        categories: task.master_tasks?.categories || []
       }))
 
     // Upcoming tasks (next 7 days)
@@ -157,13 +277,7 @@ export async function GET(request: NextRequest) {
         status,
         due_date,
         due_time,
-        master_tasks (
-          title,
-          category,
-          positions (
-            name
-          )
-        )
+        master_task_id
       `)
       .gt('due_date', todayStr)
       .lte('due_date', upcomingEndDate.toISOString().split('T')[0])
@@ -171,11 +285,20 @@ export async function GET(request: NextRequest) {
       .order('due_date', { ascending: true })
       .limit(10)
 
-    if (positionId) {
-      upcomingQuery = upcomingQuery.eq('master_tasks.position_id', positionId)
+    if (masterTasks && masterTasks.length > 0) {
+      const masterTaskIds = masterTasks.map(mt => mt.id)
+      upcomingQuery = upcomingQuery.in('master_task_id', masterTaskIds)
+    } else {
+      upcomingQuery = upcomingQuery.eq('id', 'non-existent-id')
     }
 
-    const { data: upcomingTasks } = await upcomingQuery
+    const { data: upcomingTasksRaw } = await upcomingQuery
+    
+    // Enhance upcoming tasks with master task data
+    const upcomingTasks = (upcomingTasksRaw || []).map(task => ({
+      ...task,
+      master_tasks: masterTasksMap.get(task.master_task_id)
+    }))
 
     const dashboardData = {
       // Core KPIs
@@ -204,8 +327,8 @@ export async function GET(request: NextRequest) {
       // Upcoming tasks
       upcomingTasks: upcomingTasks || [],
 
-      // Trends (simple day-by-day for the range)
-      trends: await calculateTrends(startDateStr, endDateStr, positionId),
+      // Trends (simple day-by-day for the range) - skip if no task instances
+      trends: allTasks.length > 0 ? await calculateTrends(startDateStr, endDateStr, positionId) : [],
 
       // Metadata
       dateRange: {
@@ -216,34 +339,64 @@ export async function GET(request: NextRequest) {
       generatedAt: new Date().toISOString()
     }
 
+    console.log('Dashboard API: Returning dashboard data:', {
+      totalTasks: dashboardData.summary.totalTasks,
+      completedTasks: dashboardData.summary.completedTasks,
+      categoryCount: Object.keys(dashboardData.categoryStats).length
+    })
+
     return NextResponse.json(dashboardData)
   } catch (error) {
     if (error instanceof Error && error.message.includes('Authentication')) {
       return NextResponse.json({ error: 'Authentication required' }, { status: 401 })
     }
     
-    console.error('Unexpected error:', error)
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+    console.error('Dashboard API unexpected error:', {
+      message: error instanceof Error ? error.message : String(error),
+      stack: error instanceof Error ? error.stack : undefined,
+      error: error
+    })
+    return NextResponse.json({ 
+      error: 'Internal server error',
+      details: error instanceof Error ? error.message : String(error)
+    }, { status: 500 })
   }
 }
 
 async function calculateTrends(startDate: string, endDate: string, positionId?: string | null) {
   try {
+    // First get master tasks for the position
+    let masterTasksQuery = supabaseAdmin
+      .from('master_tasks')
+      .select('id, responsibility')
+      .eq('publish_status', 'active')
+
+    if (positionId) {
+      const responsibilityValue = await getResponsibilityFromPositionId(positionId)
+      if (responsibilityValue) {
+        masterTasksQuery = masterTasksQuery.contains('responsibility', [responsibilityValue])
+      }
+    }
+
+    const { data: masterTasks } = await masterTasksQuery
+
+    // Then get task instances
     let query = supabaseAdmin
       .from('task_instances')
       .select(`
         due_date,
         status,
         completed_at,
-        master_tasks (
-          position_id
-        )
+        master_task_id
       `)
       .gte('due_date', startDate)
       .lte('due_date', endDate)
 
-    if (positionId) {
-      query = query.eq('master_tasks.position_id', positionId)
+    if (masterTasks && masterTasks.length > 0) {
+      const masterTaskIds = masterTasks.map(mt => mt.id)
+      query = query.in('master_task_id', masterTaskIds)
+    } else {
+      query = query.eq('id', 'non-existent-id')
     }
 
     const { data: trendTasks } = await query
