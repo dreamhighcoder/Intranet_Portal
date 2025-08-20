@@ -15,7 +15,7 @@ import { Check, X, Eye, LogOut, Settings, ChevronRight } from 'lucide-react'
 import Link from 'next/link'
 import { toastError, toastSuccess } from '@/hooks/use-toast'
 import { toKebabCase } from '@/lib/responsibility-mapper'
-import { authenticatedGet } from '@/lib/api-client'
+import { authenticatedGet, authenticatedPost } from '@/lib/api-client'
 import TaskDetailModal from '@/components/checklist/TaskDetailModal'
 
 interface ChecklistTask {
@@ -89,6 +89,7 @@ export default function RoleChecklistPage() {
   })
   const [selectedTask, setSelectedTask] = useState<ChecklistTask | null>(null)
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false)
+  const [processingTasks, setProcessingTasks] = useState<Set<string>>(new Set())
 
   // Handle auth redirect
   useEffect(() => {
@@ -135,7 +136,7 @@ export default function RoleChecklistPage() {
         // Calculate task counts
         const counts = {
           total: data.data.length,
-          done: data.data.filter((t: ChecklistTask) => t.status === 'done').length,
+          done: data.data.filter((t: ChecklistTask) => t.status === 'completed').length,
           due_today: 0,
           overdue: 0,
           missed: 0
@@ -145,7 +146,7 @@ export default function RoleChecklistPage() {
         const today = currentDate
         
         data.data.forEach((task: ChecklistTask) => {
-          if (task.status !== 'done') {
+          if (task.status !== 'completed') {
             counts.due_today++
             
             // Check if overdue
@@ -186,56 +187,90 @@ export default function RoleChecklistPage() {
   }
 
   const handleTaskComplete = async (taskId: string) => {
+    // Prevent multiple simultaneous requests for the same task
+    if (processingTasks.has(taskId)) return
+
+    // Add to processing set
+    setProcessingTasks(prev => new Set(prev).add(taskId))
+
+    // Optimistic update
+    setTasks(prevTasks => 
+      prevTasks.map(task => 
+        task.id === taskId 
+          ? { ...task, status: 'completed', completed_at: new Date().toISOString() }
+          : task
+      )
+    )
+
     try {
-      const response = await fetch('/api/checklist/complete', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          taskId,
-          action: 'complete'
-        })
+      const result = await authenticatedPost('/api/checklist/complete', {
+        taskId,
+        action: 'complete'
       })
 
-      const result = await response.json()
-
-      if (!response.ok) {
-        throw new Error(result.error || 'Failed to complete task')
+      if (!result || !result.success) {
+        throw new Error(result?.error || 'Failed to complete task')
       }
 
+      // Refresh to ensure synchronization with database
       setRefreshKey((prev) => prev + 1)
       toastSuccess("Task Completed", "Task has been marked as complete.")
     } catch (error) {
       console.error('Error completing task:', error)
+      // Revert optimistic update on error
+      setRefreshKey((prev) => prev + 1)
       toastError("Error", error instanceof Error ? error.message : "Failed to complete task. Please try again.")
+    } finally {
+      // Remove from processing set
+      setProcessingTasks(prev => {
+        const newSet = new Set(prev)
+        newSet.delete(taskId)
+        return newSet
+      })
     }
   }
 
   const handleTaskUndo = async (taskId: string) => {
+    // Prevent multiple simultaneous requests for the same task
+    if (processingTasks.has(taskId)) return
+
+    // Add to processing set
+    setProcessingTasks(prev => new Set(prev).add(taskId))
+
+    // Optimistic update
+    setTasks(prevTasks => 
+      prevTasks.map(task => 
+        task.id === taskId 
+          ? { ...task, status: 'pending', completed_at: undefined, completed_by: undefined }
+          : task
+      )
+    )
+
     try {
-      const response = await fetch('/api/checklist/complete', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          taskId,
-          action: 'undo'
-        })
+      const result = await authenticatedPost('/api/checklist/complete', {
+        taskId,
+        action: 'undo'
       })
 
-      const result = await response.json()
-
-      if (!response.ok) {
-        throw new Error(result.error || 'Failed to undo task')
+      if (!result || !result.success) {
+        throw new Error(result?.error || 'Failed to undo task')
       }
 
+      // Refresh to ensure synchronization with database
       setRefreshKey((prev) => prev + 1)
       toastSuccess("Task Reopened", "Task has been reopened.")
     } catch (error) {
       console.error('Error undoing task:', error)
+      // Revert optimistic update on error
+      setRefreshKey((prev) => prev + 1)
       toastError("Error", error instanceof Error ? error.message : "Failed to undo task. Please try again.")
+    } finally {
+      // Remove from processing set
+      setProcessingTasks(prev => {
+        const newSet = new Set(prev)
+        newSet.delete(taskId)
+        return newSet
+      })
     }
   }
 
@@ -265,7 +300,7 @@ export default function RoleChecklistPage() {
       // Status filter
       if (selectedStatus !== "all") {
         if (selectedStatus === "overdue") {
-          if (task.status === "done") return false
+          if (task.status === "completed") return false
           if (task.master_task?.due_time) {
             const dueTime = new Date(`${currentDate}T${task.master_task.due_time}`)
             const now = new Date()
@@ -275,11 +310,11 @@ export default function RoleChecklistPage() {
         }
         
         if (selectedStatus === "due_today") {
-          return task.status !== "done"
+          return task.status !== "completed"
         }
         
         if (selectedStatus === "completed") {
-          return task.status === "done"
+          return task.status === "completed"
         }
       }
 
@@ -352,7 +387,7 @@ export default function RoleChecklistPage() {
   }
 
   const getStatusBadge = (task: ChecklistTask) => {
-    if (task.status === "done") {
+    if (task.status === "completed") {
       return (
         <Badge className="bg-green-100 text-green-800 border-green-200">
           ✓ Done
@@ -380,7 +415,7 @@ export default function RoleChecklistPage() {
     )
   }
 
-  const allTasksCompleted = filteredTasks.length > 0 && filteredTasks.every((task) => task.status === "done")
+  const allTasksCompleted = filteredTasks.length > 0 && filteredTasks.every((task) => task.status === "completed")
 
   return (
     <div className="min-h-screen bg-[var(--color-background)]">
@@ -478,16 +513,16 @@ export default function RoleChecklistPage() {
             ) : (
               <>
                 {/* Desktop Table */}
-                <div className="hidden lg:block overflow-x-auto">
+                <div className="hidden lg:block overflow-x-auto px-4">
                   <Table>
                     <TableHeader>
                       <TableRow>
-                        <TableHead className="min-w-[200px] px-4 sm:px-6">Task Title</TableHead>
-                        <TableHead className="min-w-[120px] px-4">Category</TableHead>
-                        <TableHead className="min-w-[100px] px-4">Timing</TableHead>
-                        <TableHead className="min-w-[90px] px-4">Due Time</TableHead>
-                        <TableHead className="min-w-[100px] px-4">Status</TableHead>
-                        <TableHead className="min-w-[140px] px-4 sm:px-6">Actions</TableHead>
+                        <TableHead className="min-w-[25%] px-4 sm:px-6">Task Title</TableHead>
+                        <TableHead className="min-w-[15%] px-4">Category</TableHead>
+                        <TableHead className="min-w-[13.5%%] px-4">Timing</TableHead>
+                        <TableHead className="min-w-[13%] px-4">Due Time</TableHead>
+                        <TableHead className="min-w-[13.5%] px-4">Status</TableHead>
+                        <TableHead className="min-w-[20%] px-4 sm:px-6">Actions</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -528,24 +563,40 @@ export default function RoleChecklistPage() {
                             )}
                           </TableCell>
                           <TableCell className="px-4">{getStatusBadge(task)}</TableCell>
-                          <TableCell className="px-4 sm:px-6">
+                          <TableCell className="px-4 sm:px-6 justify-between ">
                             <div className="flex items-center space-x-2">
-                              {task.status === "done" ? (
+                              {task.status === "completed" ? (
                                 <Button
                                   size="sm"
                                   variant="outline"
                                   onClick={() => handleTaskUndo(task.id)}
-                                  className="border-green-300 bg-green-100 text-green-800 hover:bg-green-200 hover:border-green-400 font-medium"
+                                  disabled={processingTasks.has(task.id)}
+                                  className="border-green-300 bg-green-100 text-green-800 hover:bg-green-200 hover:border-green-400 font-medium disabled:opacity-50"
                                 >
-                                  <span>✓ Done</span>
+                                  {processingTasks.has(task.id) ? (
+                                    <span className="flex items-center">
+                                      <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-green-800 mr-1"></div>
+                                      Processing...
+                                    </span>
+                                  ) : (
+                                    <span>✓ Done</span>
+                                  )}
                                 </Button>
                               ) : (
                                 <Button
                                   size="sm"
                                   onClick={() => handleTaskComplete(task.id)}
-                                  className="bg-blue-600 text-white hover:bg-blue-700 border-blue-600 hover:border-blue-700 font-medium"
+                                  disabled={processingTasks.has(task.id)}
+                                  className="bg-blue-600 text-white hover:bg-blue-700 border-blue-600 hover:border-blue-700 font-medium disabled:opacity-50"
                                 >
-                                  <span>Done?</span>
+                                  {processingTasks.has(task.id) ? (
+                                    <span className="flex items-center">
+                                      <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-white mr-1"></div>
+                                      Processing...
+                                    </span>
+                                  ) : (
+                                    <span>Done ?</span>
+                                  )}
                                 </Button>
                               )}
                               <Button
@@ -625,22 +676,38 @@ export default function RoleChecklistPage() {
                             </div>
 
                             <div className="flex space-x-2">
-                              {task.status === "done" ? (
+                              {task.status === "completed" ? (
                                 <Button
                                   size="sm"
                                   variant="outline"
                                   onClick={() => handleTaskUndo(task.id)}
-                                  className="flex-1 border-green-300 bg-green-100 text-green-800 hover:bg-green-200 hover:border-green-400 font-medium"
+                                  disabled={processingTasks.has(task.id)}
+                                  className="flex-1 border-green-300 bg-green-100 text-green-800 hover:bg-green-200 hover:border-green-400 font-medium disabled:opacity-50"
                                 >
-                                  <span>✓ Done</span>
+                                  {processingTasks.has(task.id) ? (
+                                    <span className="flex items-center justify-center">
+                                      <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-green-800 mr-1"></div>
+                                      Processing...
+                                    </span>
+                                  ) : (
+                                    <span>✓ Done</span>
+                                  )}
                                 </Button>
                               ) : (
                                 <Button
                                   size="sm"
                                   onClick={() => handleTaskComplete(task.id)}
-                                  className="flex-1 bg-blue-600 text-white hover:bg-blue-700 border-blue-600 hover:border-blue-700 font-medium"
+                                  disabled={processingTasks.has(task.id)}
+                                  className="flex-1 bg-blue-600 text-white hover:bg-blue-700 border-blue-600 hover:border-blue-700 font-medium disabled:opacity-50"
                                 >
-                                  <span>Done?</span>
+                                  {processingTasks.has(task.id) ? (
+                                    <span className="flex items-center justify-center">
+                                      <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-white mr-1"></div>
+                                      Processing...
+                                    </span>
+                                  ) : (
+                                    <span>Done ?</span>
+                                  )}
                                 </Button>
                               )}
                               <Button
