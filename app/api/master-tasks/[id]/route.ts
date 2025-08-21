@@ -49,6 +49,7 @@ export async function PUT(
   { params }: { params: { id: string } }
 ) {
   console.log('Master task [id] PUT - Starting for ID:', params.id)
+  
   try {
     const user = await requireAuth(request)
     console.log('Master task [id] PUT - Authentication successful for:', user.email)
@@ -61,12 +62,14 @@ export async function PUT(
     const supabase = createClient(supabaseUrl, supabaseServiceKey)
     
     const body = await request.json()
+    
     const {
       title,
       description,
       responsibility,
       categories,
       frequency,
+      frequencies, // New field for multiple frequencies
       timing,
       due_time,
       due_date,
@@ -86,13 +89,7 @@ export async function PUT(
       publish_delay_date
     } = body
 
-    console.log('Master task [id] PUT - Updating with data:', { 
-      title, 
-      frequency,
-      responsibility,
-      categories,
-      timing
-    })
+    console.log('Master task [id] PUT - Updating task')
 
     // Prepare data for update using new schema
     const updateData: any = {
@@ -103,6 +100,7 @@ export async function PUT(
     if (title !== undefined) updateData.title = title
     if (description !== undefined) updateData.description = description
     if (frequency !== undefined) updateData.frequency = frequency
+    if (frequencies !== undefined) updateData.frequencies = frequencies
     if (timing !== undefined) updateData.timing = timing
     if (due_time !== undefined) updateData.due_time = due_time
     if (due_date !== undefined) updateData.due_date = due_date
@@ -124,56 +122,30 @@ export async function PUT(
       updateData.end_date = end_date
     }
 
+
+
     let { data: masterTask, error } = await supabase
       .from('master_tasks')
       .update(updateData)
       .eq('id', params.id)
-      .select(`
-        *,
-        positions (
-          id,
-          name
-        )
-      `)
+      .select('*')
       .single()
-
-    // Handle schema cache issue with default_due_time column
-    if (error && error.message.includes('default_due_time')) {
-      console.log('Schema cache issue detected - retrying without default_due_time field')
-      
-      // Remove the problematic field and retry
-      const { default_due_time, ...updateDataWithoutDueTime } = updateData
-      
-      const retryResult = await supabase
-        .from('master_tasks')
-        .update(updateDataWithoutDueTime)
-        .eq('id', params.id)
-        .select(`
-          *,
-          positions (
-            id,
-            name
-          )
-        `)
-        .single()
-      
-      if (retryResult.error) {
-        console.error('Master task update retry failed:', retryResult.error)
-        return NextResponse.json({ 
-          error: 'Failed to update master task',
-          schemaIssue: 'The default_due_time column is not available in the schema cache. Please refresh your database schema.'
-        }, { status: 500 })
-      }
-      
-      masterTask = retryResult.data
-      error = null
-      
-      console.log('Master task updated successfully without default_due_time field')
-    }
 
     if (error) {
       console.error('Error updating master task:', error)
-      return NextResponse.json({ error: 'Failed to update master task' }, { status: 500 })
+      console.error('Error details:', {
+        message: error.message,
+        details: error.details,
+        hint: error.hint,
+        code: error.code
+      })
+      
+      // Return more detailed error information
+      return NextResponse.json({ 
+        error: 'Failed to update master task',
+        details: error.message,
+        code: error.code
+      }, { status: 500 })
     }
 
     console.log('Master task [id] PUT - Successfully updated task')
