@@ -252,15 +252,15 @@ CREATE TRIGGER update_positions_updated_at
 -- SAMPLE DATA (Optional - for testing)
 -- ========================================
 
--- Insert sample positions if they don't exist
-INSERT INTO positions (id, name, display_name, password_hash, role, is_super_admin) 
+-- Insert sample positions if they don't exist (using generated UUIDs)
+INSERT INTO positions (id, name, description, password_hash, is_super_admin) 
 VALUES 
-    ('550e8400-e29b-41d4-a716-446655440001', 'pharmacist-primary', 'Pharmacist (Primary)', '$2b$10$example_hash_1', 'admin', true),
-    ('550e8400-e29b-41d4-a716-446655440002', 'pharmacist-supporting', 'Pharmacist (Supporting)', '$2b$10$example_hash_2', 'viewer', false),
-    ('550e8400-e29b-41d4-a716-446655440003', 'pharmacy-assistants', 'Pharmacy Assistants', '$2b$10$example_hash_3', 'viewer', false),
-    ('550e8400-e29b-41d4-a716-446655440004', 'dispensary-technicians', 'Dispensary Technicians', '$2b$10$example_hash_4', 'viewer', false),
-    ('550e8400-e29b-41d4-a716-446655440005', 'daa-packers', 'DAA Packers', '$2b$10$example_hash_5', 'viewer', false),
-    ('550e8400-e29b-41d4-a716-446655440006', 'operational-managerial', 'Operational/Managerial', '$2b$10$example_hash_6', 'admin', false)
+    (gen_random_uuid(), 'Pharmacist (Primary)', 'Lead pharmacist responsible for clinical oversight', '$2b$10$example_hash_1', false),
+    (gen_random_uuid(), 'Pharmacist (Supporting)', 'Supporting pharmacist for dispensing and clinical duties', '$2b$10$example_hash_2', false),
+    (gen_random_uuid(), 'Pharmacy Assistants', 'Front-of-house customer service and basic pharmacy tasks', '$2b$10$example_hash_3', false),
+    (gen_random_uuid(), 'Dispensary Technicians', 'Dispensing medication and inventory management', '$2b$10$example_hash_4', false),
+    (gen_random_uuid(), 'DAA Packers', 'Dose Administration Aid packaging and preparation', '$2b$10$example_hash_5', false),
+    (gen_random_uuid(), 'Operational/Managerial', 'Management and operational oversight tasks', '$2b$10$example_hash_6', false)
 ON CONFLICT (name) DO NOTHING;
 
 -- Insert sample system settings

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase'
+import { getResponsibilityForPosition } from '@/lib/position-utils'
 
 export async function GET(request: NextRequest) {
   try {
@@ -47,18 +48,20 @@ async function getCompletionRateReport(startDate?: string | null, endDate?: stri
       completed_at,
       due_date,
       master_tasks (
-        category,
-        positions (
-          id,
-          name
-        )
+        categories,
+        responsibility
       )
     `)
 
   if (startDate) query = query.gte('due_date', startDate)
   if (endDate) query = query.lte('due_date', endDate)
-  if (positionId) query = query.eq('master_tasks.position_id', positionId)
-  if (category) query = query.eq('master_tasks.category', category)
+  if (positionId) {
+    const responsibilityValue = await getResponsibilityForPosition(positionId)
+    if (responsibilityValue) {
+      query = query.contains('master_tasks.responsibility', [responsibilityValue])
+    }
+  }
+  if (category) query = query.contains('master_tasks.categories', [category])
 
   const { data: tasks, error } = await query
 
@@ -97,11 +100,8 @@ async function getAverageCompletionTimeReport(startDate?: string | null, endDate
       due_date,
       created_at,
       master_tasks (
-        category,
-        positions (
-          id,
-          name
-        )
+        categories,
+        responsibility
       )
     `)
     .eq('status', 'completed')
@@ -109,8 +109,13 @@ async function getAverageCompletionTimeReport(startDate?: string | null, endDate
 
   if (startDate) query = query.gte('due_date', startDate)
   if (endDate) query = query.lte('due_date', endDate)
-  if (positionId) query = query.eq('master_tasks.position_id', positionId)
-  if (category) query = query.eq('master_tasks.category', category)
+  if (positionId) {
+    const responsibilityValue = await getResponsibilityForPosition(positionId)
+    if (responsibilityValue) {
+      query = query.contains('master_tasks.responsibility', [responsibilityValue])
+    }
+  }
+  if (category) query = query.contains('master_tasks.categories', [category])
 
   const { data: tasks, error } = await query
 
@@ -160,8 +165,13 @@ async function getMissedTasksReport(startDate?: string | null, endDate?: string 
 
   if (startDate) query = query.gte('due_date', startDate)
   if (endDate) query = query.lte('due_date', endDate)
-  if (positionId) query = query.eq('master_tasks.position_id', positionId)
-  if (category) query = query.eq('master_tasks.category', category)
+  if (positionId) {
+    const responsibilityValue = await getResponsibilityForPosition(positionId)
+    if (responsibilityValue) {
+      query = query.contains('master_tasks.responsibility', [responsibilityValue])
+    }
+  }
+  if (category) query = query.contains('master_tasks.categories', [category])
 
   const { data: missedTasks, error } = await query
 
@@ -196,7 +206,7 @@ async function getMissedTasksByPositionReport(startDate?: string | null, endDate
 
   if (startDate) query = query.gte('due_date', startDate)
   if (endDate) query = query.lte('due_date', endDate)
-  if (category) query = query.eq('master_tasks.category', category)
+  if (category) query = query.contains('master_tasks.categories', [category])
 
   const { data: missedTasks, error } = await query
 
@@ -239,8 +249,13 @@ async function getOutstandingTasksReport(positionId?: string | null, category?: 
     .in('status', ['overdue', 'missed'])
     .order('due_date', { ascending: true })
 
-  if (positionId) query = query.eq('master_tasks.position_id', positionId)
-  if (category) query = query.eq('master_tasks.category', category)
+  if (positionId) {
+    const responsibilityValue = await getResponsibilityForPosition(positionId)
+    if (responsibilityValue) {
+      query = query.contains('master_tasks.responsibility', [responsibilityValue])
+    }
+  }
+  if (category) query = query.contains('master_tasks.categories', [category])
 
   const { data: outstandingTasks, error } = await query
 
@@ -275,8 +290,13 @@ async function getTaskSummaryReport(startDate?: string | null, endDate?: string 
 
   if (startDate) query = query.gte('due_date', startDate)
   if (endDate) query = query.lte('due_date', endDate)
-  if (positionId) query = query.eq('master_tasks.position_id', positionId)
-  if (category) query = query.eq('master_tasks.category', category)
+  if (positionId) {
+    const responsibilityValue = await getResponsibilityForPosition(positionId)
+    if (responsibilityValue) {
+      query = query.contains('master_tasks.responsibility', [responsibilityValue])
+    }
+  }
+  if (category) query = query.contains('master_tasks.categories', [category])
 
   const { data: tasks, error } = await query
 

@@ -230,8 +230,7 @@ export interface MasterChecklistTask {
   position_id?: string // Legacy field for backward compatibility
   responsibility: string[] // Multi-select array of role names responsible for this task
   categories: string[] // Multi-select array of category tags
-  frequency: string | null // Simplified frequency (once_off, every_day, once_weekly, monday, etc.) - Legacy field, can be null during migration
-  frequencies?: string[] // Multi-select array of frequencies - supports multiple recurrence patterns
+  frequencies: string[] // Multi-select array of frequencies - supports multiple recurrence patterns
   timing: TaskTiming // Task timing (opening, anytime_during_day, before_order_cut_off, closing)
   due_date?: string // ISO date string - manually entered for once-off tasks, auto-calculated for recurring
   due_time?: string // HH:MM format - auto-filled based on timing or manually set
@@ -247,7 +246,6 @@ export interface MasterChecklistTask {
   updated_at: string // ISO timestamp
   
   // Legacy fields for backward compatibility
-  frequency_rules?: FrequencyRule // JSONB frequency configuration (legacy)
   category?: string // Single category (legacy)
   
   // Optional relations

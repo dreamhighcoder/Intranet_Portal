@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/auth-middleware'
 import { createClient } from '@supabase/supabase-js'
+import { getResponsibilityForPosition } from '@/lib/position-utils'
 import { UpdateTaskInstanceSchema } from '@/lib/validation-schemas'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
@@ -104,13 +105,10 @@ export async function PUT(request: NextRequest) {
           id,
           title,
           description,
-          frequency,
+          frequencies,
           timing,
-          category,
-          positions (
-            id,
-            name
-          )
+          categories,
+          responsibility
         )
       `)
       .single()
@@ -195,14 +193,10 @@ export async function GET(request: NextRequest) {
           id,
           title,
           description,
-          frequency,
+          frequencies,
           timing,
-          category,
-          position_id,
-          positions!inner (
-            id,
-            name
-          )
+          categories,
+          responsibility
         )
       `)
 
@@ -220,9 +214,12 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // Filter by position if provided/effective
+    // Filter by position if provided/effective (map to responsibility)
     if (effectivePositionId) {
-      query = query.eq('master_tasks.position_id', effectivePositionId)
+      const responsibilityValue = await getResponsibilityForPosition(effectivePositionId)
+      if (responsibilityValue) {
+        query = query.contains('master_tasks.responsibility', [responsibilityValue])
+      }
     }
 
     // Filter by role if provided
@@ -237,7 +234,7 @@ export async function GET(request: NextRequest) {
 
     // Filter by category if provided
     if (category && category !== 'all') {
-      query = query.eq('master_tasks.category', category)
+      query = query.contains('master_tasks.categories', [category])
     }
 
     // Default ordering - due date first, then time
@@ -269,13 +266,13 @@ export async function GET(request: NextRequest) {
         id: instance.master_tasks.id,
         title: instance.master_tasks.title,
         description: instance.master_tasks.description,
-        frequency: instance.master_tasks.frequency,
+        frequencies: instance.master_tasks.frequencies,
         timing: instance.master_tasks.timing,
-        category: instance.master_tasks.category,
-        position_id: instance.master_tasks.position_id,
-        position: {
-          id: instance.master_tasks.positions.id,
-          name: instance.master_tasks.positions.name
+        categories: instance.master_tasks.categories,
+        responsibility: instance.master_tasks.responsibility,
+        position: { 
+          id: null, 
+          name: instance.master_tasks.responsibility?.[0] || 'Unknown' 
         }
       }
     })) || []

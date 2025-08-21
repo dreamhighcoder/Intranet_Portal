@@ -66,12 +66,30 @@ export async function authenticatedGet<T = any>(url: string, retryCount = 0): Pr
     if (response.ok) {
       return await response.json()
     } else {
-      const errorText = await response.text()
+      let errorText = ''
+      let errorBody = null
+      
+      try {
+        errorText = await response.text()
+        if (errorText) {
+          try {
+            errorBody = JSON.parse(errorText)
+          } catch {
+            errorBody = errorText
+          }
+        }
+      } catch (textError) {
+        console.warn(`Could not read error response from ${url}:`, textError)
+        errorBody = 'Unable to read error response'
+      }
+      
       console.error(`Failed to fetch ${url}:`, {
         status: response.status,
         statusText: response.statusText,
-        errorBody: errorText,
-        attempt: retryCount + 1
+        errorBody: errorBody || 'Empty response',
+        attempt: retryCount + 1,
+        url: url,
+        headers: Object.fromEntries(response.headers.entries())
       })
       
       // If it's an authentication error, provide more context and potentially retry
@@ -92,7 +110,13 @@ export async function authenticatedGet<T = any>(url: string, retryCount = 0): Pr
       return null
     }
   } catch (error) {
-    console.error(`Error fetching ${url}:`, error)
+    console.error(`Error fetching ${url}:`, {
+      error: error,
+      message: error instanceof Error ? error.message : String(error),
+      stack: error instanceof Error ? error.stack : undefined,
+      url: url,
+      retryCount: retryCount
+    })
     return null
   }
 }
@@ -188,7 +212,11 @@ export const taskInstancesApi = {
       }
     })
     const url = `/api/task-instances${params.toString() ? `?${params.toString()}` : ''}`
-    return await authenticatedGet(url) || []
+    const result = await authenticatedGet<any>(url)
+    // API may return either an array or an object with a data field
+    if (Array.isArray(result)) return result
+    if (result && Array.isArray(result.data)) return result.data
+    return []
   },
 
   async getById(id: string) {

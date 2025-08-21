@@ -2,6 +2,7 @@ import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { supabase } from '@/lib/supabase'
 import { NextRequest } from 'next/server'
 import type { PositionAuthUser } from '@/lib/position-auth'
+import { getPositionIdForResponsibility } from '@/lib/position-utils'
 
 export interface AuthUser {
   id: string
@@ -86,6 +87,9 @@ export async function getAuthUser(request: NextRequest): Promise<AuthUser | null
     if (!profile && (profileError?.code === 'PGRST116' || profileError?.message?.includes('No rows'))) {
       const isAdmin = user.email?.includes('admin') || false
       
+      // Get default position ID for non-admin users
+      const defaultPositionId = isAdmin ? null : await getPositionIdForResponsibility('pharmacist-primary')
+      
       const { data: newProfile, error: createError } = await supabase
         .from('user_profiles')
         .insert({
@@ -93,7 +97,7 @@ export async function getAuthUser(request: NextRequest): Promise<AuthUser | null
           email: user.email || '',
           display_name: user.email?.split('@')[0] || 'User',
           role: isAdmin ? 'admin' : 'viewer',
-          position_id: isAdmin ? null : '550e8400-e29b-41d4-a716-446655440001', // Default to Pharmacist Primary for non-admin
+          position_id: defaultPositionId, // Default to Pharmacist Primary for non-admin
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString()
         })

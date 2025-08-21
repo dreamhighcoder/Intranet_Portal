@@ -60,17 +60,8 @@ export const TASK_TIMINGS = [
   { value: "closing", label: "Closing" },
 ] as const
 
-// Responsibility options matching project specifications
-export const RESPONSIBILITY_OPTIONS = [
-  { value: "pharmacist-primary", label: "Pharmacist (Primary)" },
-  { value: "pharmacist-supporting", label: "Pharmacist (Supporting)" },
-  { value: "pharmacy-assistants", label: "Pharmacy Assistant/s" },
-  { value: "dispensary-technicians", label: "Dispensary Technician/s" },
-  { value: "daa-packers", label: "DAA Packer/s" },
-  { value: "shared-exc-pharmacist", label: "Shared (exc. Pharmacist)" },
-  { value: "shared-inc-pharmacist", label: "Shared (inc. Pharmacist)" },
-  { value: "operational-managerial", label: "Operational/Managerial" },
-] as const
+// Responsibility options are now dynamic (from database). Use getResponsibilityOptions() instead.
+export const RESPONSIBILITY_OPTIONS: ReadonlyArray<{ value: string; label: string }> = [] as const
 
 // Default due times based on timing
 export const DEFAULT_DUE_TIMES = {

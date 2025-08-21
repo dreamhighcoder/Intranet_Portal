@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase'
 import { requireAuth } from '@/lib/auth-middleware'
+import { getResponsibilityForPosition } from '@/lib/position-utils'
 
 export async function POST(request: NextRequest) {
   try {
@@ -20,19 +21,26 @@ export async function POST(request: NextRequest) {
     // Get all tasks for this position that are due today or overdue
     const today = new Date().toISOString().split('T')[0]
     
-    const { data: incompleteTasks, error } = await supabase
+    const responsibilityValue = await getResponsibilityForPosition(position_id)
+    
+    let query = supabase
       .from('task_instances')
       .select(`
         id,
         status,
         due_date,
         master_tasks!inner (
-          position_id
+          responsibility
         )
       `)
-      .eq('master_tasks.position_id', position_id)
       .lte('due_date', today)
       .in('status', ['not_due', 'due_today', 'overdue'])
+    
+    if (responsibilityValue) {
+      query = query.contains('master_tasks.responsibility', [responsibilityValue])
+    }
+    
+    const { data: incompleteTasks, error } = await query
 
     if (error) {
       console.error('Error checking incomplete tasks:', error)
@@ -84,12 +92,19 @@ export async function PUT(request: NextRequest) {
       // Check if all tasks are completed
       const today = new Date().toISOString().split('T')[0]
       
-      const { data: incompleteTasks, error } = await supabase
+      const responsibilityValue = await getResponsibilityForPosition(position_id)
+      
+      let query = supabase
         .from('task_instances')
         .select('id')
-        .eq('master_tasks.position_id', position_id)
         .lte('due_date', today)
         .in('status', ['not_due', 'due_today', 'overdue'])
+      
+      if (responsibilityValue) {
+        query = query.contains('master_tasks.responsibility', [responsibilityValue])
+      }
+      
+      const { data: incompleteTasks, error } = await query
 
       if (error) {
         console.error('Error checking incomplete tasks:', error)

@@ -7,6 +7,7 @@ import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Separator } from '@/components/ui/separator'
 import { Clock, User, Calendar, CheckCircle, XCircle, AlertTriangle, Tag, FileText, Settings, Hash } from 'lucide-react'
+import { toDisplayFormat } from '@/lib/responsibility-mapper'
 
 interface TaskDetailModalProps {
   isOpen: boolean
@@ -350,7 +351,7 @@ export default function TaskDetailModal({
                       <div className="flex flex-wrap gap-2">
                         {task.master_task.responsibility.map((resp: string, index: number) => (
                           <Badge key={index} variant="outline" className="bg-white border-indigo-200 text-indigo-800">
-                            {resp.replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
+                            {toDisplayFormat(resp)}
                           </Badge>
                         ))}
                       </div>

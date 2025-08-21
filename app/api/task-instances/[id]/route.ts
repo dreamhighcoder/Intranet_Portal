@@ -1,18 +1,133 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabase } from '@/lib/supabase'
-import { updateSpecificTaskStatus } from '@/lib/status-manager'
+import { requireAuth } from '@/lib/auth-middleware'
+import { createClient } from '@supabase/supabase-js'
+import { UpdateTaskInstanceSchema } from '@/lib/validation-schemas'
 
-export async function PATCH(
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
+const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
+
+/**
+ * GET /api/task-instances/[id] - Get a specific task instance
+ * Requires authentication
+ */
+export async function GET(
   request: NextRequest,
   { params }: { params: { id: string } }
 ) {
   try {
-    const body = await request.json()
-    const { status, completed_by, action } = body
+    // Authenticate the request
+    const user = await requireAuth(request)
     
-    const taskInstanceId = params.id
+    const { id } = params
 
-    // Get current task instance to check if it's locked
+    // Create admin Supabase client
+    const supabase = createClient(supabaseUrl, supabaseServiceKey)
+
+    const { data: taskInstance, error } = await supabase
+      .from('task_instances')
+      .select(`
+        *,
+        master_tasks!inner (
+          id,
+          title,
+          description,
+          frequencies,
+          timing,
+          categories,
+          responsibility
+        )
+      `)
+      .eq('id', id)
+      .single()
+
+    if (error || !taskInstance) {
+      return NextResponse.json({ 
+        error: 'Task instance not found',
+        details: 'The specified task instance does not exist'
+      }, { status: 404 })
+    }
+
+    // Transform data to match frontend expectations
+    const transformedData = {
+      id: taskInstance.id,
+      instance_date: taskInstance.instance_date,
+      due_date: taskInstance.due_date,
+      due_time: taskInstance.due_time,
+      status: taskInstance.status,
+      completed_at: taskInstance.completed_at,
+      completed_by: taskInstance.completed_by,
+      locked: taskInstance.locked,
+      acknowledged: taskInstance.acknowledged,
+      resolved: taskInstance.resolved,
+      created_at: taskInstance.created_at,
+      updated_at: taskInstance.updated_at,
+      master_task: {
+        id: taskInstance.master_tasks.id,
+        title: taskInstance.master_tasks.title,
+        description: taskInstance.master_tasks.description,
+        frequencies: taskInstance.master_tasks.frequencies,
+        timing: taskInstance.master_tasks.timing,
+        categories: taskInstance.master_tasks.categories,
+        responsibility: taskInstance.master_tasks.responsibility,
+        position: { 
+          id: null, 
+          name: taskInstance.master_tasks.responsibility?.[0] || 'Unknown' 
+        }
+      }
+    }
+
+    return NextResponse.json({
+      success: true,
+      data: transformedData
+    })
+
+  } catch (error) {
+    console.error('Task instance GET error:', error)
+    
+    if (error instanceof Error) {
+      if (error.message.includes('Authentication')) {
+        return NextResponse.json({ error: error.message }, { status: 401 })
+      }
+    }
+    
+    return NextResponse.json({ 
+      error: 'Internal server error',
+      details: error instanceof Error ? error.message : 'Unknown error'
+    }, { status: 500 })
+  }
+}
+
+/**
+ * PUT /api/task-instances/[id] - Update a specific task instance
+ * Requires authentication
+ */
+export async function PUT(
+  request: NextRequest,
+  { params }: { params: { id: string } }
+) {
+  try {
+    // Authenticate the request
+    const user = await requireAuth(request)
+    
+    const { id: taskId } = params
+    
+    // Parse and validate request body
+    const body = await request.json()
+    const validationResult = UpdateTaskInstanceSchema.safeParse(body)
+    
+    if (!validationResult.success) {
+      return NextResponse.json({ 
+        error: 'Validation failed',
+        details: validationResult.error.errors
+      }, { status: 400 })
+    }
+
+    const validatedData = validationResult.data
+
+    // Create admin Supabase client
+    const supabase = createClient(supabaseUrl, supabaseServiceKey)
+
+    // Get current task instance for audit logging
     const { data: currentInstance, error: fetchError } = await supabase
       .from('task_instances')
       .select(`
@@ -22,265 +137,242 @@ export async function PATCH(
           sticky_once_off
         )
       `)
-      .eq('id', taskInstanceId)
+      .eq('id', taskId)
       .single()
 
     if (fetchError || !currentInstance) {
-      return NextResponse.json({ error: 'Task instance not found' }, { status: 404 })
+      return NextResponse.json({ 
+        error: 'Task instance not found',
+        details: 'The specified task instance does not exist'
+      }, { status: 404 })
     }
 
     // Check if task is locked and editing is not allowed
     if (currentInstance.locked && !currentInstance.master_tasks.allow_edit_when_locked) {
-      return NextResponse.json({ error: 'Task is locked and cannot be modified' }, { status: 403 })
+      return NextResponse.json({ 
+        error: 'Task is locked',
+        details: 'This task has been locked and cannot be modified'
+      }, { status: 403 })
     }
 
     // Prepare update data
-    const updateData: any = {}
+    const finalUpdateData: any = {}
     
-    if (status !== undefined) {
-      updateData.status = status
+    if (validatedData.status !== undefined) {
+      finalUpdateData.status = validatedData.status
       
-      if (status === 'done') {
-        updateData.completed_at = new Date().toISOString()
-        updateData.completed_by = completed_by
-      } else if (status !== 'done' && currentInstance.status === 'done') {
+      if (validatedData.status === 'completed') {
+        finalUpdateData.completed_at = new Date().toISOString()
+        finalUpdateData.completed_by = user.id
+      } else if (validatedData.status !== 'completed' && currentInstance.status === 'completed') {
         // Undoing completion
-        updateData.completed_at = null
-        updateData.completed_by = null
+        finalUpdateData.completed_at = null
+        finalUpdateData.completed_by = null
       }
     }
+
+    if (validatedData.notes !== undefined) {
+      finalUpdateData.notes = validatedData.notes
+    }
+
+    if (validatedData.payload !== undefined) {
+      finalUpdateData.payload = validatedData.payload
+    }
+
+    finalUpdateData.updated_at = new Date().toISOString()
 
     // Update the task instance
     const { data: updatedInstance, error: updateError } = await supabase
       .from('task_instances')
-      .update(updateData)
-      .eq('id', taskInstanceId)
+      .update(finalUpdateData)
+      .eq('id', taskId)
       .select(`
         *,
         master_tasks (
           id,
           title,
           description,
-          frequency,
+          frequencies,
           timing,
-          category,
-          positions (
-            id,
-            name
-          )
+          categories,
+          responsibility
         )
       `)
       .single()
 
     if (updateError) {
       console.error('Error updating task instance:', updateError)
-      return NextResponse.json({ error: 'Failed to update task instance' }, { status: 500 })
+      return NextResponse.json({ 
+        error: 'Failed to update task instance',
+        details: updateError.message
+      }, { status: 500 })
     }
 
     // Log the action in audit log
-    if (action && completed_by) {
-      const { error: auditError } = await supabase
+    try {
+      await supabase
         .from('audit_log')
         .insert([{
-          task_instance_id: taskInstanceId,
-          user_id: completed_by,
-          action: action,
-          old_values: { status: currentInstance.status },
-          new_values: { status: status },
+          user_id: user.id,
+          action: 'update_task_instance',
+          table_name: 'task_instances',
+          record_id: taskId,
+          old_values: currentInstance,
+          new_values: updatedInstance,
           metadata: { 
-            timestamp: new Date().toISOString()
+            timestamp: new Date().toISOString(),
+            user_email: user.email,
+            action_type: validatedData.status === 'completed' ? 'complete' : 'update'
           }
         }])
+    } catch (auditError) {
+      console.error('Error creating audit log:', auditError)
+      // Don't fail the request if audit logging fails
+    }
 
-      if (auditError) {
-        console.error('Error creating audit log:', auditError)
-        // Don't fail the request if audit logging fails
+    // Transform data to match frontend expectations
+    const transformedData = {
+      id: updatedInstance.id,
+      instance_date: updatedInstance.instance_date,
+      due_date: updatedInstance.due_date,
+      due_time: updatedInstance.due_time,
+      status: updatedInstance.status,
+      completed_at: updatedInstance.completed_at,
+      completed_by: updatedInstance.completed_by,
+      locked: updatedInstance.locked,
+      acknowledged: updatedInstance.acknowledged,
+      resolved: updatedInstance.resolved,
+      created_at: updatedInstance.created_at,
+      updated_at: updatedInstance.updated_at,
+      master_task: {
+        id: updatedInstance.master_tasks.id,
+        title: updatedInstance.master_tasks.title,
+        description: updatedInstance.master_tasks.description,
+        frequencies: updatedInstance.master_tasks.frequencies,
+        timing: updatedInstance.master_tasks.timing,
+        categories: updatedInstance.master_tasks.categories,
+        responsibility: updatedInstance.master_tasks.responsibility,
+        position: { 
+          id: null, 
+          name: updatedInstance.master_tasks.responsibility?.[0] || 'Unknown' 
+        }
       }
     }
 
-    return NextResponse.json(updatedInstance)
-  } catch (error) {
-    console.error('Unexpected error:', error)
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
-  }
-}
-
-export async function GET(
-  request: NextRequest,
-  { params }: { params: { id: string } }
-) {
-  try {
-    const taskInstanceId = params.id
-
-    const { data: taskInstance, error } = await supabase
-      .from('task_instances')
-      .select(`
-        *,
-        master_tasks (
-          id,
-          title,
-          description,
-          frequency,
-          timing,
-          category,
-          positions (
-            id,
-            name
-          )
-        ),
-        audit_log (
-          id,
-          action,
-          actor,
-          meta,
-          created_at
-        )
-      `)
-      .eq('id', taskInstanceId)
-      .single()
-
-    if (error || !taskInstance) {
-      return NextResponse.json({ error: 'Task instance not found' }, { status: 404 })
-    }
-
-    return NextResponse.json(taskInstance)
-  } catch (error) {
-    console.error('Unexpected error:', error)
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
-  }
-}
-
-// New endpoint for task completion actions with improved status management
-export async function PUT(
-  request: NextRequest,
-  { params }: { params: { id: string } }
-) {
-  try {
-    const { id } = params
-    const body = await request.json()
-    const { action, userId } = body // action: 'complete' | 'undo' | 'acknowledge' | 'resolve'
-
-    // Get current task instance
-    const { data: currentTask, error: fetchError } = await supabase
-      .from('task_instances')
-      .select(`
-        *,
-        master_tasks (
-          allow_edit_when_locked,
-          sticky_once_off
-        )
-      `)
-      .eq('id', id)
-      .single()
-
-    if (fetchError || !currentTask) {
-      return NextResponse.json({ error: 'Task instance not found' }, { status: 404 })
-    }
-
-    let success = false
-    let newStatus = currentTask.status
-
-    switch (action) {
-      case 'complete':
-        // Check if task can be completed
-        if (currentTask.locked && !currentTask.master_tasks.allow_edit_when_locked) {
-          return NextResponse.json({ 
-            error: 'Cannot complete locked task',
-            details: 'This task has been locked. Contact an admin if you need to modify it.'
-          }, { status: 403 })
-        }
-        
-        success = await updateSpecificTaskStatus(id, 'done', userId)
-        newStatus = 'done'
-        break
-
-      case 'undo':
-        // Check if task can be undone
-        if (currentTask.locked && !currentTask.master_tasks.allow_edit_when_locked) {
-          return NextResponse.json({ 
-            error: 'Cannot undo locked task',
-            details: 'This task has been locked. Contact an admin if you need to modify it.'
-          }, { status: 403 })
-        }
-        
-        // Determine appropriate status for undo
-        const today = new Date().toISOString().split('T')[0]
-        const currentTime = new Date().toTimeString().slice(0, 5)
-        
-        if (currentTask.due_date === today && currentTime <= currentTask.due_time) {
-          newStatus = 'not_due'
-        } else if (currentTask.due_date === today) {
-          newStatus = 'due_today'
-        } else if (currentTask.due_date < today) {
-          newStatus = 'overdue'
-        } else {
-          newStatus = 'not_due'
-        }
-        
-        success = await updateSpecificTaskStatus(id, newStatus, userId)
-        break
-
-      case 'acknowledge':
-        const { error: ackError } = await supabase
-          .from('task_instances')
-          .update({ 
-            acknowledged: true,
-            updated_at: new Date().toISOString()
-          })
-          .eq('id', id)
-
-        success = !ackError
-        break
-
-      case 'resolve':
-        const { error: resolveError } = await supabase
-          .from('task_instances')
-          .update({ 
-            resolved: true,
-            updated_at: new Date().toISOString()
-          })
-          .eq('id', id)
-
-        success = !resolveError
-        break
-
-      default:
-        return NextResponse.json({ error: 'Invalid action' }, { status: 400 })
-    }
-
-    if (!success) {
-      return NextResponse.json({ error: `Failed to ${action} task` }, { status: 500 })
-    }
-
-    // Fetch updated task
-    const { data: updatedTask } = await supabase
-      .from('task_instances')
-      .select(`
-        *,
-        master_tasks (
-          id,
-          title,
-          description,
-          frequency,
-          timing,
-          category,
-          positions (
-            id,
-            name
-          )
-        )
-      `)
-      .eq('id', id)
-      .single()
-
     return NextResponse.json({
       success: true,
-      message: `Task ${action} successful`,
-      task: updatedTask
+      message: 'Task instance updated successfully',
+      data: transformedData
     })
 
   } catch (error) {
-    console.error('Error in task action:', error)
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+    console.error('Task instance PUT error:', error)
+    
+    if (error instanceof Error) {
+      if (error.message.includes('Authentication')) {
+        return NextResponse.json({ error: error.message }, { status: 401 })
+      }
+    }
+    
+    return NextResponse.json({ 
+      error: 'Internal server error',
+      details: error instanceof Error ? error.message : 'Unknown error'
+    }, { status: 500 })
+  }
+}
+
+/**
+ * DELETE /api/task-instances/[id] - Delete a specific task instance
+ * Requires authentication and admin role
+ */
+export async function DELETE(
+  request: NextRequest,
+  { params }: { params: { id: string } }
+) {
+  try {
+    // Authenticate the request
+    const user = await requireAuth(request)
+    
+    // Only admins can delete task instances
+    if (user.role !== 'admin') {
+      return NextResponse.json({ 
+        error: 'Access denied',
+        details: 'Only administrators can delete task instances'
+      }, { status: 403 })
+    }
+    
+    const { id: taskId } = params
+
+    // Create admin Supabase client
+    const supabase = createClient(supabaseUrl, supabaseServiceKey)
+
+    // Get the task instance before deletion for audit logging
+    const { data: taskInstance, error: fetchError } = await supabase
+      .from('task_instances')
+      .select('*')
+      .eq('id', taskId)
+      .single()
+
+    if (fetchError || !taskInstance) {
+      return NextResponse.json({ 
+        error: 'Task instance not found',
+        details: 'The specified task instance does not exist'
+      }, { status: 404 })
+    }
+
+    // Delete the task instance
+    const { error: deleteError } = await supabase
+      .from('task_instances')
+      .delete()
+      .eq('id', taskId)
+
+    if (deleteError) {
+      console.error('Error deleting task instance:', deleteError)
+      return NextResponse.json({ 
+        error: 'Failed to delete task instance',
+        details: deleteError.message
+      }, { status: 500 })
+    }
+
+    // Log the action in audit log
+    try {
+      await supabase
+        .from('audit_log')
+        .insert([{
+          user_id: user.id,
+          action: 'delete_task_instance',
+          table_name: 'task_instances',
+          record_id: taskId,
+          old_values: taskInstance,
+          new_values: null,
+          metadata: { 
+            timestamp: new Date().toISOString(),
+            user_email: user.email,
+            action_type: 'delete'
+          }
+        }])
+    } catch (auditError) {
+      console.error('Error creating audit log:', auditError)
+      // Don't fail the request if audit logging fails
+    }
+
+    return NextResponse.json({
+      success: true,
+      message: 'Task instance deleted successfully'
+    })
+
+  } catch (error) {
+    console.error('Task instance DELETE error:', error)
+    
+    if (error instanceof Error) {
+      if (error.message.includes('Authentication')) {
+        return NextResponse.json({ error: error.message }, { status: 401 })
+      }
+    }
+    
+    return NextResponse.json({ 
+      error: 'Internal server error',
+      details: error instanceof Error ? error.message : 'Unknown error'
+    }, { status: 500 })
   }
 }

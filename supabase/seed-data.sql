@@ -1,11 +1,12 @@
--- Insert Positions
+-- Insert Positions (using generated UUIDs)
 INSERT INTO positions (id, name, description) VALUES
-  ('550e8400-e29b-41d4-a716-446655440001', 'Pharmacist (Primary)', 'Lead pharmacist responsible for clinical oversight'),
-  ('550e8400-e29b-41d4-a716-446655440002', 'Pharmacist (Supporting)', 'Supporting pharmacist for dispensing and clinical duties'),
-  ('550e8400-e29b-41d4-a716-446655440003', 'Pharmacy Assistants', 'Front-of-house customer service and basic pharmacy tasks'),
-  ('550e8400-e29b-41d4-a716-446655440004', 'Dispensary Technicians', 'Dispensing medication and inventory management'),
-  ('550e8400-e29b-41d4-a716-446655440005', 'DAA Packers', 'Dose Administration Aid packaging and preparation'),
-  ('550e8400-e29b-41d4-a716-446655440006', 'Operational/Managerial', 'Management and operational oversight tasks');
+  (gen_random_uuid(), 'Pharmacist (Primary)', 'Lead pharmacist responsible for clinical oversight'),
+  (gen_random_uuid(), 'Pharmacist (Supporting)', 'Supporting pharmacist for dispensing and clinical duties'),
+  (gen_random_uuid(), 'Pharmacy Assistants', 'Front-of-house customer service and basic pharmacy tasks'),
+  (gen_random_uuid(), 'Dispensary Technicians', 'Dispensing medication and inventory management'),
+  (gen_random_uuid(), 'DAA Packers', 'Dose Administration Aid packaging and preparation'),
+  (gen_random_uuid(), 'Operational/Managerial', 'Management and operational oversight tasks')
+ON CONFLICT (name) DO NOTHING;
 
 -- Insert some sample Master Tasks
 INSERT INTO master_tasks (

@@ -1,155 +1,164 @@
 /**
  * Responsibility Mapper Utility
- * 
- * This utility provides functions to map between different formats of responsibility values
- * used throughout the application, ensuring consistent handling of role-based access.
+ *
+ * Normalizes and maps responsibility values between stored/display strings and
+ * a kebab-case form for internal checks. Avoids hardcoded role lists by
+ * slugifying arbitrary position names. Shared responsibility options are
+ * handled explicitly.
  */
 
-// Map from display format to kebab-case
-const displayToKebabMap: Record<string, string> = {
-  'Pharmacist (Primary)': 'pharmacist-primary',
-  'Pharmacist (Supporting)': 'pharmacist-supporting',
-  'Pharmacy Assistant/s': 'pharmacy-assistants',
-  'Pharmacy Assistants': 'pharmacy-assistants',
-  'Dispensary Technician/s': 'dispensary-technicians',
-  'Dispensary Technicians': 'dispensary-technicians',
-  'DAA Packer/s': 'daa-packers',
-  'DAA Packers': 'daa-packers',
-  'Operational/Managerial': 'operational-managerial',
-  'Shared (inc. Pharmacist)': 'shared-inc-pharmacist',
-  'Shared (exc. Pharmacist)': 'shared-exc-pharmacist'
-};
+// Shared responsibility labels and their kebab equivalents
+const SHARED_LABELS = {
+  incPharmacist: 'Shared (inc. Pharmacist)',
+  excPharmacist: 'Shared (exc. Pharmacist)'
+} as const
 
-// Map from kebab-case to display format
-const kebabToDisplayMap: Record<string, string> = {
-  'pharmacist-primary': 'Pharmacist (Primary)',
-  'pharmacist-supporting': 'Pharmacist (Supporting)',
-  'pharmacy-assistants': 'Pharmacy Assistant/s',
-  'dispensary-technicians': 'Dispensary Technician/s',
-  'daa-packers': 'DAA Packer/s',
-  'operational-managerial': 'Operational/Managerial',
-  'shared-inc-pharmacist': 'Shared (inc. Pharmacist)',
-  'shared-exc-pharmacist': 'Shared (exc. Pharmacist)'
-};
+const SHARED_KEBAB = {
+  incPharmacist: 'shared-inc-pharmacist',
+  excPharmacist: 'shared-exc-pharmacist'
+} as const
+
+function slugify(input: string): string {
+  return input
+    .toLowerCase()
+    .trim()
+    .replace(/[()/]/g, ' ') // normalize punctuation
+    .replace(/[^a-z0-9]+/g, '-') // non-alphanum to dash
+    .replace(/^-+|-+$/g, '') // trim dashes
+}
+
+function isSharedLabel(value: string): value is typeof SHARED_LABELS[keyof typeof SHARED_LABELS] {
+  return value === SHARED_LABELS.incPharmacist || value === SHARED_LABELS.excPharmacist
+}
+
+function isSharedKebab(value: string): value is typeof SHARED_KEBAB[keyof typeof SHARED_KEBAB] {
+  return value === SHARED_KEBAB.incPharmacist || value === SHARED_KEBAB.excPharmacist
+}
 
 /**
  * Convert a responsibility value to kebab-case format
- * 
- * @param responsibility - The responsibility value to convert
- * @returns The kebab-case version of the responsibility
+ * Accepts display strings (e.g., "Pharmacist (Primary)" or shared labels)
+ * or already-kebab strings and returns a kebab-case value.
  */
 export function toKebabCase(responsibility: string): string {
-  return displayToKebabMap[responsibility] || responsibility;
+  if (!responsibility) return responsibility
+
+  // Shared labels map to fixed kebab values
+  if (isSharedLabel(responsibility)) {
+    return responsibility === SHARED_LABELS.incPharmacist
+      ? SHARED_KEBAB.incPharmacist
+      : SHARED_KEBAB.excPharmacist
+  }
+
+  // Already a shared kebab
+  if (isSharedKebab(responsibility)) return responsibility
+
+  // Generic slug for arbitrary position names
+  return slugify(responsibility)
 }
 
 /**
  * Convert a responsibility value to display format
- * 
- * @param responsibility - The responsibility value to convert
- * @returns The display format version of the responsibility
+ * - Shared kebab -> Shared label
+ * - Kebab for arbitrary names -> Title-cased best-effort
+ * - Otherwise return as-is (assume already a display string)
  */
 export function toDisplayFormat(responsibility: string): string {
-  return kebabToDisplayMap[responsibility] || responsibility;
+  if (!responsibility) return responsibility
+
+  if (responsibility === SHARED_KEBAB.incPharmacist) return SHARED_LABELS.incPharmacist
+  if (responsibility === SHARED_KEBAB.excPharmacist) return SHARED_LABELS.excPharmacist
+
+  // Heuristic: if looks like kebab, title-case it for display fallback
+  if (/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(responsibility)) {
+    return responsibility
+      .split('-')
+      .map(w => w.charAt(0).toUpperCase() + w.slice(1))
+      .join(' ')
+  }
+
+  return responsibility
 }
 
 /**
  * Get all variants of a responsibility value (both kebab-case and display format)
- * 
- * @param responsibility - The responsibility value to get variants for
- * @returns Array of all possible variants for the responsibility
  */
 export function getAllVariants(responsibility: string): string[] {
-  const variants = [responsibility];
-  
-  // Add kebab-case variant if this is a display format
-  const kebabVariant = displayToKebabMap[responsibility];
-  if (kebabVariant && kebabVariant !== responsibility) {
-    variants.push(kebabVariant);
-  }
-  
-  // Add display format variant if this is a kebab-case
-  const displayVariant = kebabToDisplayMap[responsibility];
-  if (displayVariant && displayVariant !== responsibility) {
-    variants.push(displayVariant);
-  }
-  
-  return variants;
+  const variants = new Set<string>()
+  if (!responsibility) return []
+
+  variants.add(responsibility)
+
+  const kebab = toKebabCase(responsibility)
+  if (kebab && kebab !== responsibility) variants.add(kebab)
+
+  // Add shared label if kebab is shared
+  if (kebab === SHARED_KEBAB.incPharmacist) variants.add(SHARED_LABELS.incPharmacist)
+  if (kebab === SHARED_KEBAB.excPharmacist) variants.add(SHARED_LABELS.excPharmacist)
+
+  return Array.from(variants)
 }
 
 /**
  * Get all shared responsibility options in both formats
- * 
- * @returns Array of all shared responsibility options
  */
 export function getSharedOptions(): string[] {
   return [
-    'shared-inc-pharmacist',
-    'shared-exc-pharmacist',
-    'Shared (inc. Pharmacist)',
-    'Shared (exc. Pharmacist)'
-  ];
+    SHARED_KEBAB.incPharmacist,
+    SHARED_KEBAB.excPharmacist,
+    SHARED_LABELS.incPharmacist,
+    SHARED_LABELS.excPharmacist,
+  ]
 }
 
 /**
  * Get all responsibility search options for a given role
- * 
- * @param role - The role to get search options for
- * @returns Array of all possible responsibility values to search for
  */
 export function getSearchOptions(role: string): string[] {
-  return [...getAllVariants(role), ...getSharedOptions()];
+  return [...getAllVariants(role), ...getSharedOptions()]
 }
 
 /**
- * Check if a role is a pharmacist role
- * 
- * @param role - The role to check
- * @returns True if the role is a pharmacist role
+ * Check if a role is a pharmacist role (by slug)
  */
 export function isPharmacistRole(role: string): boolean {
-  const normalizedRole = toKebabCase(role);
-  return normalizedRole === 'pharmacist-primary' || normalizedRole === 'pharmacist-supporting';
+  const normalized = toKebabCase(role)
+  return normalized === 'pharmacist-primary' || normalized === 'pharmacist-supporting'
 }
 
 /**
  * Filter tasks based on responsibility rules
- * 
- * @param tasks - Array of tasks to filter
- * @param role - The role to filter for
- * @returns Filtered array of tasks
  */
 export function filterTasksByResponsibility<T extends { responsibility: string[] }>(
   tasks: T[],
   role: string
 ): T[] {
   return tasks.filter(task => {
-    // Check if the task is directly assigned to this role (any variant)
-    const roleVariants = getAllVariants(role);
-    for (const roleVariant of roleVariants) {
-      if (task.responsibility.includes(roleVariant)) {
-        return true;
-      }
+    // Direct assignment: any variant match
+    const roleVariants = getAllVariants(role)
+    for (const rv of roleVariants) {
+      if (task.responsibility.includes(rv)) return true
     }
-    
-    // Handle shared responsibilities
-    const pharmacistRole = isPharmacistRole(role);
-    
-    // If task is shared including pharmacists, only show to pharmacist roles
+
+    // Shared handling
+    const pharmacistRole = isPharmacistRole(role)
+
+    // Shared including pharmacists -> only pharmacist roles see it
     if (
-      task.responsibility.includes('shared-inc-pharmacist') || 
-      task.responsibility.includes('Shared (inc. Pharmacist)')
+      task.responsibility.includes(SHARED_KEBAB.incPharmacist) ||
+      task.responsibility.includes(SHARED_LABELS.incPharmacist)
     ) {
-      return pharmacistRole;
+      return pharmacistRole
     }
-    
-    // If task is shared excluding pharmacists, only show to non-pharmacist roles
+
+    // Shared excluding pharmacists -> non-pharmacist roles only
     if (
-      task.responsibility.includes('shared-exc-pharmacist') || 
-      task.responsibility.includes('Shared (exc. Pharmacist)')
+      task.responsibility.includes(SHARED_KEBAB.excPharmacist) ||
+      task.responsibility.includes(SHARED_LABELS.excPharmacist)
     ) {
-      return !pharmacistRole;
+      return !pharmacistRole
     }
-    
-    return false;
-  });
+
+    return false
+  })
 }

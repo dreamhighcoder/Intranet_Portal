@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/auth-middleware'
 import { createClient } from '@supabase/supabase-js'
-import { RESPONSIBILITY_OPTIONS } from '@/lib/constants'
+import { toKebabCase, toDisplayFormat } from '@/lib/responsibility-mapper'
+import { getResponsibilityForPosition, getResponsibilityOptions } from '@/lib/position-utils'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
@@ -42,17 +43,7 @@ export async function GET(request: NextRequest) {
     if (positionId) {
       console.log('Master tasks GET - Filtering by responsibility for position_id:', positionId)
       
-      // Map position IDs to responsibility values
-      const positionToResponsibilityMap: { [key: string]: string } = {
-        '550e8400-e29b-41d4-a716-446655440001': 'pharmacist-primary',
-        '550e8400-e29b-41d4-a716-446655440002': 'pharmacist-supporting',
-        '550e8400-e29b-41d4-a716-446655440003': 'pharmacy-assistants',
-        '550e8400-e29b-41d4-a716-446655440004': 'dispensary-technicians',
-        '550e8400-e29b-41d4-a716-446655440005': 'daa-packers',
-        '550e8400-e29b-41d4-a716-446655440006': 'operational-managerial'
-      }
-      
-      const responsibilityValue = positionToResponsibilityMap[positionId]
+      const responsibilityValue = await getResponsibilityForPosition(positionId)
       if (responsibilityValue) {
         // Filter by responsibility array containing the responsibility value
         query = query.contains('responsibility', [responsibilityValue])
@@ -143,7 +134,6 @@ export async function POST(request: NextRequest) {
       description,
       responsibility = [],
       categories = [],
-      frequency,
       frequencies = [],
       timing,
       due_time,
@@ -156,7 +146,6 @@ export async function POST(request: NextRequest) {
       allow_edit_when_locked = false,
       // Legacy fields for backward compatibility
       position_id,
-      frequency_rules,
       weekdays = [],
       months = [],
       default_due_time,
@@ -179,28 +168,15 @@ export async function POST(request: NextRequest) {
     if (!categories || categories.length === 0) {
       return NextResponse.json({ error: 'At least one category is required' }, { status: 400 })
     }
-    // Allow either single frequency or frequencies[] (at least one required)
-    if ((!frequency || String(frequency).trim() === '') && (!frequencies || frequencies.length === 0)) {
-      return NextResponse.json({ error: 'At least one frequency is required (frequency or frequencies[])' }, { status: 400 })
+    // Frequencies array is required
+    if (!frequencies || frequencies.length === 0) {
+      return NextResponse.json({ error: 'At least one frequency is required' }, { status: 400 })
     }
     if (!timing) {
       return NextResponse.json({ error: 'Timing is required' }, { status: 400 })
     }
 
-    // Validate that responsibilities are valid against the predefined options
-    if (responsibility && responsibility.length > 0) {
-      const validResponsibilities = RESPONSIBILITY_OPTIONS.map(option => option.value)
-      const invalidResponsibilities = responsibility.filter(r => !validResponsibilities.includes(r))
-      
-      if (invalidResponsibilities.length > 0) {
-        console.error('Invalid responsibilities provided:', invalidResponsibilities)
-        console.error('Valid responsibilities are:', validResponsibilities)
-        return NextResponse.json({ 
-          error: 'Invalid responsibilities provided',
-          details: `The following responsibilities are not valid: ${invalidResponsibilities.join(', ')}. Valid options are: ${validResponsibilities.join(', ')}`
-        }, { status: 400 })
-      }
-    }
+    // Note: responsibilities come from the UI dynamic list; server-side strict validation is removed to avoid blocking creation.
 
     // The new schema uses responsibility values directly, no position_id mapping needed
 
@@ -227,17 +203,8 @@ export async function POST(request: NextRequest) {
       allow_edit_when_locked: allow_edit_when_locked || false
     }
     
-    // Handle frequencies array - this is the new multi-frequency support
-    if (frequencies && frequencies.length > 0) {
-      // For now, we'll use the first frequency as the main frequency field for backward compatibility
-      insertData.frequency = frequencies[0]
-      // Store all frequencies in a custom field if needed (this would require schema update)
-      // insertData.frequencies = frequencies
-    } else if (frequency) {
-      insertData.frequency = frequency
-    } else {
-      insertData.frequency = 'every_day' // Default fallback
-    }
+    // Store frequencies array
+    insertData.frequencies = frequencies
     
     // Note: position_id is no longer used in the new schema
     // The responsibility array field is used instead
@@ -260,19 +227,15 @@ export async function POST(request: NextRequest) {
       insertData.publish_delay = publish_delay
     }
 
-    // Handle weekdays (frequency_rules field doesn't exist in schema)
+    // Optional legacy fields: keep if provided (harmless for updated schema)
     if (weekdays && weekdays.length > 0) {
       insertData.weekdays = weekdays
-    } else if (frequency === 'specific_weekdays') {
-      insertData.weekdays = [1, 2, 3, 4, 5] // Default to weekdays
     }
-
-    // Handle months
     if (months && months.length > 0) {
       insertData.months = months
     }
 
-    console.log('Master task POST - Inserting with frequency:', frequency, 'timing:', timing)
+    console.log('Master task POST - Inserting with timing:', timing)
 
     let { data: masterTask, error } = await supabase
       .from('master_tasks')

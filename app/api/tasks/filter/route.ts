@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase'
 import { requireAuth } from '@/lib/auth-middleware'
+import { getResponsibilityForPosition } from '@/lib/position-utils'
 
 export async function GET(request: NextRequest) {
   try {
@@ -55,30 +56,31 @@ export async function GET(request: NextRequest) {
           id,
           title,
           description,
-          frequency,
+          frequencies,
           timing,
-          category,
+          categories,
+          responsibility,
           sticky_once_off,
-          allow_edit_when_locked,
-          position_id,
-          positions (
-            id,
-            name,
-            description
-          )
+          allow_edit_when_locked
         )
       `, { count: 'exact' })
 
     // Apply filters
     if (positionId) {
-      query = query.eq('master_tasks.position_id', positionId)
+      const responsibilityValue = await getResponsibilityForPosition(positionId)
+      if (responsibilityValue) {
+        query = query.contains('master_tasks.responsibility', [responsibilityValue])
+      }
     } else if (user.role !== 'admin' && user.position_id) {
       // Non-admin users can only see their own position's tasks
-      query = query.eq('master_tasks.position_id', user.position_id)
+      const responsibilityValue = await getResponsibilityForPosition(user.position_id)
+      if (responsibilityValue) {
+        query = query.contains('master_tasks.responsibility', [responsibilityValue])
+      }
     }
 
     if (category) {
-      query = query.eq('master_tasks.category', category)
+      query = query.contains('master_tasks.categories', [category])
     }
 
     if (status) {
@@ -91,7 +93,7 @@ export async function GET(request: NextRequest) {
     }
 
     if (frequency) {
-      query = query.eq('master_tasks.frequency', frequency)
+      query = query.contains('master_tasks.frequencies', [frequency])
     }
 
     if (dateFrom) {
@@ -223,21 +225,27 @@ async function calculateFilterSummary(
         status,
         locked,
         master_tasks (
-          category,
-          frequency,
-          position_id
+          categories,
+          frequencies,
+          responsibility
         )
       `)
 
     // Apply the same filters
     if (positionId) {
-      summaryQuery = summaryQuery.eq('master_tasks.position_id', positionId)
+      const responsibilityValue = await getResponsibilityForPosition(positionId)
+      if (responsibilityValue) {
+        summaryQuery = summaryQuery.contains('master_tasks.responsibility', [responsibilityValue])
+      }
     } else if (user?.role !== 'admin' && user?.position_id) {
-      summaryQuery = summaryQuery.eq('master_tasks.position_id', user.position_id)
+      const responsibilityValue = await getResponsibilityForPosition(user.position_id)
+      if (responsibilityValue) {
+        summaryQuery = summaryQuery.contains('master_tasks.responsibility', [responsibilityValue])
+      }
     }
 
     if (category) {
-      summaryQuery = summaryQuery.eq('master_tasks.category', category)
+      summaryQuery = summaryQuery.contains('master_tasks.categories', [category])
     }
 
     if (status) {
@@ -249,7 +257,7 @@ async function calculateFilterSummary(
     }
 
     if (frequency) {
-      summaryQuery = summaryQuery.eq('master_tasks.frequency', frequency)
+      summaryQuery = summaryQuery.contains('master_tasks.frequencies', [frequency])
     }
 
     if (dateFrom) {
@@ -304,13 +312,17 @@ async function calculateFilterSummary(
       // Count by status
       summary.byStatus[task.status] = (summary.byStatus[task.status] || 0) + 1
 
-      // Count by category
-      const cat = task.master_tasks?.category || 'Uncategorized'
-      summary.byCategory[cat] = (summary.byCategory[cat] || 0) + 1
+      // Count by categories (array field)
+      const categories = task.master_tasks?.categories || ['Uncategorized']
+      categories.forEach(cat => {
+        summary.byCategory[cat] = (summary.byCategory[cat] || 0) + 1
+      })
 
-      // Count by frequency
-      const freq = task.master_tasks?.frequency || 'Unknown'
-      summary.byFrequency[freq] = (summary.byFrequency[freq] || 0) + 1
+      // Count by frequencies (array field)
+      const frequencies = task.master_tasks?.frequencies || ['Unknown']
+      frequencies.forEach(freq => {
+        summary.byFrequency[freq] = (summary.byFrequency[freq] || 0) + 1
+      })
 
       // Count locked tasks
       if (task.locked) {

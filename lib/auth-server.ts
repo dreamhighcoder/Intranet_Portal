@@ -1,5 +1,6 @@
 import { NextRequest } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { getPositionIdForResponsibility } from '@/lib/position-utils'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
@@ -54,13 +55,17 @@ export async function getAuthenticatedUser(request: NextRequest): Promise<AuthUs
   // If no profile exists, create a default one
   if (!profile) {
     const isAdmin = user.email?.includes('admin') || false
+    
+    // Get default position ID for non-admin users
+    const defaultPositionId = isAdmin ? null : await getPositionIdForResponsibility('pharmacist-primary')
+    
     const { data: newProfile, error: createError } = await supabase
       .from('user_profiles')
       .insert({
         id: user.id,
         display_name: user.email?.split('@')[0] || 'User',
         role: isAdmin ? 'admin' : 'viewer',
-        position_id: isAdmin ? null : '550e8400-e29b-41d4-a716-446655440001'
+        position_id: defaultPositionId
       })
       .select()
       .single()

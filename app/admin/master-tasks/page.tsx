@@ -200,56 +200,7 @@ const formatFrequency = (frequency: string | null | undefined) => {
   return frequency.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())
 }
 
-// Helper function to format frequency rules for display
-const formatFrequencyRules = (frequencyRules: any) => {
-  if (!frequencyRules || typeof frequencyRules !== 'object') {
-    return 'No frequency rules defined'
-  }
 
-  const rules = []
-  
-  // Type
-  if (frequencyRules.type) {
-    rules.push(`Type: ${frequencyRules.type.replace(/_/g, ' ').replace(/\b\w/g, (l: string) => l.toUpperCase())}`)
-  }
-  
-  // Interval settings
-  if (frequencyRules.every_n_days) {
-    rules.push(`Every ${frequencyRules.every_n_days} day${frequencyRules.every_n_days !== 1 ? 's' : ''}`)
-  }
-  if (frequencyRules.every_n_weeks) {
-    rules.push(`Every ${frequencyRules.every_n_weeks} week${frequencyRules.every_n_weeks !== 1 ? 's' : ''}`)
-  }
-  if (frequencyRules.every_n_months) {
-    rules.push(`Every ${frequencyRules.every_n_months} month${frequencyRules.every_n_months !== 1 ? 's' : ''}`)
-  }
-  
-  // Weekdays
-  if (frequencyRules.weekdays && Array.isArray(frequencyRules.weekdays) && frequencyRules.weekdays.length > 0) {
-    const dayNames = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
-    const weekdayNames = frequencyRules.weekdays.map((day: number) => dayNames[day - 1] || `Day ${day}`)
-    rules.push(`Weekdays: ${weekdayNames.join(', ')}`)
-  }
-  
-  // Months
-  if (frequencyRules.months && Array.isArray(frequencyRules.months) && frequencyRules.months.length > 0) {
-    const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
-    const monthNamesList = frequencyRules.months.map((month: number) => monthNames[month - 1] || `Month ${month}`)
-    rules.push(`Months: ${monthNamesList.join(', ')}`)
-  }
-  
-  // Business days only
-  if (frequencyRules.business_days_only) {
-    rules.push('Business days only: Yes')
-  }
-  
-  // Due date
-  if (frequencyRules.due_date) {
-    rules.push(`Due date: ${new Date(frequencyRules.due_date).toLocaleDateString()}`)
-  }
-  
-  return rules.length > 0 ? rules : ['No specific rules defined']
-}
 
 // Helper function to get frequency badge color
 const getFrequencyBadgeColor = (frequency: string | null | undefined) => {
@@ -309,16 +260,16 @@ const getFrequencyBadgeColor = (frequency: string | null | undefined) => {
 
 // Helper function to render frequency with additional details
 const renderFrequencyWithDetails = (task: MasterTask) => {
-  // Use frequencies array if available, otherwise fall back to single frequency
-  const frequencies = task.frequencies || (task.frequency ? [task.frequency] : [])
+  // Use frequencies array
+  const frequencies = task.frequencies || []
   
   if (frequencies.length === 0) {
     return <span className="text-gray-400 text-xs">No frequency set</span>
   }
 
-  // If multiple frequencies, show them as badges
-  if (frequencies.length > 1) {
-    return (
+  return (
+    <div className="space-y-2">
+      {/* Frequencies */}
       <div className="flex flex-wrap gap-1">
         {frequencies.slice(0, 2).map((freq, index) => (
           <Badge
@@ -338,80 +289,14 @@ const renderFrequencyWithDetails = (task: MasterTask) => {
           </Badge>
         )}
       </div>
-    )
-  }
-
-  // Single frequency - show with details
-  const frequency = frequencies[0]
-  const baseFrequency = formatFrequency(frequency)
-  const details = []
-  
-  // Add weekdays if applicable
-  if (task.weekdays && task.weekdays.length > 0) {
-    const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
-    const weekdayNames = task.weekdays.map(day => dayNames[day] || day)
-    
-    // Format for display
-    let weekdayDisplay = weekdayNames.slice(0, 3).join(', ')
-    if (task.weekdays.length > 3) {
-      weekdayDisplay += ` +${task.weekdays.length - 3} more`
-    }
-    
-    details.push(`Days: ${weekdayDisplay}`)
-  }
-  
-  // Add months if applicable
-  if (task.months && task.months.length > 0) {
-    const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
-    const monthNamesList = task.months.map(month => monthNames[month - 1] || month)
-    
-    // Format for display
-    let monthDisplay = monthNamesList.slice(0, 3).join(', ')
-    if (task.months.length > 3) {
-      monthDisplay += ` +${task.months.length - 3} more`
-    }
-    
-    details.push(`Months: ${monthDisplay}`)
-  }
-  
-  // Add due date for once-off tasks
-  if ((frequency === 'once_off' || frequencies.includes('once_off')) && task.due_date) {
-    const dueDate = new Date(task.due_date).toLocaleDateString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric'
-    })
-    details.push(`Due: ${dueDate}`)
-  }
-  
-  // Add timing information
-  if (task.timing) {
-    const timingMap: Record<string, string> = {
-      'opening': '🕘 Opening',
-      'anytime': '🕓 Anytime',
-      'before_order_cutoff': '🕒 Before Order Cutoff',
-      'closing': '🕕 Closing'
-    }
-    details.push(timingMap[task.timing] || task.timing)
-  }
-  
-  return (
-    <div className="space-y-1 w-full flex flex-col">
-      <Badge 
-        variant="outline" 
-        className={`text-xs truncate w-3/5 text-center ${getFrequencyBadgeColor(frequency)}`}
-        title={baseFrequency}
-      >
-        {baseFrequency}
-      </Badge>
       
-      {details.length > 0 && (
-        <div className="text-xs text-gray-600 space-y-1 w-full">
-          {details.map((detail, index) => (
-            <div key={index} className="truncate w-full" title={detail}>
-              {detail}
-            </div>
-          ))}
+      {/* Timing */}
+      {task.timing && (
+        <div className="flex items-center gap-1">
+          <Clock className="h-3 w-3 text-gray-400" />
+          <span className="text-xs text-gray-600">
+            {task.timing.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
+          </span>
         </div>
       )}
     </div>
@@ -549,10 +434,18 @@ const TaskDetailsModal = ({ task, positions }: { task: MasterTask, positions: Po
           <CardContent className="space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div>
-                <label className="text-sm font-medium text-gray-600">Frequency</label>
-                <p className="text-sm mt-1">
-                  <Badge variant="outline" className={getFrequencyBadgeColor(task.frequency)}>{formatFrequency(task.frequency)}</Badge>
-                </p>
+                <label className="text-sm font-medium text-gray-600">Frequencies</label>
+                <div className="flex flex-wrap gap-1 mt-1">
+                  {task.frequencies && task.frequencies.length > 0 ? (
+                    task.frequencies.map((freq, index) => (
+                      <Badge key={index} variant="outline" className={getFrequencyBadgeColor(freq)}>
+                        {formatFrequency(freq)}
+                      </Badge>
+                    ))
+                  ) : (
+                    <span className="text-sm text-gray-400">No frequencies set</span>
+                  )}
+                </div>
               </div>
               <div>
                 <label className="text-sm font-medium text-gray-600">Timing</label>
@@ -685,28 +578,7 @@ const TaskDetailsModal = ({ task, positions }: { task: MasterTask, positions: Po
           </Card>
         )}
 
-        {/* Frequency Rules */}
-        {task.frequency_rules && Object.keys(task.frequency_rules).length > 0 && (
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center space-x-2">
-                <Settings className="h-5 w-5" />
-                <span>Frequency Rules</span>
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-2">
-              <div className="p-3 bg-gray-50 rounded-md border border-gray-100">
-                <div className="space-y-2">
-                  {formatFrequencyRules(task.frequency_rules).map((rule, index) => (
-                    <div key={index} className="text-sm text-gray-700">
-                      • {rule}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        )}
+
 
         {/* Metadata */}
         <Card>
@@ -1057,7 +929,7 @@ export default function AdminMasterTasksPage() {
         'Title': task.title,
         'Description': task.description || '',
         'Position': task.positions?.name || task.position?.name || '',
-        'Frequency': frequencyLabels[task.frequency as keyof typeof frequencyLabels] || task.frequency,
+        'Frequencies': task.frequencies ? task.frequencies.map(f => formatFrequency(f)).join(', ') : '',
         'Category': task.category || '',
         'Status': task.publish_status,
         'Default Due Time': (task as any).default_due_time || '',

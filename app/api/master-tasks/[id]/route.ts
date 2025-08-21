@@ -68,8 +68,7 @@ export async function PUT(
       description,
       responsibility,
       categories,
-      frequency,
-      frequencies, // New field for multiple frequencies
+      frequencies,
       timing,
       due_time,
       due_date,
@@ -81,7 +80,6 @@ export async function PUT(
       allow_edit_when_locked,
       // Legacy fields for backward compatibility
       position_id,
-      frequency_rules,
       weekdays,
       months,
       default_due_time,
@@ -99,8 +97,6 @@ export async function PUT(
     // Only add fields that are explicitly provided in the request
     if (title !== undefined) updateData.title = title
     if (description !== undefined) updateData.description = description
-    if (frequency !== undefined) updateData.frequency = frequency
-    if (frequencies !== undefined) updateData.frequencies = frequencies
     if (timing !== undefined) updateData.timing = timing
     if (due_time !== undefined) updateData.due_time = due_time
     if (due_date !== undefined) updateData.due_date = due_date
@@ -110,6 +106,11 @@ export async function PUT(
     if (categories !== undefined) updateData.categories = categories
     if (sticky_once_off !== undefined) updateData.sticky_once_off = sticky_once_off
     if (allow_edit_when_locked !== undefined) updateData.allow_edit_when_locked = allow_edit_when_locked
+
+    // Handle frequencies array
+    if (frequencies !== undefined) {
+      updateData.frequencies = frequencies
+    }
 
 
 

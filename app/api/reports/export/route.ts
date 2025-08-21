@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase'
+import { getResponsibilityForPosition } from '@/lib/position-utils'
 
 export async function GET(request: NextRequest) {
   try {
@@ -63,19 +64,22 @@ async function exportTasks(startDate?: string | null, endDate?: string | null, p
       master_tasks (
         title,
         description,
-        category,
-        frequency,
-        positions (
-          name
-        )
+        categories,
+        frequencies,
+        responsibility
       )
     `)
     .order('due_date', { ascending: false })
 
   if (startDate) query = query.gte('due_date', startDate)
   if (endDate) query = query.lte('due_date', endDate)
-  if (positionId) query = query.eq('master_tasks.position_id', positionId)
-  if (category) query = query.eq('master_tasks.category', category)
+  if (positionId) {
+    const responsibilityValue = await getResponsibilityForPosition(positionId)
+    if (responsibilityValue) {
+      query = query.contains('master_tasks.responsibility', [responsibilityValue])
+    }
+  }
+  if (category) query = query.contains('master_tasks.categories', [category])
 
   const { data: tasks, error } = await query
 
@@ -87,9 +91,9 @@ async function exportTasks(startDate?: string | null, endDate?: string | null, p
     'Task ID': task.id,
     'Title': task.master_tasks?.title || '',
     'Description': task.master_tasks?.description || '',
-    'Category': task.master_tasks?.category || '',
-    'Frequency': task.master_tasks?.frequency || '',
-    'Position': task.master_tasks?.positions?.name || '',
+    'Categories': task.master_tasks?.categories?.join(', ') || '',
+    'Frequencies': task.master_tasks?.frequencies?.join(', ') || '',
+    'Responsibility': task.master_tasks?.responsibility?.join(', ') || '',
     'Status': task.status,
     'Due Date': task.due_date,
     'Completed At': task.completed_at || '',
@@ -168,8 +172,13 @@ async function exportCompletionSummary(startDate?: string | null, endDate?: stri
 
   if (startDate) query = query.gte('due_date', startDate)
   if (endDate) query = query.lte('due_date', endDate)
-  if (positionId) query = query.eq('master_tasks.position_id', positionId)
-  if (category) query = query.eq('master_tasks.category', category)
+  if (positionId) {
+    const responsibilityValue = await getResponsibilityForPosition(positionId)
+    if (responsibilityValue) {
+      query = query.contains('master_tasks.responsibility', [responsibilityValue])
+    }
+  }
+  if (category) query = query.contains('master_tasks.categories', [category])
 
   const { data: tasks, error } = await query
 

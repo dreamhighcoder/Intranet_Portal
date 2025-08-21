@@ -80,10 +80,23 @@ async function setupDatabase() {
     
     // Test the schema
     console.log('Testing schema...')
+    
+    // Get a valid position ID from the database for testing
+    const { data: positions, error: positionError } = await supabase
+      .from('positions')
+      .select('id')
+      .neq('name', 'Administrator')
+      .limit(1)
+    
+    if (positionError || !positions || positions.length === 0) {
+      console.error('Could not find a valid position for testing:', positionError)
+      return
+    }
+    
     const testData = {
       title: 'Schema Test Task',
       description: 'Testing schema setup',
-      position_id: '550e8400-e29b-41d4-a716-446655440001',
+      position_id: positions[0].id,
       frequency: 'every_day',
       timing: 'Any Time',
       default_due_time: '09:00:00',

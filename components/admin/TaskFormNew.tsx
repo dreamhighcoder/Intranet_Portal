@@ -15,7 +15,9 @@ import { Badge } from '@/components/ui/badge'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Checkbox } from '@/components/ui/checkbox'
 
-import { RESPONSIBILITY_OPTIONS, TASK_CATEGORIES, TASK_FREQUENCIES, TASK_TIMINGS, DEFAULT_DUE_TIMES } from '@/lib/constants'
+import { TASK_CATEGORIES, TASK_FREQUENCIES, TASK_TIMINGS, DEFAULT_DUE_TIMES } from '@/lib/constants'
+import { getResponsibilityOptions } from '@/lib/position-utils'
+import { toDisplayFormat } from '@/lib/responsibility-mapper'
 import type { MasterChecklistTask, CreateMasterTaskRequest, UpdateMasterTaskRequest } from '@/types/checklist'
 
 // Zod schema for form validation matching specifications
@@ -55,6 +57,7 @@ interface TaskFormProps {
 
 export default function TaskFormNew({ task, onSubmit, onCancel }: TaskFormProps) {
   const [showConfirmModal, setShowConfirmModal] = useState(false)
+  const [responsibilityOptions, setResponsibilityOptions] = useState<{ value: string; label: string }[]>([])
 
   const isEditing = !!task
 
@@ -70,7 +73,7 @@ export default function TaskFormNew({ task, onSubmit, onCancel }: TaskFormProps)
       due_date: task?.due_date || undefined,
       publish_status: task?.publish_status || 'draft',
       publish_delay: task?.publish_delay || undefined,
-      frequencies: task?.frequencies || (task?.frequency ? [task.frequency] : ['every_day']),
+      frequencies: task?.frequencies || [],
       start_date: task?.start_date || new Date().toISOString().split('T')[0],
       end_date: task?.end_date || undefined
     }
@@ -79,6 +82,20 @@ export default function TaskFormNew({ task, onSubmit, onCancel }: TaskFormProps)
   const { watch, setValue, formState: { errors, isValid } } = form
   const frequencies = watch('frequencies')
   const timing = watch('timing')
+
+  // Load dynamic responsibilities from Positions + shared
+  useEffect(() => {
+    let mounted = true
+    ;(async () => {
+      try {
+        const opts = await getResponsibilityOptions()
+        if (mounted) setResponsibilityOptions(opts)
+      } catch {
+        if (mounted) setResponsibilityOptions([])
+      }
+    })()
+    return () => { mounted = false }
+  }, [])
 
   // Auto-fill due_time based on timing selection
   useEffect(() => {
@@ -123,12 +140,41 @@ export default function TaskFormNew({ task, onSubmit, onCancel }: TaskFormProps)
   }
 
   const handleCreateClick = async () => {
-    // Trigger validation for all fields
-    const result = await form.trigger()
-
-    if (!result) {
-      // If validation fails, scroll to the first error
-      const firstError = Object.keys(form.formState.errors)[0]
+    // Get current form values
+    const formData = form.getValues()
+    
+    // Check required fields: Description, Responsibilities, Categories, and Frequency
+    const requiredFields = [
+      { field: 'description', label: 'Description', value: formData.description },
+      { field: 'responsibility', label: 'Responsibilities', value: formData.responsibility },
+      { field: 'categories', label: 'Categories', value: formData.categories },
+      { field: 'frequencies', label: 'Frequency', value: formData.frequencies }
+    ]
+    
+    const missingFields = requiredFields.filter(({ value }) => {
+      if (Array.isArray(value)) {
+        return !value || value.length === 0
+      }
+      return !value || value.trim() === ''
+    })
+    
+    if (missingFields.length > 0) {
+      // Set errors for missing fields
+      missingFields.forEach(({ field, label }) => {
+        form.setError(field as any, {
+          type: 'manual',
+          message: `${label} is required`
+        })
+      })
+      
+      // Show toast warning
+      const missingFieldNames = missingFields.map(f => f.label).join(', ')
+      import('@/hooks/use-toast').then(({ toastError }) => {
+        toastError("Validation Error", `Please fill in the following required fields: ${missingFieldNames}`)
+      })
+      
+      // Scroll to the first error
+      const firstError = missingFields[0].field
       const errorElement = document.getElementById(firstError)
       if (errorElement) {
         errorElement.scrollIntoView({ behavior: 'smooth', block: 'center' })
@@ -136,25 +182,11 @@ export default function TaskFormNew({ task, onSubmit, onCancel }: TaskFormProps)
       return
     }
 
-    // Check for required array fields specifically
-    const formData = form.getValues()
-    const arrayFields = ['responsibility', 'categories', 'frequencies']
-    const missingArrayFields = arrayFields.filter(field => {
-      const value = formData[field as keyof TaskFormData]
-      return !value || (Array.isArray(value) && value.length === 0)
-    })
-
-    if (missingArrayFields.length > 0) {
-      // Set errors for missing array fields
-      missingArrayFields.forEach(field => {
-        form.setError(field as any, {
-          type: 'manual',
-          message: `At least one ${field} is required`
-        })
-      })
-
-      // Scroll to the first error
-      const firstError = missingArrayFields[0]
+    // Trigger full validation for all other fields
+    const result = await form.trigger()
+    if (!result) {
+      // If validation fails, scroll to the first error
+      const firstError = Object.keys(form.formState.errors)[0]
       const errorElement = document.getElementById(firstError)
       if (errorElement) {
         errorElement.scrollIntoView({ behavior: 'smooth', block: 'center' })
@@ -331,7 +363,7 @@ export default function TaskFormNew({ task, onSubmit, onCancel }: TaskFormProps)
                     }}
                   >
                     <div className="space-y-2">
-                      {RESPONSIBILITY_OPTIONS.map(responsibility => (
+                      {responsibilityOptions.map(responsibility => (
                         <div
                           key={responsibility.value}
                           className="flex items-center space-x-2 p-2 hover:bg-gray-50 rounded cursor-pointer"
@@ -365,13 +397,13 @@ export default function TaskFormNew({ task, onSubmit, onCancel }: TaskFormProps)
                 {/* Selected Responsibilities */}
                 <div className="flex flex-wrap gap-2 min-h-[2rem]">
                   {form.watch('responsibility')?.map(responsibility => {
-                    const responsibilityObj = RESPONSIBILITY_OPTIONS.find(r => r.value === responsibility);
+                    const responsibilityObj = responsibilityOptions.find(r => r.value === responsibility)
                     return (
                       <Badge
                         key={responsibility}
                         className="bg-blue-600 text-white hover:bg-blue-700 px-3 py-1 flex items-center gap-2"
                       >
-                        {responsibilityObj?.label || responsibility}
+                        {responsibilityObj?.label || toDisplayFormat(responsibility)}
                         <button
                           type="button"
                           className="hover:bg-blue-800 rounded-full p-0.5"
@@ -380,7 +412,7 @@ export default function TaskFormNew({ task, onSubmit, onCancel }: TaskFormProps)
                           <XIcon className="h-3 w-3" />
                         </button>
                       </Badge>
-                    );
+                    )
                   })}
                 </div>
               </div>
@@ -663,7 +695,6 @@ export default function TaskFormNew({ task, onSubmit, onCancel }: TaskFormProps)
           <Button
             type="button"
             onClick={handleCreateClick}
-            disabled={!isValid}
             className="bg-[var(--color-primary)] hover:bg-[var(--color-primary)]/90 text-[var(--color-primary-on)]"
           >
             {isEditing ? 'Update Task' : 'Create Task'}

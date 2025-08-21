@@ -4,22 +4,33 @@ import { createClient } from '@supabase/supabase-js'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
-const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey)
 
+/**
+ * GET /api/task-instances - Fetch task instances with filtering
+ * Requires authentication
+ */
 export async function GET(request: NextRequest) {
+  console.log('Task instances API GET - Starting request')
   try {
-    // Require authentication; authorize via code, query via service client
+    // Authenticate the request
+    console.log('Task instances API GET - Authenticating request')
     const user = await requireAuth(request)
-
+    console.log('Task instances API GET - Authentication successful:', { id: user.id, role: user.role })
+    
     const searchParams = request.nextUrl.searchParams
-    const date = searchParams.get('date')
-    const dateRange = searchParams.get('dateRange')
-    const positionIdParam = searchParams.get('position_id')
-    const responsibility = searchParams.get('responsibility')
     const status = searchParams.get('status')
+    const dateRange = searchParams.get('dateRange')
+    const date = searchParams.get('date')
+    const role = searchParams.get('role')
     const category = searchParams.get('category')
 
-    let query = supabaseAdmin
+    console.log('Task instances API GET - Query parameters:', { status, dateRange, date, role, category })
+
+    // Create admin Supabase client
+    console.log('Task instances API GET - Creating Supabase client')
+    const supabase = createClient(supabaseUrl, supabaseServiceKey)
+
+    let query = supabase
       .from('task_instances')
       .select(`
         *,
@@ -27,14 +38,10 @@ export async function GET(request: NextRequest) {
           id,
           title,
           description,
-          frequency,
+          frequencies,
           timing,
           categories,
-          responsibility,
-          default_due_time,
-          publish_status,
-          sticky_once_off,
-          allow_edit_when_locked
+          responsibility
         )
       `)
 
@@ -49,29 +56,10 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // Filter by responsibility if provided (since position_id doesn't exist)
-    if (positionIdParam && user.role === 'admin') {
-      // For admin users, try to filter by responsibility based on position name
-      const { data: position } = await supabaseAdmin
-        .from('positions')
-        .select('name')
-        .eq('id', positionIdParam)
-        .single()
-      
-      if (position?.name) {
-        query = query.contains('master_tasks.responsibility', [position.name])
-      }
+    // Filter by role if provided
+    if (role) {
+      query = query.eq('role', role)
     }
-
-    // Filter by responsibility if provided (for new responsibility-based filtering)
-    // Note: responsibility field doesn't exist in current schema, so skip this filter
-    // if (responsibility) {
-    //   query = query.overlaps('master_tasks.responsibility', [
-    //     responsibility, 
-    //     'Shared (inc. Pharmacist)', 
-    //     'Shared (exc. Pharmacist)'
-    //   ])
-    // }
 
     // Filter by status if provided
     if (status && status !== 'all') {
@@ -80,7 +68,6 @@ export async function GET(request: NextRequest) {
 
     // Filter by category if provided
     if (category && category !== 'all') {
-      // Use the categories array field
       query = query.contains('master_tasks.categories', [category])
     }
 
@@ -88,21 +75,24 @@ export async function GET(request: NextRequest) {
     query = query.order('due_date', { ascending: true })
     query = query.order('due_time', { ascending: true })
 
+    console.log('Task instances API GET - Executing query')
     const { data: taskInstances, error } = await query
 
     if (error) {
-      console.error('Error fetching task instances:', error)
-      return NextResponse.json({ error: 'Failed to fetch task instances' }, { status: 500 })
+      console.error('Task instances API GET - Database error:', {
+        message: error.message,
+        details: error.details,
+        hint: error.hint,
+        code: error.code
+      })
+      return NextResponse.json({ 
+        error: 'Failed to fetch task instances',
+        details: error.message,
+        code: error.code
+      }, { status: 500 })
     }
 
-    // Handle case when there are no task instances
-    if (!taskInstances || taskInstances.length === 0) {
-      console.log('No task instances found, returning empty array')
-      return NextResponse.json([])
-    }
-
-    // Since position_id doesn't exist in the actual database, we'll use responsibility instead
-    // No need to fetch position data separately for now
+    console.log('Task instances API GET - Query successful, found', taskInstances?.length || 0, 'task instances')
 
     // Transform data to match frontend expectations
     const transformedData = taskInstances?.map(instance => ({
@@ -111,6 +101,7 @@ export async function GET(request: NextRequest) {
       due_date: instance.due_date,
       due_time: instance.due_time,
       status: instance.status,
+      is_published: instance.is_published,
       completed_at: instance.completed_at,
       completed_by: instance.completed_by,
       locked: instance.locked,
@@ -122,83 +113,40 @@ export async function GET(request: NextRequest) {
         id: instance.master_tasks.id,
         title: instance.master_tasks.title,
         description: instance.master_tasks.description,
-        frequency: instance.master_tasks.frequency,
+        frequencies: instance.master_tasks.frequencies,
         timing: instance.master_tasks.timing,
         categories: instance.master_tasks.categories,
-        responsibility: instance.master_tasks.responsibility,
-        default_due_time: instance.master_tasks.default_due_time,
-        publish_status: instance.master_tasks.publish_status,
-        sticky_once_off: instance.master_tasks.sticky_once_off,
-        allow_edit_when_locked: instance.master_tasks.allow_edit_when_locked,
-        position: { 
-          id: null, 
-          name: instance.master_tasks.responsibility?.[0] || 'Unknown' 
-        }
+        responsibility: instance.master_tasks.responsibility
       }
     })) || []
 
-    return NextResponse.json(transformedData)
+    console.log('Task instances API GET - Returning response with', transformedData.length, 'tasks')
+    return NextResponse.json({
+      success: true,
+      data: transformedData,
+      meta: {
+        total_instances: transformedData.length,
+        completed_instances: transformedData.filter(t => t.status === 'completed').length,
+        pending_instances: transformedData.filter(t => t.status !== 'completed').length
+      }
+    })
+
   } catch (error) {
-    console.error('Unexpected error:', error)
-    if (error instanceof Error && error.message.includes('Authentication')) {
-      return NextResponse.json({ error: 'Authentication required' }, { status: 401 })
+    console.error('Task instances API GET error:', {
+      error: error,
+      message: error instanceof Error ? error.message : String(error),
+      stack: error instanceof Error ? error.stack : undefined
+    })
+    
+    if (error instanceof Error) {
+      if (error.message.includes('Authentication')) {
+        return NextResponse.json({ error: error.message }, { status: 401 })
+      }
     }
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
-  }
-}
-
-export async function POST(request: NextRequest) {
-  try {
-    // Only admins can create task instances via API
-    const user = await requireAuth(request)
-    if (user.role !== 'admin') {
-      return NextResponse.json({ error: 'Admin access required' }, { status: 403 })
-    }
-
-    const body = await request.json()
-    const { master_task_id, instance_date, due_date, due_time } = body
-
-    if (!master_task_id || !instance_date || !due_date || !due_time) {
-      return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
-    }
-
-    const { data: taskInstance, error } = await supabaseAdmin
-      .from('task_instances')
-      .insert([{
-        master_task_id,
-        instance_date,
-        due_date,
-        due_time,
-        status: 'not_due'
-      }])
-      .select(`
-        *,
-        master_tasks (
-          id,
-          title,
-          description,
-          frequency,
-          timing,
-          category,
-          positions (
-            id,
-            name
-          )
-        )
-      `)
-      .single()
-
-    if (error) {
-      console.error('Error creating task instance:', error)
-      return NextResponse.json({ error: 'Failed to create task instance' }, { status: 500 })
-    }
-
-    return NextResponse.json(taskInstance, { status: 201 })
-  } catch (error) {
-    console.error('Unexpected error:', error)
-    if (error instanceof Error && error.message.includes('Authentication')) {
-      return NextResponse.json({ error: 'Authentication required' }, { status: 401 })
-    }
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+    
+    return NextResponse.json({ 
+      error: 'Internal server error',
+      details: error instanceof Error ? error.message : 'Unknown error'
+    }, { status: 500 })
   }
 }

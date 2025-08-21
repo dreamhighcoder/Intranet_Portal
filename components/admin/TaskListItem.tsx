@@ -10,6 +10,7 @@ import { Separator } from '@/components/ui/separator'
 import { createRecurrenceEngine } from '@/lib/recurrence-engine'
 import { createHolidayHelper } from '@/lib/public-holidays'
 import type { MasterChecklistTask, FrequencyRule, FrequencyType } from '@/types/checklist'
+import { toDisplayFormat } from '@/lib/responsibility-mapper'
 
 // Define responsibility options for proper display names
 const RESPONSIBILITY_OPTIONS = [
@@ -37,8 +38,7 @@ const CATEGORY_OPTIONS = [
 
 // Helper function to get display name for responsibilities
 const getResponsibilityDisplayName = (value: string): string => {
-  const option = RESPONSIBILITY_OPTIONS.find(opt => opt.value === value)
-  return option ? option.label : value.replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase())
+  return toDisplayFormat(value)
 }
 
 // Helper function to get display name for categories
