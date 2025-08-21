@@ -23,7 +23,7 @@ interface MasterTask {
   months?: number[]
   timing?: string
   default_due_time?: string
-  category?: string
+  categories?: string[]
   publish_status: 'draft' | 'active' | 'inactive'
   publish_delay_date?: string
   sticky_once_off: boolean
@@ -111,7 +111,7 @@ export function MasterTaskForm({ task, positions, onSave, onCancel, loading = fa
       months: [],
       timing: 'morning',
       default_due_time: '17:00',
-      category: '',
+      categories: [],
       publish_status: 'draft' as const,
       publish_delay_date: '',
       sticky_once_off: false,
@@ -128,7 +128,7 @@ export function MasterTaskForm({ task, positions, onSave, onCancel, loading = fa
         position_id: task.position_id || '',
         timing: task.timing || 'morning',
         default_due_time: task.default_due_time || '17:00',
-        category: task.category || '',
+        categories: task.categories || [],
         publish_delay_date: task.publish_delay_date || '',
         weekdays: task.weekdays || [],
         months: task.months || [],
@@ -153,15 +153,16 @@ export function MasterTaskForm({ task, positions, onSave, onCancel, loading = fa
         position_id: task.position_id || '',
         timing: task.timing || 'morning',
         default_due_time: task.default_due_time || '17:00',
-        category: task.category || '',
+        categories: task.categories || [],
         publish_delay_date: task.publish_delay_date || '',
         weekdays: task.weekdays || [],
         months: task.months || []
       }
       setFormData(sanitizedTask)
-      // Check if category is custom (not in predefined list)
-      if (task.category && !categoryOptions.includes(task.category)) {
-        setCustomCategory(task.category)
+      // Check if any category is custom (not in predefined list)
+      const customCategories = (task.categories || []).filter(cat => !categoryOptions.includes(cat))
+      if (customCategories.length > 0) {
+        setCustomCategory(customCategories[0])
         setShowCustomCategory(true)
       }
     }
@@ -206,10 +207,14 @@ export function MasterTaskForm({ task, positions, onSave, onCancel, loading = fa
       return
     }
 
-    const finalCategory = showCustomCategory ? customCategory : formData.category
+    const finalCategories = [...(formData.categories || [])]
+    if (showCustomCategory && customCategory.trim()) {
+      finalCategories.push(customCategory.trim())
+    }
+    
     const taskData = {
       ...formData,
-      category: finalCategory || undefined
+      categories: finalCategories.length > 0 ? finalCategories : ['general-pharmacy-operations']
     }
 
     try {
@@ -236,6 +241,15 @@ export function MasterTaskForm({ task, positions, onSave, onCancel, loading = fa
       : [...currentMonths, month].sort()
     
     setFormData({ ...formData, months: newMonths })
+  }
+
+  const handleCategoryToggle = (category: string) => {
+    const currentCategories = formData.categories || []
+    const newCategories = currentCategories.includes(category)
+      ? currentCategories.filter(c => c !== category)
+      : [...currentCategories, category]
+    
+    setFormData({ ...formData, categories: newCategories })
   }
 
   const selectedFrequency = frequencyOptions.find(f => f.value === formData.frequency)
@@ -309,36 +323,36 @@ export function MasterTaskForm({ task, positions, onSave, onCancel, loading = fa
               </div>
 
               <div>
-                <Label htmlFor="category">Category</Label>
+                <Label>Categories</Label>
                 <div className="space-y-2">
-                  <Select
-                    value={showCustomCategory ? 'custom' : (formData.category || 'none')}
-                    onValueChange={(value) => {
-                      if (value === 'custom') {
-                        setShowCustomCategory(true)
-                        setFormData({ ...formData, category: '' })
-                      } else if (value === 'none') {
-                        setShowCustomCategory(false)
-                        setFormData({ ...formData, category: '' })
-                      } else {
-                        setShowCustomCategory(false)
-                        setFormData({ ...formData, category: value })
-                      }
-                    }}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select category" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="none">No Category</SelectItem>
-                      {categoryOptions.map(category => (
-                        <SelectItem key={category} value={category}>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                    {categoryOptions.map(category => (
+                      <div key={category} className="flex items-center space-x-2">
+                        <Checkbox
+                          id={`category-${category}`}
+                          checked={formData.categories?.includes(category) || false}
+                          onCheckedChange={() => handleCategoryToggle(category)}
+                        />
+                        <Label 
+                          htmlFor={`category-${category}`}
+                          className="text-sm cursor-pointer"
+                        >
                           {category}
-                        </SelectItem>
-                      ))}
-                      <SelectItem value="custom">Custom Category...</SelectItem>
-                    </SelectContent>
-                  </Select>
+                        </Label>
+                      </div>
+                    ))}
+                  </div>
+                  
+                  <div className="flex items-center space-x-2">
+                    <Checkbox
+                      id="custom-category-toggle"
+                      checked={showCustomCategory}
+                      onCheckedChange={(checked) => setShowCustomCategory(!!checked)}
+                    />
+                    <Label htmlFor="custom-category-toggle" className="text-sm cursor-pointer">
+                      Add custom category
+                    </Label>
+                  </div>
                   
                   {showCustomCategory && (
                     <Input
@@ -346,6 +360,16 @@ export function MasterTaskForm({ task, positions, onSave, onCancel, loading = fa
                       onChange={(e) => setCustomCategory(e.target.value)}
                       placeholder="Enter custom category"
                     />
+                  )}
+                  
+                  {formData.categories && formData.categories.length > 0 && (
+                    <div className="flex flex-wrap gap-1 mt-2">
+                      {formData.categories.map((category, index) => (
+                        <Badge key={index} variant="secondary" className="text-xs">
+                          {category}
+                        </Badge>
+                      ))}
+                    </div>
                   )}
                 </div>
               </div>

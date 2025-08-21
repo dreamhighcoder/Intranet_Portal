@@ -20,7 +20,6 @@ export interface Database {
           months: number[] | null
           timing: string
           due_time: string | null
-          category: string | null
           publish_status: string
           publish_delay: string | null
           sticky_once_off: boolean
@@ -46,7 +45,6 @@ export interface Database {
           months?: number[] | null
           timing: string
           due_time?: string | null
-          category?: string | null
           publish_status: string
           publish_delay?: string | null
           sticky_once_off?: boolean

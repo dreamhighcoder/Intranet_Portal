@@ -10,7 +10,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
 import { Separator } from '@/components/ui/separator'
 import { useToast } from '@/hooks/use-toast'
-import TaskForm from '@/components/admin/TaskForm'
+import TaskForm from '@/components/admin/TaskFormNew'
 import TaskListItem from '@/components/admin/TaskListItem'
 import type { MasterChecklistTask, CreateMasterTaskRequest, UpdateMasterTaskRequest } from '@/types/checklist'
 

@@ -50,7 +50,7 @@ export type Database = {
           months: number[]
           timing: string | null
           default_due_time: string | null
-          category: string | null
+          categories: string[]
           publish_status: 'draft' | 'active' | 'inactive'
           publish_delay_date: string | null
           sticky_once_off: boolean
@@ -68,7 +68,7 @@ export type Database = {
           months?: number[]
           timing?: string | null
           default_due_time?: string | null
-          category?: string | null
+          categories?: string[]
           publish_status?: 'draft' | 'active' | 'inactive'
           publish_delay_date?: string | null
           sticky_once_off?: boolean
@@ -86,7 +86,7 @@ export type Database = {
           months?: number[]
           timing?: string | null
           default_due_time?: string | null
-          category?: string | null
+          categories?: string[]
           publish_status?: 'draft' | 'active' | 'inactive'
           publish_delay_date?: string | null
           sticky_once_off?: boolean

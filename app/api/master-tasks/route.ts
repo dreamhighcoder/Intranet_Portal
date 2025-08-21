@@ -38,19 +38,24 @@ export async function GET(request: NextRequest) {
       .from('master_tasks')
       .select(`*`)
 
-    // Legacy: support filter by position by matching responsibility label
+    // Legacy: support filter by position by mapping to responsibility values
     if (positionId) {
       console.log('Master tasks GET - Filtering by responsibility for position_id:', positionId)
-      // Fetch position name and filter where responsibility contains it
-      const { data: pos, error: posErr } = await supabase
-        .from('positions')
-        .select('name')
-        .eq('id', positionId)
-        .single()
-
-      if (!posErr && pos?.name) {
-        // Since responsibility field doesn't exist in current schema, filter by position_id instead
-        query = query.eq('position_id', positionId)
+      
+      // Map position IDs to responsibility values
+      const positionToResponsibilityMap: { [key: string]: string } = {
+        '550e8400-e29b-41d4-a716-446655440001': 'pharmacist-primary',
+        '550e8400-e29b-41d4-a716-446655440002': 'pharmacist-supporting',
+        '550e8400-e29b-41d4-a716-446655440003': 'pharmacy-assistants',
+        '550e8400-e29b-41d4-a716-446655440004': 'dispensary-technicians',
+        '550e8400-e29b-41d4-a716-446655440005': 'daa-packers',
+        '550e8400-e29b-41d4-a716-446655440006': 'operational-managerial'
+      }
+      
+      const responsibilityValue = positionToResponsibilityMap[positionId]
+      if (responsibilityValue) {
+        // Filter by responsibility array containing the responsibility value
+        query = query.contains('responsibility', [responsibilityValue])
       }
     }
 
@@ -182,73 +187,22 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Timing is required' }, { status: 400 })
     }
 
-    // Map responsibility to position_id for backward compatibility
-    const responsibilityToPositionMap: { [key: string]: string } = {
-      'pharmacist-primary': '550e8400-e29b-41d4-a716-446655440001',
-      'pharmacist-supporting': '550e8400-e29b-41d4-a716-446655440002',
-      'pharmacy-assistants': '550e8400-e29b-41d4-a716-446655440003',
-      'dispensary-technicians': '550e8400-e29b-41d4-a716-446655440004',
-      'daa-packers': '550e8400-e29b-41d4-a716-446655440005',
-      'operational-managerial': '550e8400-e29b-41d4-a716-446655440006',
-      'shared-exc-pharmacist': '550e8400-e29b-41d4-a716-446655440003', // Default to pharmacy assistants
-      'shared-inc-pharmacist': '550e8400-e29b-41d4-a716-446655440001'  // Default to primary pharmacist
-    }
-
-    // Get position_id from responsibility or use provided position_id
-    let mappedPositionId = position_id
-    if (!mappedPositionId && responsibility && responsibility.length > 0) {
-      mappedPositionId = responsibilityToPositionMap[responsibility[0]]
-    }
-    
-    // Validate that the position exists before using it
-    if (mappedPositionId) {
-      const { data: positionExists, error: positionError } = await supabase
-        .from('positions')
-        .select('id')
-        .eq('id', mappedPositionId)
-        .single()
+    // Validate that responsibilities are valid against the predefined options
+    if (responsibility && responsibility.length > 0) {
+      const validResponsibilities = RESPONSIBILITY_OPTIONS.map(option => option.value)
+      const invalidResponsibilities = responsibility.filter(r => !validResponsibilities.includes(r))
       
-      if (positionError || !positionExists) {
-        console.error('Position validation failed:', {
-          position_id: mappedPositionId,
-          error: positionError?.message
-        })
-        
-        // Try to get the first available position as fallback
-        const { data: firstPosition, error: firstPositionError } = await supabase
-          .from('positions')
-          .select('id')
-          .limit(1)
-          .single()
-        
-        if (firstPositionError || !firstPosition) {
-          return NextResponse.json({ 
-            error: 'No valid positions found in database. Please ensure positions are properly configured.',
-            details: 'Run "npm run check-positions" to diagnose and fix position issues.'
-          }, { status: 400 })
-        }
-        
-        mappedPositionId = firstPosition.id
-        console.log('Using fallback position:', mappedPositionId)
-      }
-    } else {
-      // No position specified, get the first available position
-      const { data: firstPosition, error: firstPositionError } = await supabase
-        .from('positions')
-        .select('id')
-        .limit(1)
-        .single()
-      
-      if (firstPositionError || !firstPosition) {
+      if (invalidResponsibilities.length > 0) {
+        console.error('Invalid responsibilities provided:', invalidResponsibilities)
+        console.error('Valid responsibilities are:', validResponsibilities)
         return NextResponse.json({ 
-          error: 'No positions found in database. Please ensure positions are properly configured.',
-          details: 'Run "npm run check-positions" to diagnose and fix position issues.'
+          error: 'Invalid responsibilities provided',
+          details: `The following responsibilities are not valid: ${invalidResponsibilities.join(', ')}. Valid options are: ${validResponsibilities.join(', ')}`
         }, { status: 400 })
       }
-      
-      mappedPositionId = firstPosition.id
-      console.log('Using first available position:', mappedPositionId)
     }
+
+    // The new schema uses responsibility values directly, no position_id mapping needed
 
     // Timing values are now stored directly as per new schema
     // No mapping needed - use the values directly from the form
@@ -260,23 +214,50 @@ export async function POST(request: NextRequest) {
 
     console.log('Master task POST - Creating task:', title)
     
-    // Prepare data for insertion using actual database schema
+    // Prepare data for insertion using the new schema
     const insertData: any = {
       title,
       description,
-      position_id: mappedPositionId,
-      frequency: frequency || 'every_day',
+      responsibility: responsibility && responsibility.length > 0 ? responsibility : [],
+      categories: categories && categories.length > 0 ? categories : ['general-pharmacy-operations'],
       timing: timing,
-      default_due_time: due_time || '09:00:00',
-      category: categories && categories.length > 0 ? categories[0] : 'general-pharmacy-operations',
+      due_time: due_time || '09:00:00',
       publish_status: publish_status || 'draft',
       sticky_once_off: sticky_once_off || false,
       allow_edit_when_locked: allow_edit_when_locked || false
     }
     
-    // Only add publish_delay_date if it has valid value (this field exists in schema)
+    // Handle frequencies array - this is the new multi-frequency support
+    if (frequencies && frequencies.length > 0) {
+      // For now, we'll use the first frequency as the main frequency field for backward compatibility
+      insertData.frequency = frequencies[0]
+      // Store all frequencies in a custom field if needed (this would require schema update)
+      // insertData.frequencies = frequencies
+    } else if (frequency) {
+      insertData.frequency = frequency
+    } else {
+      insertData.frequency = 'every_day' // Default fallback
+    }
+    
+    // Note: position_id is no longer used in the new schema
+    // The responsibility array field is used instead
+    
+    // Handle optional date fields
+    if (due_date && due_date.trim() !== '') {
+      insertData.due_date = due_date
+    }
+    
+    if (start_date && start_date.trim() !== '') {
+      insertData.start_date = start_date
+    }
+    
+    if (end_date && end_date.trim() !== '') {
+      insertData.end_date = end_date
+    }
+    
+    // Only add publish_delay if it has valid value (renamed from publish_delay_date)
     if (publish_delay && publish_delay.trim() !== '') {
-      insertData.publish_delay_date = publish_delay
+      insertData.publish_delay = publish_delay
     }
 
     // Handle weekdays (frequency_rules field doesn't exist in schema)
@@ -296,51 +277,10 @@ export async function POST(request: NextRequest) {
     let { data: masterTask, error } = await supabase
       .from('master_tasks')
       .insert([insertData])
-      .select(`
-        *,
-        positions (
-          id,
-          name
-        )
-      `)
+      .select('*')
       .single()
 
-    // Handle schema cache issue with default_due_time column
-    if (error && error.message.includes('default_due_time')) {
-      console.log('Schema cache issue detected - retrying without default_due_time field')
-      
-      // Remove the problematic field and retry
-      const { default_due_time, ...insertDataWithoutDueTime } = insertData
-      
-      const retryResult = await supabase
-        .from('master_tasks')
-        .insert([insertDataWithoutDueTime])
-        .select(`
-          *,
-          positions (
-            id,
-            name
-          )
-        `)
-        .single()
-      
-      if (retryResult.error) {
-        console.error('Master task POST - Retry failed:', retryResult.error)
-        return NextResponse.json({ 
-          error: `Database error: ${retryResult.error.message}`,
-          details: retryResult.error.details,
-          hint: retryResult.error.hint,
-          code: retryResult.error.code,
-          schemaIssue: 'The default_due_time column is not available in the schema cache. Please refresh your database schema.'
-        }, { status: 500 })
-      }
-      
-      masterTask = retryResult.data
-      error = null
-      
-      console.log('Master task created successfully without default_due_time field')
-    }
-
+    // Handle database errors
     if (error) {
       console.error('Master task POST - Database error:', error)
       console.error('Master task POST - Error details:', {
@@ -350,6 +290,24 @@ export async function POST(request: NextRequest) {
         code: error.code
       })
       console.error('Master task POST - Insert data that failed:', JSON.stringify(insertData, null, 2))
+      
+      // Provide more specific error messages based on the error
+      if (error.message.includes('responsibility') && error.message.includes('not found')) {
+        return NextResponse.json({ 
+          error: 'Database schema issue: responsibility column not found',
+          details: 'The database schema migration may not have been applied correctly.',
+          hint: 'Run the database migration: supabase/migrations/001_add_master_checklist_and_instances.sql'
+        }, { status: 500 })
+      }
+      
+      if (error.message.includes('categories') && error.message.includes('not found')) {
+        return NextResponse.json({ 
+          error: 'Database schema issue: categories column not found',
+          details: 'The database schema migration may not have been applied correctly.',
+          hint: 'Run the database migration: supabase/migrations/001_add_master_checklist_and_instances.sql'
+        }, { status: 500 })
+      }
+      
       return NextResponse.json({ 
         error: `Database error: ${error.message}`,
         details: error.details,
@@ -357,6 +315,8 @@ export async function POST(request: NextRequest) {
         code: error.code
       }, { status: 500 })
     }
+
+
 
     // After successfully creating the master task, generate task instances
     try {

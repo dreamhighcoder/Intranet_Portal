@@ -16,6 +16,14 @@ export async function getAuthUser(request: NextRequest): Promise<AuthUser | null
     const authHeader = request.headers.get('authorization')
     const positionAuthHeader = request.headers.get('x-position-auth')
     
+    console.log('Auth Middleware - Headers received:', {
+      hasAuthHeader: !!authHeader,
+      positionAuthHeader,
+      positionUserId: request.headers.get('x-position-user-id'),
+      positionUserRole: request.headers.get('x-position-user-role'),
+      positionDisplayName: request.headers.get('x-position-display-name')
+    })
+    
     // Handle position-based authentication first (tolerate missing X-Position-Auth flag)
     if (positionAuthHeader === 'true' || (
       request.headers.get('x-position-user-id') &&
@@ -26,16 +34,21 @@ export async function getAuthUser(request: NextRequest): Promise<AuthUser | null
       const userRole = request.headers.get('x-position-user-role') as 'admin' | 'viewer'
       const displayName = request.headers.get('x-position-display-name')
       
+      console.log('Auth Middleware - Position auth data:', { userId, userRole, displayName })
+      
       if (userId && userRole) {
-        return {
+        const authUser = {
           id: userId,
           email: `${userId}@position.local`, // Synthetic email for position-based auth
           role: userRole,
           position_id: userRole === 'admin' ? undefined : userId,
           display_name: displayName || userId
         }
+        console.log('Auth Middleware - Returning position auth user:', authUser)
+        return authUser
       }
       
+      console.log('Auth Middleware - Position auth failed - missing userId or userRole')
       return null
     }
     
@@ -117,12 +130,17 @@ export async function getAuthUser(request: NextRequest): Promise<AuthUser | null
 }
 
 export async function requireAuth(request: NextRequest): Promise<AuthUser> {
+  console.log('Auth Middleware - requireAuth called')
   const user = await getAuthUser(request)
   
+  console.log('Auth Middleware - getAuthUser result:', user)
+  
   if (!user) {
+    console.log('Auth Middleware - No user found, throwing authentication error')
     throw new Error('Authentication required')
   }
   
+  console.log('Auth Middleware - Authentication successful for user:', user.id)
   return user
 }
 

@@ -111,8 +111,7 @@ export async function PUT(
     if (sticky_once_off !== undefined) updateData.sticky_once_off = sticky_once_off
     if (allow_edit_when_locked !== undefined) updateData.allow_edit_when_locked = allow_edit_when_locked
 
-    // Legacy field for backward compatibility
-    if (categories !== undefined && categories.length > 0) updateData.category = categories[0]
+
 
     // Only add start_date and end_date if they have values
     if (start_date) {

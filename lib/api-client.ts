@@ -102,18 +102,29 @@ export async function authenticatedGet<T = any>(url: string, retryCount = 0): Pr
  */
 export async function authenticatedPost<T = any>(url: string, data: any): Promise<T | null> {
   try {
+    console.log('API Client - Making POST request to:', url)
+    console.log('API Client - Request data:', JSON.stringify(data, null, 2))
+    
     const response = await authenticatedFetch(url, {
       method: 'POST',
       body: JSON.stringify(data),
     })
+    
+    console.log('API Client - Response status:', response.status)
+    console.log('API Client - Response ok:', response.ok)
+    
     if (response.ok) {
-      return await response.json()
+      const result = await response.json()
+      console.log('API Client - Success response:', result)
+      return result
     } else {
       const errorText = await response.text()
+      console.log('API Client - Error response text:', errorText)
       
       let errorMessage = `Failed to post to ${url}`
       try {
         const errorJson = JSON.parse(errorText)
+        console.log('API Client - Parsed error JSON:', errorJson)
         errorMessage = errorJson.error || errorMessage
       } catch {
         // If response is not JSON, use the text as error message
@@ -122,10 +133,11 @@ export async function authenticatedPost<T = any>(url: string, data: any): Promis
         }
       }
       
+      console.log('API Client - Final error message:', errorMessage)
       throw new Error(errorMessage)
     }
   } catch (error) {
-    // Only re-throw the error, don't log it here
+    console.error('API Client - Exception caught:', error)
     throw error
   }
 }
