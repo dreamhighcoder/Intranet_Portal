@@ -63,12 +63,12 @@ export const TASK_TIMINGS = [
 // Responsibility options are now dynamic (from database). Use getResponsibilityOptions() instead.
 export const RESPONSIBILITY_OPTIONS: ReadonlyArray<{ value: string; label: string }> = [] as const
 
-// Default due times based on timing
+// Default due times based on timing - matching project specifications
 export const DEFAULT_DUE_TIMES = {
   opening: "09:30",
-  anytime_during_day: "12:00",
-  before_order_cut_off: "14:00",
-  closing: "17:30",
+  anytime_during_day: "16:30", // 4:30pm
+  before_order_cut_off: "16:55", // 4:55pm  
+  closing: "17:00", // 5:00pm
 } as const
 
 // Updated color system - removed old TASK_STATUS_COLORS as they're now in CSS
