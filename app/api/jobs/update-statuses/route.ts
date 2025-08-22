@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { updateTaskStatuses, runStatusUpdateJob } from '@/lib/status-manager'
+import { runNewDailyStatusUpdate } from '@/lib/new-task-generator'
 
 export async function POST(request: NextRequest) {
   try {
@@ -12,17 +12,25 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    // Run the status update job
-    const result = await runStatusUpdateJob()
+    const body = await request.json().catch(() => ({}))
+    const { date, testMode = false, dryRun = false } = body
+
+    // Run the new status update job
+    const result = await runNewDailyStatusUpdate(date, {
+      testMode,
+      dryRun
+    })
 
     return NextResponse.json({
-      success: result.success,
-      message: result.message,
+      success: result.errors === 0,
+      message: result.errors === 0 ? 'Status update completed successfully' : 'Status update completed with errors',
       stats: {
-        updated: result.updated,
-        errors: result.errors,
-        details: result.details
+        totalInstances: result.totalInstances,
+        instancesUpdated: result.instancesUpdated,
+        instancesSkipped: result.instancesSkipped,
+        errors: result.errors
       },
+      details: result,
       timestamp: new Date().toISOString()
     })
 
@@ -38,19 +46,29 @@ export async function POST(request: NextRequest) {
 }
 
 // GET endpoint for manual triggers from admin panel
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
-    // This endpoint can be called manually by admins
-    const result = await updateTaskStatuses()
+    const { searchParams } = new URL(request.url)
+    const date = searchParams.get('date') || undefined
+    const testMode = searchParams.get('testMode') === 'true'
+    const dryRun = searchParams.get('dryRun') === 'true'
+
+    // Run the new status update job
+    const result = await runNewDailyStatusUpdate(date, {
+      testMode,
+      dryRun
+    })
 
     return NextResponse.json({
-      success: result.success,
-      message: result.message,
+      success: result.errors === 0,
+      message: result.errors === 0 ? 'Status update completed successfully' : 'Status update completed with errors',
       stats: {
-        updated: result.updated,
-        errors: result.errors,
-        details: result.details
+        totalInstances: result.totalInstances,
+        instancesUpdated: result.instancesUpdated,
+        instancesSkipped: result.instancesSkipped,
+        errors: result.errors
       },
+      details: result,
       timestamp: new Date().toISOString()
     })
 

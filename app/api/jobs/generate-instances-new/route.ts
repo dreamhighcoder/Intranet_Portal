@@ -36,19 +36,8 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Get public holidays for the recurrence engine
-    const { data: holidays, error: holidaysError } = await supabase
-      .from('public_holidays')
-      .select('date, name')
-      .order('date')
-
-    if (holidaysError) {
-      console.error('Failed to fetch public holidays:', holidaysError)
-      // Continue without holidays rather than failing
-    }
-
-    // Create task generator with holidays
-    const generator = createNewTaskGenerator(holidays || [])
+    // Create task generator with integrated engine
+    const generator = await createNewTaskGenerator()
 
     // Generate instances
     const result = await generator.generateForDate({
@@ -100,18 +89,8 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    // Get public holidays
-    const { data: holidays, error: holidaysError } = await supabase
-      .from('public_holidays')
-      .select('date, name')
-      .order('date')
-
-    if (holidaysError) {
-      console.error('Failed to fetch public holidays:', holidaysError)
-    }
-
     // Create task generator
-    const generator = createNewTaskGenerator(holidays || [])
+    const generator = await createNewTaskGenerator()
 
     // Generate instances
     const result = await generator.generateForDate({

@@ -492,7 +492,7 @@ export function isOnceOffFrequencyRule(rule: FrequencyRule): rule is OnceOffFreq
  */
 export const DEFAULT_TASK_VALUES = {
   publish_status: PublishStatus.DRAFT,
-  timing: TaskTiming.MORNING,
+  timing: TaskTiming.OPENING,
   due_time: '09:00:00',
   sticky_once_off: false,
   allow_edit_when_locked: false,

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { generateTaskInstances, runDailyGeneration } from '@/lib/task-instance-generator'
+import { runNewDailyGeneration } from '@/lib/new-task-generator'
 
 export async function POST(request: NextRequest) {
   try {
@@ -14,36 +14,26 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json().catch(() => ({}))
-    const { mode = 'daily', masterTaskId, forceRegenerate = false } = body
+    const { date, testMode = false, dryRun = false, forceRegenerate = false } = body
 
-    let result
-    
-    if (mode === 'daily') {
-      // Run the daily generation job
-      result = await runDailyGeneration()
-    } else if (mode === 'custom') {
-      // Custom generation with parameters
-      const startDate = body.startDate ? new Date(body.startDate) : undefined
-      const endDate = body.endDate ? new Date(body.endDate) : undefined
-      
-      result = await generateTaskInstances({
-        startDate,
-        endDate,
-        masterTaskId,
-        forceRegenerate
-      })
-    } else {
-      return NextResponse.json({ error: 'Invalid mode. Use "daily" or "custom"' }, { status: 400 })
-    }
+    // Run the new daily generation job
+    const result = await runNewDailyGeneration(date, {
+      testMode,
+      dryRun,
+      forceRegenerate
+    })
 
     return NextResponse.json({
-      success: result.success,
-      message: result.message,
+      success: result.errors === 0,
+      message: result.errors === 0 ? 'Generation completed successfully' : 'Generation completed with errors',
       stats: {
-        generated: result.generated,
-        skipped: result.skipped,
+        totalTasks: result.totalTasks,
+        newInstances: result.newInstances,
+        carryInstances: result.carryInstances,
+        totalInstances: result.totalInstances,
         errors: result.errors
       },
+      details: result,
       timestamp: new Date().toISOString()
     })
 
@@ -71,29 +61,29 @@ export async function GET(request: NextRequest) {
     }
     
     const { searchParams } = new URL(request.url)
-    const mode = searchParams.get('mode') || 'custom'
-    const masterTaskId = searchParams.get('masterTaskId') || undefined
+    const date = searchParams.get('date') || undefined
+    const testMode = searchParams.get('testMode') === 'true'
+    const dryRun = searchParams.get('dryRun') === 'true'
     const forceRegenerate = searchParams.get('forceRegenerate') === 'true'
 
-    let result
-    
-    if (mode === 'daily') {
-      result = await runDailyGeneration()
-    } else {
-      result = await generateTaskInstances({
-        masterTaskId,
-        forceRegenerate
-      })
-    }
+    // Run the new daily generation job
+    const result = await runNewDailyGeneration(date, {
+      testMode,
+      dryRun,
+      forceRegenerate
+    })
 
     return NextResponse.json({
-      success: result.success,
-      message: result.message,
+      success: result.errors === 0,
+      message: result.errors === 0 ? 'Generation completed successfully' : 'Generation completed with errors',
       stats: {
-        generated: result.generated,
-        skipped: result.skipped,
+        totalTasks: result.totalTasks,
+        newInstances: result.newInstances,
+        carryInstances: result.carryInstances,
+        totalInstances: result.totalInstances,
         errors: result.errors
       },
+      details: result,
       timestamp: new Date().toISOString()
     })
 

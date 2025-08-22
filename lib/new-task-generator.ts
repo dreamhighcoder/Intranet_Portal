@@ -1,17 +1,24 @@
 /**
- * New Task Generator Service
- * Replaces the old task-instance-generator with the new recurrence engine
+ * New Task Generator using Complete Recurrence & Status Engine
+ * Pharmacy Intranet Portal - Task Instance Generation
+ * 
+ * This module provides functionality to:
+ * - Generate task instances using the complete recurrence engine
+ * - Handle carry instances and new instances separately
+ * - Update task statuses based on precise timing rules
+ * - Support bulk operations for date ranges
  */
 
-import { NewRecurrenceEngine, createNewRecurrenceEngine, type MasterTask, type TaskInstance } from './new-recurrence-engine'
-import { RecurrenceMigrationService, createMigrationService } from './recurrence-migration'
-import { supabase } from './db'
-import type { MasterChecklistTask } from '@/types/checklist'
+import { createTaskRecurrenceStatusEngine, TaskStatus, type TaskRecurrenceStatusEngine, type MasterTask, type TaskInstance, type FrequencyType } from './task-recurrence-status-engine'
+import { taskDatabaseAdapter } from './task-database-adapter'
 
 // ========================================
 // TYPES AND INTERFACES
 // ========================================
 
+/**
+ * Generation options for task instances
+ */
 export interface NewGenerationOptions {
   date: string // ISO date string (YYYY-MM-DD)
   testMode?: boolean // If true, don't actually insert records
@@ -19,212 +26,184 @@ export interface NewGenerationOptions {
   forceRegenerate?: boolean // If true, delete existing instances before generating
   maxTasks?: number // Maximum number of tasks to process
   logLevel?: 'silent' | 'info' | 'debug'
-  useNewEngine?: boolean // If true, use new recurrence engine
 }
 
+/**
+ * Generation result for a single task
+ */
+export interface NewTaskGenerationResult {
+  taskId: string
+  taskTitle: string
+  frequencies: FrequencyType[]
+  newInstances: number
+  carryInstances: number
+  totalInstances: number
+  error?: string
+  skipped?: boolean
+  reason?: string
+}
+
+/**
+ * Overall generation result
+ */
 export interface NewGenerationResult {
   date: string
   totalTasks: number
+  tasksProcessed: number
   newInstances: number
   carryInstances: number
-  instancesCreated: number
+  totalInstances: number
   instancesSkipped: number
   errors: number
   results: NewTaskGenerationResult[]
   executionTime: number
   testMode: boolean
   dryRun: boolean
-  engineUsed: 'old' | 'new'
 }
 
-export interface NewTaskGenerationResult {
-  taskId: string
-  taskTitle: string
-  frequency: string
-  shouldAppear: boolean
-  isCarryOver: boolean
-  instanceCreated: boolean
-  instanceId?: string
-  dueDate?: string
-  error?: string
-  skipped?: boolean
-  reason?: string
-}
-
-export interface BulkNewGenerationOptions {
-  startDate: string
-  endDate: string
-  testMode?: boolean
-  dryRun?: boolean
-  maxTasksPerDay?: number
+/**
+ * Status update options
+ */
+export interface NewStatusUpdateOptions {
+  date?: string // ISO date string (YYYY-MM-DD), defaults to today
+  testMode?: boolean // If true, don't actually update records
+  dryRun?: boolean // If true, return what would be updated without updating
+  maxInstances?: number // Maximum instances to process
   logLevel?: 'silent' | 'info' | 'debug'
-  useNewEngine?: boolean
 }
 
-export interface BulkNewGenerationResult {
-  startDate: string
-  endDate: string
-  totalDays: number
-  successfulDays: number
-  failedDays: number
-  totalInstancesCreated: number
-  totalErrors: number
-  dailyResults: Array<{
-    date: string
-    result: NewGenerationResult
-  }>
+/**
+ * Status update result for a single instance
+ */
+export interface NewInstanceStatusUpdateResult {
+  instanceId: string
+  masterTaskId: string
+  date: string
+  oldStatus: TaskStatus
+  newStatus: TaskStatus
+  locked: boolean
+  updated: boolean
+  reason: string
+  error?: string
+}
+
+/**
+ * Overall status update result
+ */
+export interface NewStatusUpdateResult {
+  date: string
+  totalInstances: number
+  instancesUpdated: number
+  instancesSkipped: number
+  errors: number
+  results: NewInstanceStatusUpdateResult[]
   executionTime: number
-  engineUsed: 'old' | 'new'
+  testMode: boolean
+  dryRun: boolean
 }
 
 // ========================================
 // NEW TASK GENERATOR CLASS
 // ========================================
 
+/**
+ * New task generator using the complete recurrence engine
+ */
 export class NewTaskGenerator {
-  private recurrenceEngine: NewRecurrenceEngine
-  private migrationService: RecurrenceMigrationService
+  private engine: TaskRecurrenceStatusEngine
   private logLevel: 'silent' | 'info' | 'debug'
 
-  constructor(publicHolidays: any[] = [], logLevel: 'silent' | 'info' | 'debug' = 'info') {
-    this.recurrenceEngine = createNewRecurrenceEngine(publicHolidays)
-    this.migrationService = createMigrationService()
+  constructor(engine: TaskRecurrenceStatusEngine, logLevel: 'silent' | 'info' | 'debug' = 'info') {
+    this.engine = engine
     this.logLevel = logLevel
   }
 
   /**
-   * Generate task instances for a specific date using the new engine
+   * Generate task instances for a specific date
    */
   async generateForDate(options: NewGenerationOptions): Promise<NewGenerationResult> {
     const startTime = Date.now()
-    const { 
-      date, 
-      testMode = false, 
-      dryRun = false, 
-      forceRegenerate = false, 
-      maxTasks,
-      useNewEngine = true 
-    } = options
+    const { date, testMode = false, dryRun = false, forceRegenerate = false, maxTasks } = options
 
     this.log('info', `Starting new task generation for date: ${date}`)
-    this.log('info', `Mode: ${testMode ? 'TEST' : 'PRODUCTION'}, Dry Run: ${dryRun}, Engine: ${useNewEngine ? 'NEW' : 'OLD'}`)
+    this.log('info', `Mode: ${testMode ? 'TEST' : 'PRODUCTION'}, Dry Run: ${dryRun}, Force: ${forceRegenerate}`)
 
     try {
-      // Step 1: Get all active master tasks
-      const { data: masterTasks, error: tasksError } = await supabase
-        .from('master_tasks')
-        .select('*')
-        .eq('publish_status', 'active')
-        .or(`publish_delay.is.null,publish_delay.lte.${date}`)
-        .order('created_at', { ascending: true })
+      // Step 1: Get all active master tasks using the database adapter
+      const masterTasks = await taskDatabaseAdapter.loadActiveMasterTasks()
 
-      if (tasksError) {
-        throw new Error(`Failed to fetch master tasks: ${tasksError.message}`)
-      }
-
-      if (!masterTasks || masterTasks.length === 0) {
+      if (masterTasks.length === 0) {
         this.log('info', 'No active master tasks found')
-        return this.createEmptyResult(date, testMode, dryRun, startTime, useNewEngine ? 'new' : 'old')
+        return this.createEmptyResult(date, testMode, dryRun, startTime)
       }
 
       // Apply max tasks limit if specified
       const tasksToProcess = maxTasks ? masterTasks.slice(0, maxTasks) : masterTasks
       this.log('info', `Processing ${tasksToProcess.length} master tasks`)
 
-      // Step 2: Check existing instances if not forcing regeneration
+      // Step 2: Check if instances already exist for this date
       if (!forceRegenerate && !dryRun) {
-        const existingInstances = await this.checkExistingInstances(date)
-        if (existingInstances.length > 0) {
-          this.log('info', `Found ${existingInstances.length} existing instances for ${date}`)
+        const instancesExist = await taskDatabaseAdapter.instancesExistForDate(date)
+        if (instancesExist) {
+          this.log('info', `Found existing instances for ${date}`)
           
           if (!testMode) {
-            const tasksWithInstances = new Set(existingInstances.map(inst => inst.master_task_id))
-            const allTasksHaveInstances = tasksToProcess.every(task => tasksWithInstances.has(task.id))
-            
-            if (allTasksHaveInstances) {
-              this.log('info', 'All tasks already have instances for this date, skipping generation')
-              return this.createEmptyResult(date, testMode, dryRun, startTime, useNewEngine ? 'new' : 'old', tasksToProcess.length)
-            }
+            this.log('info', 'Instances already exist for this date, skipping generation')
+            return this.createEmptyResult(date, testMode, dryRun, startTime, tasksToProcess.length)
           }
         }
       }
 
       // Step 3: Force delete existing instances if requested
       if (forceRegenerate && !dryRun && !testMode) {
-        const deletedCount = await this.deleteExistingInstances(date)
-        this.log('info', `Deleted ${deletedCount} existing instances for regeneration`)
+        await taskDatabaseAdapter.deleteInstancesForDate(date)
+        this.log('info', `Deleted existing instances for regeneration`)
       }
 
-      // Step 4: Process tasks with appropriate engine
-      let results: NewTaskGenerationResult[]
-      let newInstances = 0
-      let carryInstances = 0
-      let instancesCreated = 0
+      // Step 4: Generate instances using the engine
+      const generationResult = this.engine.generateInstancesForDate(tasksToProcess, date)
+      
+      // Step 5: Save instances to database if not in dry run mode
+      if (!dryRun && !testMode && generationResult.total_instances > 0) {
+        const allInstances = [...generationResult.new_instances, ...generationResult.carry_instances]
+        await taskDatabaseAdapter.saveTaskInstances(allInstances)
+        this.log('info', `Saved ${allInstances.length} instances to database`)
+      }
+
+      // Step 6: Build results
+      const results: NewTaskGenerationResult[] = []
+      let totalNewInstances = generationResult.new_instances.length
+      let totalCarryInstances = generationResult.carry_instances.length
       let instancesSkipped = 0
       let errors = 0
 
-      if (useNewEngine) {
-        // Use new recurrence engine
-        const convertedTasks = this.migrationService.convertMasterTasks(tasksToProcess)
-        const generationResult = this.recurrenceEngine.generateInstancesForDate(convertedTasks, date)
+      // Group results by task
+      const taskResults = new Map<string, { new: number, carry: number }>()
+      
+      for (const instance of generationResult.new_instances) {
+        const current = taskResults.get(instance.master_task_id) || { new: 0, carry: 0 }
+        current.new++
+        taskResults.set(instance.master_task_id, current)
+      }
+      
+      for (const instance of generationResult.carry_instances) {
+        const current = taskResults.get(instance.master_task_id) || { new: 0, carry: 0 }
+        current.carry++
+        taskResults.set(instance.master_task_id, current)
+      }
+
+      // Create results for each processed task
+      for (const task of tasksToProcess) {
+        const taskResult = taskResults.get(task.id) || { new: 0, carry: 0 }
         
-        results = []
-        
-        // Process new instances
-        for (const instance of generationResult.instances) {
-          const masterTask = tasksToProcess.find(t => t.id === instance.master_task_id)
-          if (!masterTask) continue
-
-          try {
-            const result = await this.createTaskInstance(instance, masterTask, testMode, dryRun, false)
-            results.push(result)
-            
-            if (result.instanceCreated) {
-              instancesCreated++
-              newInstances++
-            } else if (result.skipped) {
-              instancesSkipped++
-            }
-            
-            if (result.error) {
-              errors++
-            }
-          } catch (error) {
-            const errorResult = this.createErrorResult(masterTask, error)
-            results.push(errorResult)
-            errors++
-          }
-        }
-
-        // Process carry-over instances
-        for (const instance of generationResult.carry_instances) {
-          const masterTask = tasksToProcess.find(t => t.id === instance.master_task_id)
-          if (!masterTask) continue
-
-          try {
-            const result = await this.createTaskInstance(instance, masterTask, testMode, dryRun, true)
-            results.push(result)
-            
-            if (result.instanceCreated) {
-              instancesCreated++
-              carryInstances++
-            } else if (result.skipped) {
-              instancesSkipped++
-            }
-            
-            if (result.error) {
-              errors++
-            }
-          } catch (error) {
-            const errorResult = this.createErrorResult(masterTask, error)
-            results.push(errorResult)
-            errors++
-          }
-        }
-      } else {
-        // Fallback to old logic (simplified for now)
-        results = []
-        this.log('info', 'Using old engine logic (not implemented in this version)')
+        results.push({
+          taskId: task.id,
+          taskTitle: `Task ${task.id}`, // We don't have title in MasterTask interface
+          frequencies: task.frequencies,
+          newInstances: taskResult.new,
+          carryInstances: taskResult.carry,
+          totalInstances: taskResult.new + taskResult.carry
+        })
       }
 
       const executionTime = Date.now() - startTime
@@ -232,20 +211,20 @@ export class NewTaskGenerator {
       const finalResult: NewGenerationResult = {
         date,
         totalTasks: tasksToProcess.length,
-        newInstances,
-        carryInstances,
-        instancesCreated,
+        tasksProcessed: tasksToProcess.length,
+        newInstances: totalNewInstances,
+        carryInstances: totalCarryInstances,
+        totalInstances: totalNewInstances + totalCarryInstances,
         instancesSkipped,
         errors,
         results,
         executionTime,
         testMode,
-        dryRun,
-        engineUsed: useNewEngine ? 'new' : 'old'
+        dryRun
       }
 
       this.log('info', `Generation completed in ${executionTime}ms`)
-      this.log('info', `Results: ${newInstances} new, ${carryInstances} carry, ${instancesCreated} created, ${instancesSkipped} skipped, ${errors} errors`)
+      this.log('info', `Results: ${totalNewInstances} new, ${totalCarryInstances} carry, ${errors} errors`)
 
       return finalResult
 
@@ -256,210 +235,163 @@ export class NewTaskGenerator {
       return {
         date,
         totalTasks: 0,
+        tasksProcessed: 0,
         newInstances: 0,
         carryInstances: 0,
-        instancesCreated: 0,
+        totalInstances: 0,
         instancesSkipped: 0,
         errors: 1,
         results: [{
           taskId: 'error',
           taskTitle: 'Generation Error',
-          frequency: 'unknown',
-          shouldAppear: false,
-          isCarryOver: false,
-          instanceCreated: false,
-          error: error instanceof Error ? error.message : 'Unknown error',
-          skipped: false
+          frequencies: [],
+          newInstances: 0,
+          carryInstances: 0,
+          totalInstances: 0,
+          error: error instanceof Error ? error.message : 'Unknown error'
         }],
         executionTime,
         testMode,
-        dryRun,
-        engineUsed: useNewEngine ? 'new' : 'old'
+        dryRun
       }
     }
   }
 
   /**
-   * Generate instances for a date range
+   * Update statuses for existing instances
    */
-  async generateForDateRange(options: BulkNewGenerationOptions): Promise<BulkNewGenerationResult> {
+  async updateStatusesForDate(options: NewStatusUpdateOptions = {}): Promise<NewStatusUpdateResult> {
     const startTime = Date.now()
     const { 
-      startDate, 
-      endDate, 
-      testMode = false, 
-      dryRun = false, 
-      maxTasksPerDay,
-      useNewEngine = true 
+      date = new Date().toISOString().split('T')[0],
+      testMode = false,
+      dryRun = false,
+      maxInstances
     } = options
 
-    this.log('info', `Starting bulk generation from ${startDate} to ${endDate}`)
-
-    const start = new Date(startDate)
-    const end = new Date(endDate)
-    const totalDays = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1
-
-    const dailyResults: Array<{ date: string; result: NewGenerationResult }> = []
-    let successfulDays = 0
-    let failedDays = 0
-    let totalInstancesCreated = 0
-    let totalErrors = 0
-
-    for (let i = 0; i < totalDays; i++) {
-      const currentDate = new Date(start)
-      currentDate.setDate(start.getDate() + i)
-      const dateString = currentDate.toISOString().split('T')[0]
-
-      try {
-        const result = await this.generateForDate({
-          date: dateString,
-          testMode,
-          dryRun,
-          maxTasks: maxTasksPerDay,
-          logLevel: this.logLevel,
-          useNewEngine
-        })
-
-        dailyResults.push({ date: dateString, result })
-        totalInstancesCreated += result.instancesCreated
-        totalErrors += result.errors
-
-        if (result.errors === 0) {
-          successfulDays++
-        } else {
-          failedDays++
-        }
-
-        this.log('info', `Completed ${dateString}: ${result.instancesCreated} instances, ${result.errors} errors`)
-      } catch (error) {
-        failedDays++
-        totalErrors++
-        this.log('info', `Failed to generate for ${dateString}: ${error instanceof Error ? error.message : 'Unknown error'}`)
-        
-        dailyResults.push({
-          date: dateString,
-          result: this.createEmptyResult(dateString, testMode, dryRun, Date.now(), useNewEngine ? 'new' : 'old', 0, error)
-        })
-      }
-    }
-
-    const executionTime = Date.now() - startTime
-
-    const bulkResult: BulkNewGenerationResult = {
-      startDate,
-      endDate,
-      totalDays,
-      successfulDays,
-      failedDays,
-      totalInstancesCreated,
-      totalErrors,
-      dailyResults,
-      executionTime,
-      engineUsed: useNewEngine ? 'new' : 'old'
-    }
-
-    this.log('info', `Bulk generation completed in ${executionTime}ms`)
-    this.log('info', `Summary: ${successfulDays}/${totalDays} days successful, ${totalInstancesCreated} total instances, ${totalErrors} total errors`)
-
-    return bulkResult
-  }
-
-  /**
-   * Update task statuses using the new engine
-   */
-  async updateStatusesForDate(date: string, testMode: boolean = false): Promise<{
-    date: string
-    instancesUpdated: number
-    errors: number
-    results: any[]
-  }> {
-    this.log('info', `Updating statuses for date: ${date}`)
+    this.log('info', `Starting status update for date: ${date}`)
+    this.log('info', `Mode: ${testMode ? 'TEST' : 'PRODUCTION'}, Dry Run: ${dryRun}`)
 
     try {
-      // Get all instances for the date
-      const { data: instances, error: fetchError } = await supabase
-        .from('task_instances')
-        .select('*')
-        .eq('instance_date', date)
+      // Step 1: Get all instances for the date using the database adapter
+      const instances = await taskDatabaseAdapter.loadTaskInstancesForDate(date)
 
-      if (fetchError) {
-        throw new Error(`Failed to fetch instances: ${fetchError.message}`)
+      if (instances.length === 0) {
+        this.log('info', 'No instances found for this date')
+        return this.createEmptyStatusResult(date, testMode, dryRun, startTime)
       }
 
-      if (!instances || instances.length === 0) {
-        this.log('info', 'No instances found for status update')
-        return {
-          date,
-          instancesUpdated: 0,
-          errors: 0,
-          results: []
-        }
-      }
+      // Apply max instances limit if specified
+      const instancesToProcess = maxInstances ? instances.slice(0, maxInstances) : instances
+      this.log('info', `Processing ${instancesToProcess.length} instances`)
 
-      // Convert to new format and update statuses
-      const taskInstances: TaskInstance[] = instances.map(inst => ({
-        id: inst.id,
-        master_task_id: inst.master_task_id,
-        date: inst.instance_date,
-        due_date: inst.due_date,
-        due_time: inst.due_time || '09:00',
-        status: inst.status as any,
-        locked: inst.locked || false,
-        created_at: inst.created_at,
-        updated_at: inst.updated_at,
-        due_date_override: undefined,
-        due_time_override: undefined
-      }))
-
+      // Step 2: Update statuses using the engine
       const currentDateTime = new Date()
-      const statusUpdates = this.recurrenceEngine.updateInstanceStatuses(taskInstances, currentDateTime)
+      const statusResults = this.engine.updateInstanceStatuses(instancesToProcess, currentDateTime)
 
+      // Step 3: Collect updates for database
+      const updates: Array<{ id: string, status: TaskStatus, locked: boolean }> = []
+      const results: NewInstanceStatusUpdateResult[] = []
       let instancesUpdated = 0
-      const results = []
+      let instancesSkipped = 0
+      let errors = 0
 
-      for (const update of statusUpdates) {
-        if (!testMode) {
-          // Apply the status update to the database
-          const { error: updateError } = await supabase
-            .from('task_instances')
-            .update({
-              status: update.new_status,
-              locked: update.locked,
-              updated_at: new Date().toISOString()
+      for (const statusResult of statusResults) {
+        try {
+          const instance = instancesToProcess.find(inst => inst.id === statusResult.instance_id)
+          if (!instance) continue
+
+          if (statusResult.updated && !dryRun && !testMode) {
+            updates.push({
+              id: statusResult.instance_id,
+              status: statusResult.new_status,
+              locked: statusResult.locked
             })
-            .eq('id', update.instance_id)
-
-          if (updateError) {
-            this.log('info', `Failed to update instance ${update.instance_id}: ${updateError.message}`)
-            results.push({ ...update, error: updateError.message })
-          } else {
-            instancesUpdated++
-            results.push(update)
           }
-        } else {
-          instancesUpdated++
-          results.push(update)
+
+          results.push({
+            instanceId: statusResult.instance_id,
+            masterTaskId: instance.master_task_id,
+            date: instance.date,
+            oldStatus: statusResult.old_status,
+            newStatus: statusResult.new_status,
+            locked: statusResult.locked,
+            updated: statusResult.updated,
+            reason: statusResult.reason
+          })
+
+          if (statusResult.updated) {
+            instancesUpdated++
+          } else {
+            instancesSkipped++
+          }
+
+        } catch (error) {
+          const instance = instancesToProcess.find(inst => inst.id === statusResult.instance_id)
+          results.push({
+            instanceId: statusResult.instance_id,
+            masterTaskId: instance?.master_task_id || 'unknown',
+            date: instance?.date || date,
+            oldStatus: statusResult.old_status,
+            newStatus: statusResult.old_status,
+            locked: false,
+            updated: false,
+            reason: 'Update failed',
+            error: error instanceof Error ? error.message : 'Unknown error'
+          })
+          errors++
         }
       }
 
-      this.log('info', `Status update completed: ${instancesUpdated} instances updated`)
-
-      return {
-        date,
-        instancesUpdated,
-        errors: statusUpdates.length - instancesUpdated,
-        results
+      // Step 4: Apply updates to database using the adapter
+      if (updates.length > 0) {
+        await taskDatabaseAdapter.updateTaskInstanceStatuses(updates)
+        this.log('info', `Updated ${updates.length} instances in database`)
       }
+
+      const executionTime = Date.now() - startTime
+
+      const finalResult: NewStatusUpdateResult = {
+        date,
+        totalInstances: instancesToProcess.length,
+        instancesUpdated,
+        instancesSkipped,
+        errors,
+        results,
+        executionTime,
+        testMode,
+        dryRun
+      }
+
+      this.log('info', `Status update completed in ${executionTime}ms`)
+      this.log('info', `Results: ${instancesUpdated} updated, ${instancesSkipped} skipped, ${errors} errors`)
+
+      return finalResult
 
     } catch (error) {
-      this.log('info', `Status update failed: ${error instanceof Error ? error.message : 'Unknown error'}`)
+      const executionTime = Date.now() - startTime
+      this.log('info', `Status update failed after ${executionTime}ms: ${error instanceof Error ? error.message : 'Unknown error'}`)
+      
       return {
         date,
+        totalInstances: 0,
         instancesUpdated: 0,
+        instancesSkipped: 0,
         errors: 1,
         results: [{
+          instanceId: 'error',
+          masterTaskId: 'error',
+          date,
+          oldStatus: TaskStatus.PENDING,
+          newStatus: TaskStatus.PENDING,
+          locked: false,
+          updated: false,
+          reason: 'Status update error',
           error: error instanceof Error ? error.message : 'Unknown error'
-        }]
+        }],
+        executionTime,
+        testMode,
+        dryRun
       }
     }
   }
@@ -468,171 +400,53 @@ export class NewTaskGenerator {
   // PRIVATE HELPER METHODS
   // ========================================
 
-  private async createTaskInstance(
-    instance: TaskInstance,
-    masterTask: MasterChecklistTask,
-    testMode: boolean,
-    dryRun: boolean,
-    isCarryOver: boolean
-  ): Promise<NewTaskGenerationResult> {
-    try {
-      if (dryRun || testMode) {
-        return {
-          taskId: masterTask.id,
-          taskTitle: masterTask.title || 'Unknown',
-          frequency: masterTask.frequency,
-          shouldAppear: true,
-          isCarryOver,
-          instanceCreated: true,
-          instanceId: instance.id,
-          dueDate: instance.due_date,
-          reason: testMode ? 'Test mode' : 'Dry run'
-        }
-      }
-
-      // Check if instance already exists
-      const { data: existing } = await supabase
-        .from('task_instances')
-        .select('id')
-        .eq('master_task_id', instance.master_task_id)
-        .eq('instance_date', instance.date)
-        .single()
-
-      if (existing) {
-        return {
-          taskId: masterTask.id,
-          taskTitle: masterTask.title || 'Unknown',
-          frequency: masterTask.frequency,
-          shouldAppear: true,
-          isCarryOver,
-          instanceCreated: false,
-          skipped: true,
-          reason: 'Instance already exists'
-        }
-      }
-
-      // Create new instance
-      const { data: newInstance, error: insertError } = await supabase
-        .from('task_instances')
-        .insert({
-          master_task_id: instance.master_task_id,
-          instance_date: instance.date,
-          due_date: instance.due_date,
-          due_time: instance.due_time,
-          status: 'not_due', // Map from new status to old status
-          is_published: true,
-          locked: false,
-          acknowledged: false,
-          resolved: false
-        })
-        .select()
-        .single()
-
-      if (insertError) {
-        throw new Error(`Failed to create instance: ${insertError.message}`)
-      }
-
-      return {
-        taskId: masterTask.id,
-        taskTitle: masterTask.title || 'Unknown',
-        frequency: masterTask.frequency,
-        shouldAppear: true,
-        isCarryOver,
-        instanceCreated: true,
-        instanceId: newInstance.id,
-        dueDate: instance.due_date
-      }
-
-    } catch (error) {
-      return {
-        taskId: masterTask.id,
-        taskTitle: masterTask.title || 'Unknown',
-        frequency: masterTask.frequency,
-        shouldAppear: true,
-        isCarryOver,
-        instanceCreated: false,
-        error: error instanceof Error ? error.message : 'Unknown error'
-      }
-    }
-  }
-
-  private createErrorResult(masterTask: MasterChecklistTask, error: any): NewTaskGenerationResult {
-    return {
-      taskId: masterTask.id,
-      taskTitle: masterTask.title || 'Unknown',
-      frequency: masterTask.frequency,
-      shouldAppear: false,
-      isCarryOver: false,
-      instanceCreated: false,
-      error: error instanceof Error ? error.message : 'Unknown error',
-      skipped: false
-    }
-  }
-
   private createEmptyResult(
     date: string, 
     testMode: boolean, 
     dryRun: boolean, 
     startTime: number, 
-    engineUsed: 'old' | 'new',
-    totalTasks: number = 0,
-    error?: any
+    totalTasks: number = 0
   ): NewGenerationResult {
     return {
       date,
       totalTasks,
+      tasksProcessed: totalTasks,
       newInstances: 0,
       carryInstances: 0,
-      instancesCreated: 0,
+      totalInstances: 0,
       instancesSkipped: 0,
-      errors: error ? 1 : 0,
-      results: error ? [{
-        taskId: 'error',
-        taskTitle: 'Error',
-        frequency: 'unknown',
-        shouldAppear: false,
-        isCarryOver: false,
-        instanceCreated: false,
-        error: error instanceof Error ? error.message : 'Unknown error'
-      }] : [],
+      errors: 0,
+      results: [],
       executionTime: Date.now() - startTime,
       testMode,
-      dryRun,
-      engineUsed
+      dryRun
     }
   }
 
-  private async checkExistingInstances(date: string): Promise<any[]> {
-    const { data, error } = await supabase
-      .from('task_instances')
-      .select('id, master_task_id')
-      .eq('instance_date', date)
-
-    if (error) {
-      throw new Error(`Failed to check existing instances: ${error.message}`)
+  private createEmptyStatusResult(
+    date: string, 
+    testMode: boolean, 
+    dryRun: boolean, 
+    startTime: number
+  ): NewStatusUpdateResult {
+    return {
+      date,
+      totalInstances: 0,
+      instancesUpdated: 0,
+      instancesSkipped: 0,
+      errors: 0,
+      results: [],
+      executionTime: Date.now() - startTime,
+      testMode,
+      dryRun
     }
-
-    return data || []
-  }
-
-  private async deleteExistingInstances(date: string): Promise<number> {
-    const { data, error } = await supabase
-      .from('task_instances')
-      .delete()
-      .eq('instance_date', date)
-      .select()
-
-    if (error) {
-      throw new Error(`Failed to delete existing instances: ${error.message}`)
-    }
-
-    return data?.length || 0
   }
 
   private log(level: 'silent' | 'info' | 'debug', message: string): void {
-    if (this.logLevel !== 'silent' && (this.logLevel === 'debug' || level === 'info')) {
-      console.log(`[NewTaskGenerator] ${message}`)
-    }
+    if (this.logLevel === 'silent') return
+    if (level === 'debug' && this.logLevel !== 'debug') return
+    
+    console.log(`[NewTaskGenerator] ${message}`)
   }
 }
 
@@ -640,13 +454,46 @@ export class NewTaskGenerator {
 // FACTORY FUNCTIONS
 // ========================================
 
-export function createNewTaskGenerator(publicHolidays: any[] = []): NewTaskGenerator {
-  return new NewTaskGenerator(publicHolidays)
+/**
+ * Create a new task generator instance with engine
+ */
+export async function createNewTaskGenerator(
+  logLevel: 'silent' | 'info' | 'debug' = 'info'
+): Promise<NewTaskGenerator> {
+  const engine = await createTaskRecurrenceStatusEngine()
+  return new NewTaskGenerator(engine, logLevel)
 }
 
-export function createNewTaskGeneratorWithConfig(
-  publicHolidays: any[] = [],
-  logLevel: 'silent' | 'info' | 'debug' = 'info'
-): NewTaskGenerator {
-  return new NewTaskGenerator(publicHolidays, logLevel)
+/**
+ * Run daily generation using the new engine
+ */
+export async function runNewDailyGeneration(
+  date?: string,
+  options: Partial<NewGenerationOptions> = {}
+): Promise<NewGenerationResult> {
+  const targetDate = date || new Date().toISOString().split('T')[0]
+  
+  const generator = await createNewTaskGenerator()
+  
+  return generator.generateForDate({
+    date: targetDate,
+    ...options
+  })
+}
+
+/**
+ * Run daily status updates using the new engine
+ */
+export async function runNewDailyStatusUpdate(
+  date?: string,
+  options: Partial<NewStatusUpdateOptions> = {}
+): Promise<NewStatusUpdateResult> {
+  const targetDate = date || new Date().toISOString().split('T')[0]
+  
+  const generator = await createNewTaskGenerator()
+  
+  return generator.updateStatusesForDate({
+    date: targetDate,
+    ...options
+  })
 }
