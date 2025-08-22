@@ -164,19 +164,15 @@ WHERE trigger_schema = 'public';
 -- SAMPLE DATA VERIFICATION
 -- ========================================
 
--- Check positions are properly named
+-- Check positions exist (no longer validating specific names since they're dynamic)
 SELECT 
     name,
-    CASE WHEN name IN (
-        'Pharmacist (Primary)',
-        'Pharmacist (Supporting)', 
-        'Pharmacy Assistants',
-        'Dispensary Technicians',
-        'DAA Packers',
-        'Operational/Managerial'
-    ) THEN '✓' ELSE '✗' END as valid_name
+    CASE WHEN name != 'Administrator' THEN '✓' ELSE '✗' END as is_staff_position,
+    CASE WHEN name IS NOT NULL AND LENGTH(name) > 0 THEN '✓' ELSE '✗' END as has_name
 FROM positions
 ORDER BY name;
+
+-- Note: Position names are now dynamic and can be customized per pharmacy
 
 -- Check system settings categories
 SELECT 

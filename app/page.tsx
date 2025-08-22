@@ -51,16 +51,9 @@ export default function HomePage() {
   
   // Helper function to get position descriptions
   const getPositionDescription = (displayName: string): string => {
-    const descriptions: Record<string, string> = {
-      "Pharmacist (Primary)": "Licensed pharmacist duties and clinical responsibilities",
-      "Pharmacist (Supporting)": "Supporting pharmacist tasks and backup duties", 
-      "Pharmacy Assistants": "Dispensing assistance and customer service tasks",
-      "Dispensary Technicians": "Technical dispensing and preparation tasks",
-      "DAA Packers": "Dose administration aid packing and quality control",
-      "Operational/Managerial": "Management oversight and operational tasks"
-    }
-    
-    return descriptions[displayName] || `${displayName} tasks and responsibilities`
+    // Generate generic description based on position name
+    // This removes hardcoded position names and works with any position from database
+    return `${displayName} tasks and responsibilities`
   }
   
   // Map position names to responsibility values using our utility

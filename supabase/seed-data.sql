@@ -1,4 +1,5 @@
 -- Insert Positions (using generated UUIDs)
+-- These are sample positions - can be customized per pharmacy's needs
 INSERT INTO positions (id, name, description) VALUES
   (gen_random_uuid(), 'Pharmacist (Primary)', 'Lead pharmacist responsible for clinical oversight'),
   (gen_random_uuid(), 'Pharmacist (Supporting)', 'Supporting pharmacist for dispensing and clinical duties'),
@@ -7,6 +8,9 @@ INSERT INTO positions (id, name, description) VALUES
   (gen_random_uuid(), 'DAA Packers', 'Dose Administration Aid packaging and preparation'),
   (gen_random_uuid(), 'Operational/Managerial', 'Management and operational oversight tasks')
 ON CONFLICT (name) DO NOTHING;
+
+-- Note: These are sample positions. Pharmacies can add, modify, or remove positions
+-- through the admin interface. The system dynamically adapts to any position names.
 
 -- Insert some sample Master Tasks
 INSERT INTO master_tasks (

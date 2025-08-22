@@ -65,19 +65,21 @@ export async function getPositionToResponsibilityMapping(): Promise<{ [key: stri
 
 /**
  * Convert position name to responsibility value
- * This maps the human-readable position names to the responsibility values used in master_tasks
+ * This dynamically converts any position name to a kebab-case responsibility value
+ * Removes hardcoded mappings and works with any position from database
  */
 function nameToResponsibilityValue(positionName: string): string | null {
-  const nameMapping: { [key: string]: string } = {
-    'Pharmacist (Primary)': 'pharmacist-primary',
-    'Pharmacist (Supporting)': 'pharmacist-supporting',
-    'Pharmacy Assistants': 'pharmacy-assistants',
-    'Dispensary Technicians': 'dispensary-technicians',
-    'DAA Packers': 'daa-packers',
-    'Operational/Managerial': 'operational-managerial'
+  if (!positionName || positionName === 'Administrator') {
+    return null
   }
-
-  return nameMapping[positionName] || null
+  
+  // Convert any position name to kebab-case
+  return positionName
+    .toLowerCase()
+    .trim()
+    .replace(/[()/]/g, ' ') // normalize punctuation
+    .replace(/[^a-z0-9]+/g, '-') // non-alphanum to dash
+    .replace(/^-+|-+$/g, '') // trim dashes
 }
 
 /**
@@ -126,16 +128,16 @@ export async function getPositionIdForResponsibility(responsibility: string): Pr
 
 /**
  * Get all available responsibility values
+ * Now dynamically fetched from database instead of hardcoded
  */
-export function getAllResponsibilityValues(): string[] {
-  return [
-    'pharmacist-primary',
-    'pharmacist-supporting', 
-    'pharmacy-assistants',
-    'dispensary-technicians',
-    'daa-packers',
-    'operational-managerial'
-  ]
+export async function getAllResponsibilityValues(): Promise<string[]> {
+  try {
+    const mapping = await getPositionToResponsibilityMapping()
+    return Object.values(mapping)
+  } catch (error) {
+    console.error('Error getting responsibility values:', error)
+    return [] // Return empty array if database query fails
+  }
 }
 
 /**
@@ -156,13 +158,14 @@ export async function getResponsibilityOptions(): Promise<{ value: string; label
 
     const positions: Array<{ name: string }> = response.ok ? await response.json() : []
 
-    const mapNameToValue: { [key: string]: string } = {
-      'Pharmacist (Primary)': 'pharmacist-primary',
-      'Pharmacist (Supporting)': 'pharmacist-supporting',
-      'Pharmacy Assistants': 'pharmacy-assistants',
-      'Dispensary Technicians': 'dispensary-technicians',
-      'DAA Packers': 'daa-packers',
-      'Operational/Managerial': 'operational-managerial'
+    // Dynamic mapping - convert any position name to kebab-case
+    const mapNameToValue = (name: string): string => {
+      return name
+        .toLowerCase()
+        .trim()
+        .replace(/[()/]/g, ' ') // normalize punctuation
+        .replace(/[^a-z0-9]+/g, '-') // non-alphanum to dash
+        .replace(/^-+|-+$/g, '') // trim dashes
     }
 
     const opts: { value: string; label: string }[] = []
@@ -171,7 +174,7 @@ export async function getResponsibilityOptions(): Promise<{ value: string; label
     if (positions && Array.isArray(positions)) {
       for (const p of positions) {
         if (!p?.name || p.name === 'Administrator') continue
-        const v = mapNameToValue[p.name] || p.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')
+        const v = mapNameToValue(p.name)
         if (!seen.has(v)) {
           opts.push({ value: v, label: p.name })
           seen.add(v)
@@ -179,25 +182,10 @@ export async function getResponsibilityOptions(): Promise<{ value: string; label
       }
     }
 
-    // Append shared options
-    const shared = [
-      { value: 'shared-inc-pharmacist', label: 'Shared (inc. Pharmacist)' },
-      { value: 'shared-exc-pharmacist', label: 'Shared (exc. Pharmacist)' }
-    ]
-    for (const s of shared) {
-      if (!seen.has(s.value)) {
-        opts.push(s)
-        seen.add(s.value)
-      }
-    }
-
     return opts
   } catch (e) {
     console.error('Error in getResponsibilityOptions:', e)
-    // Fallback: shared only if positions fail
-    return [
-      { value: 'shared-inc-pharmacist', label: 'Shared (inc. Pharmacist)' },
-      { value: 'shared-exc-pharmacist', label: 'Shared (exc. Pharmacist)' }
-    ]
+    // Fallback: return empty array if positions fail
+    return []
   }
 }

@@ -279,17 +279,9 @@ export function getUserIdFromRequest(request: any): string | null {
   }
 }
 
-// Position mapping for the 6 main position types
-export const POSITION_TYPES = {
-  'pharmacist-primary': 'Pharmacist (Primary)',
-  'pharmacist-supporting': 'Pharmacist (Supporting)', 
-  'pharmacy-assistants': 'Pharmacy Assistants',
-  'dispensary-technicians': 'Dispensary Technicians',
-  'daa-packers': 'DAA Packers',
-  'operational-managerial': 'Operational/Managerial'
-} as const
-
-export type PositionType = keyof typeof POSITION_TYPES
+// Position types are now loaded dynamically from the database
+// This removes hardcoded position mappings and uses database-driven data
+export type PositionType = string
 
 /**
  * Extract client information from request for audit logging

@@ -524,16 +524,11 @@ export const COMMON_CATEGORIES = [
 ] as const
 
 /**
- * Common responsibility roles
+ * Common responsibility roles - now loaded dynamically from database
+ * This array is kept for backward compatibility but should not be used for new features
+ * Use getResponsibilityOptions() from lib/position-utils.ts instead
  */
-export const COMMON_ROLES = [
-  'pharmacist-primary',
-  'pharmacist-supporting',
-  'pharmacy-assistants',
-  'dispensary-technicians',
-  'daa-packers',
-  'operational-managerial'
-] as const
+export const COMMON_ROLES: readonly string[] = []
 
 
 

@@ -253,15 +253,19 @@ CREATE TRIGGER update_positions_updated_at
 -- ========================================
 
 -- Insert sample positions if they don't exist (using generated UUIDs)
-INSERT INTO positions (id, name, description, password_hash, is_super_admin) 
+-- These are sample positions - can be customized per pharmacy's needs
+INSERT INTO positions (id, name, display_name, password_hash, is_super_admin) 
 VALUES 
-    (gen_random_uuid(), 'Pharmacist (Primary)', 'Lead pharmacist responsible for clinical oversight', '$2b$10$example_hash_1', false),
-    (gen_random_uuid(), 'Pharmacist (Supporting)', 'Supporting pharmacist for dispensing and clinical duties', '$2b$10$example_hash_2', false),
-    (gen_random_uuid(), 'Pharmacy Assistants', 'Front-of-house customer service and basic pharmacy tasks', '$2b$10$example_hash_3', false),
-    (gen_random_uuid(), 'Dispensary Technicians', 'Dispensing medication and inventory management', '$2b$10$example_hash_4', false),
-    (gen_random_uuid(), 'DAA Packers', 'Dose Administration Aid packaging and preparation', '$2b$10$example_hash_5', false),
-    (gen_random_uuid(), 'Operational/Managerial', 'Management and operational oversight tasks', '$2b$10$example_hash_6', false)
+    (gen_random_uuid(), 'Pharmacist (Primary)', 'Pharmacist (Primary)', '$2b$10$example_hash_1', false),
+    (gen_random_uuid(), 'Pharmacist (Supporting)', 'Pharmacist (Supporting)', '$2b$10$example_hash_2', false),
+    (gen_random_uuid(), 'Pharmacy Assistants', 'Pharmacy Assistants', '$2b$10$example_hash_3', false),
+    (gen_random_uuid(), 'Dispensary Technicians', 'Dispensary Technicians', '$2b$10$example_hash_4', false),
+    (gen_random_uuid(), 'DAA Packers', 'DAA Packers', '$2b$10$example_hash_5', false),
+    (gen_random_uuid(), 'Operational/Managerial', 'Operational/Managerial', '$2b$10$example_hash_6', false)
 ON CONFLICT (name) DO NOTHING;
+
+-- Note: These are sample positions. Pharmacies can add, modify, or remove positions
+-- through the admin interface. The system dynamically adapts to any position names.
 
 -- Insert sample system settings
 INSERT INTO system_settings (key, value, description) 

@@ -94,7 +94,7 @@ export async function GET(request: NextRequest) {
       })
     }
 
-    // Post-filter tasks based on responsibility rules (handles shared-inc/exc-pharmacist)
+    // Post-filter tasks based on responsibility rules
     const roleFiltered = responsibility 
       ? filterTasksByResponsibility(
           (masterTasks || []).map((t: any) => ({ ...t, responsibility: t.responsibility || [] })),

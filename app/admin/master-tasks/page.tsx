@@ -70,17 +70,8 @@ const frequencyLabels = {
   end_certain_months: 'End Certain Months'
 }
 
-// Define responsibility options for proper display names
-const RESPONSIBILITY_OPTIONS = [
-  { value: 'pharmacist-primary', label: 'Pharmacist (Primary)' },
-  { value: 'pharmacist-supporting', label: 'Pharmacist (Supporting)' },
-  { value: 'pharmacy-assistants', label: 'Pharmacy Assistant/s' },
-  { value: 'dispensary-technicians', label: 'Dispensary Technician/s' },
-  { value: 'daa-packers', label: 'DAA Packer/s' },
-  { value: 'shared-exc-pharmacist', label: 'Shared (exc. Pharmacist)' },
-  { value: 'shared-inc-pharmacist', label: 'Shared (inc. Pharmacist)' },
-  { value: 'operational-managerial', label: 'Operational/Managerial' }
-]
+// Dynamic responsibility options - loaded from database
+let RESPONSIBILITY_OPTIONS: { value: string; label: string }[] = []
 
 // Define category options for proper display names
 const CATEGORY_OPTIONS = [
@@ -109,17 +100,25 @@ const getCategoryDisplayName = (value: string): string => {
 // Helper to get badge color based on type and value
 const getBadgeClass = (item: string, type: string) => {
   if (type === "responsibility") {
-    const colorMap: Record<string, string> = {
-      'pharmacist-primary': 'bg-blue-100 text-blue-800 border-blue-200',
-      'pharmacist-supporting': 'bg-sky-100 text-sky-800 border-sky-200',
-      'pharmacy-assistants': 'bg-green-100 text-green-800 border-green-200',
-      'dispensary-technicians': 'bg-teal-100 text-teal-800 border-teal-200',
-      'daa-packers': 'bg-emerald-100 text-emerald-800 border-emerald-200',
-      'shared-exc-pharmacist': 'bg-amber-100 text-amber-800 border-amber-200',
-      'shared-inc-pharmacist': 'bg-orange-100 text-orange-800 border-orange-200',
-      'operational-managerial': 'bg-purple-100 text-purple-800 border-purple-200'
+    // Dynamic color assignment based on hash of the item name
+    const colors = [
+      'bg-blue-100 text-blue-800 border-blue-200',
+      'bg-sky-100 text-sky-800 border-sky-200',
+      'bg-green-100 text-green-800 border-green-200',
+      'bg-teal-100 text-teal-800 border-teal-200',
+      'bg-emerald-100 text-emerald-800 border-emerald-200',
+      'bg-purple-100 text-purple-800 border-purple-200',
+      'bg-indigo-100 text-indigo-800 border-indigo-200',
+      'bg-pink-100 text-pink-800 border-pink-200',
+      'bg-rose-100 text-rose-800 border-rose-200',
+      'bg-orange-100 text-orange-800 border-orange-200'
+    ]
+    // Simple hash function to consistently assign colors
+    let hash = 0
+    for (let i = 0; i < item.length; i++) {
+      hash = ((hash << 5) - hash + item.charCodeAt(i)) & 0xffffffff
     }
-    return colorMap[item] || ''
+    return colors[Math.abs(hash) % colors.length]
   } else if (type === "category") {
     const colorMap: Record<string, string> = {
       'stock-control': 'bg-blue-50 text-blue-700 border-blue-100',
@@ -546,7 +545,7 @@ const TaskDetailsModal = ({ task, positions }: { task: MasterTask, positions: Po
             <CardContent className="space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 {task.due_date && (
-                  <div className="p-3 bg-gray-50 rounded-md border border-gray-100">
+                  <div className="flex items-center justify-between p-4 bg-gray-50 rounded-md border border-gray-100 shadow-sm">
                     <label className="text-sm font-medium text-gray-600">Due Date (Once-off)</label>
                     <p className="text-sm mt-1">{new Date(task.due_date).toLocaleDateString()}</p>
                   </div>
@@ -564,13 +563,13 @@ const TaskDetailsModal = ({ task, positions }: { task: MasterTask, positions: Po
                   </div>
                 )}
                 {task.end_date && (
-                  <div className="p-3 bg-gray-50 rounded-md border border-gray-100">
+                  <div className="flex items-center justify-between p-4 bg-gray-50 rounded-md border border-gray-100 shadow-sm">
                     <label className="text-sm font-medium text-gray-600">End Date</label>
                     <p className="text-sm mt-1">{new Date(task.end_date).toLocaleDateString()}</p>
                   </div>
                 )}
                 {task.publish_delay_date && (
-                  <div className="p-3 bg-gray-50 rounded-md border border-gray-100">
+                  <div className="flex items-center justify-between p-4 bg-gray-50 rounded-md border border-gray-100 shadow-sm">
                     <label className="text-sm font-medium text-gray-600">Publish Delay Date</label>
                     <p className="text-sm mt-1">{new Date(task.publish_delay_date).toLocaleDateString()}</p>
                   </div>
@@ -698,6 +697,19 @@ export default function AdminMasterTasksPage() {
       ])
       console.log('Loaded tasks:', tasksData.length)
       console.log('Loaded positions:', positionsData.length)
+
+      // Load responsibility options from positions (excluding Administrator)
+      const responsibilityOptions = positionsData
+        .filter((position: any) => position.name !== 'Administrator')
+        .map((position: any) => ({
+          value: position.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, ''),
+          label: position.name
+        }))
+      
+      // No longer adding shared options - they have been removed
+      
+      RESPONSIBILITY_OPTIONS.length = 0 // Clear existing array
+      RESPONSIBILITY_OPTIONS.push(...responsibilityOptions) // Add new options
 
       // Debug: Log the first few tasks to see their structure
       if (tasksData.length > 0) {

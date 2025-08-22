@@ -265,12 +265,12 @@ export function PositionLoginModal({
             <p className="text-sm text-[var(--color-text)] mb-2 font-medium">Demo Passwords:</p>
             <div className="text-xs space-y-1 text-[var(--color-text-muted)]">
               <p>Administrator: admin123</p>
-              <p>Pharmacist (Primary): pharmprim123</p>
-              <p>Pharmacist (Supporting): pharmsup123</p>
-              <p>Pharmacy Assistants: assistant123</p>
-              <p>Dispensary Technicians: tech123</p>
-              <p>DAA Packers: packer123</p>
-              <p>Operational/Managerial: ops123</p>
+              {availablePositions
+                .filter(pos => pos.role !== 'admin' && !pos.displayName.toLowerCase().includes('admin'))
+                .map(pos => (
+                  <p key={pos.id}>{pos.displayName}: {pos.displayName.toLowerCase().replace(/[^a-z0-9]/g, '')}123</p>
+                ))
+              }
             </div>
           </div>
         )}

@@ -107,15 +107,9 @@ export const PHARMACY_COLORS = {
   accentGreen: "#3fa846",
 } as const
 
-// Position types for the pharmacy
-export const POSITION_TYPES = [
-  "Pharmacist (Primary)",
-  "Pharmacist (Supporting)",
-  "Pharmacy Assistants",
-  "Dispensary Technicians",
-  "DAA Packers",
-  "Operational/Managerial",
-] as const
+// Position types are now loaded dynamically from the database
+// This removes hardcoded position names and uses database-driven data
+export const POSITION_TYPES: readonly string[] = []
 
 // Weekdays for specific weekday frequencies
 export const WEEKDAYS = [

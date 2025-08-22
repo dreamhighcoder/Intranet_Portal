@@ -245,8 +245,8 @@ CREATE POLICY "Position users can read own data" ON positions
     ) AND
     -- Allow if the position ID matches the authenticated position
     id::text = current_setting('app.position_id', true) OR
-    -- Or if it's a public position
-    name IN ('pharmacist-primary', 'pharmacist-supporting', 'pharmacy-assistants')
+    -- Or if it's a non-admin position (dynamic check instead of hardcoded names)
+    (name IS NOT NULL AND name != 'Administrator')
   );
 
 -- Allow position-based users to update task instances for their position

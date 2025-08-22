@@ -12,17 +12,8 @@ import { createHolidayHelper } from '@/lib/public-holidays'
 import type { MasterChecklistTask, FrequencyRule, FrequencyType } from '@/types/checklist'
 import { toDisplayFormat } from '@/lib/responsibility-mapper'
 
-// Define responsibility options for proper display names
-const RESPONSIBILITY_OPTIONS = [
-  { value: 'pharmacist-primary', label: 'Pharmacist (Primary)' },
-  { value: 'pharmacist-supporting', label: 'Pharmacist (Supporting)' },
-  { value: 'pharmacy-assistants', label: 'Pharmacy Assistant/s' },
-  { value: 'dispensary-technicians', label: 'Dispensary Technician/s' },
-  { value: 'daa-packers', label: 'DAA Packer/s' },
-  { value: 'shared-exc-pharmacist', label: 'Shared (exc. Pharmacist)' },
-  { value: 'shared-inc-pharmacist', label: 'Shared (inc. Pharmacist)' },
-  { value: 'operational-managerial', label: 'Operational/Managerial' }
-]
+// Responsibility options are now handled dynamically via toDisplayFormat utility
+// This removes hardcoded position names and uses database-driven data
 
 // Define category options for proper display names
 const CATEGORY_OPTIONS = [

@@ -185,14 +185,9 @@ export interface DashboardStats {
   tasks_created_this_month: number
 }
 
-export type PositionType =
-  | "administrator"
-  | "pharmacist-primary"
-  | "pharmacist-supporting"
-  | "pharmacy-assistants"
-  | "dispensary-technicians"
-  | "daa-packers"
-  | "operational-managerial"
+// Position types are now loaded dynamically from the database
+// This type is kept as string for backward compatibility
+export type PositionType = string
 
 export interface PositionAuth {
   id: string
