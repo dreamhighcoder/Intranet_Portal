@@ -68,8 +68,39 @@ export default function RoleChecklistPage() {
   const router = useRouter()
   const searchParams = useSearchParams()
   
-  const role = params.role as string
+  const rawRole = params.role as string
   const userRole = isAdmin ? 'admin' : 'viewer'
+
+  // Validate and decode role parameter
+  if (!rawRole || typeof rawRole !== 'string') {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <h1 className="text-2xl font-bold text-red-600 mb-2">Invalid Role</h1>
+          <p className="text-gray-600">The role parameter is missing or invalid.</p>
+        </div>
+      </div>
+    )
+  }
+
+  // Decode URL-encoded role parameter and validate
+  let role: string
+  try {
+    role = decodeURIComponent(rawRole)
+    // Additional validation to ensure it's a valid role format
+    if (role.includes('[') || role.includes(']') || role.includes('%')) {
+      throw new Error('Invalid role format')
+    }
+  } catch (error) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <h1 className="text-2xl font-bold text-red-600 mb-2">Invalid Role Format</h1>
+          <p className="text-gray-600">The role parameter contains invalid characters.</p>
+        </div>
+      </div>
+    )
+  }
 
   const [currentDate, setCurrentDate] = useState(() => {
     return searchParams.get("date") || new Date().toISOString().split("T")[0]
@@ -163,7 +194,19 @@ export default function RoleChecklistPage() {
       } catch (error) {
         console.error('Error loading tasks:', error)
         setTasks([])
-        toastError("Error", "Failed to load tasks. Please try again.")
+        
+        // More specific error handling
+        if (error instanceof Error) {
+          if (error.message.includes('ChunkLoadError') || error.message.includes('Loading chunk')) {
+            toastError("Loading Error", "Failed to load page resources. Please refresh the page.")
+          } else if (error.message.includes('Network')) {
+            toastError("Network Error", "Please check your internet connection and try again.")
+          } else {
+            toastError("Error", `Failed to load tasks: ${error.message}`)
+          }
+        } else {
+          toastError("Error", "Failed to load tasks. Please try again.")
+        }
       } finally {
         setLoading(false)
       }

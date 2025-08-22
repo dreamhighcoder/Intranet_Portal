@@ -61,7 +61,9 @@ async function getCompletionRateReport(startDate?: string | null, endDate?: stri
       query = query.contains('master_tasks.responsibility', [responsibilityValue])
     }
   }
-  if (category) query = query.contains('master_tasks.categories', [category])
+  if (category && category !== 'all') {
+    query = query.contains('master_tasks.categories', [category])
+  }
 
   const { data: tasks, error } = await query
 
@@ -71,9 +73,9 @@ async function getCompletionRateReport(startDate?: string | null, endDate?: stri
   }
 
   const totalTasks = tasks?.length || 0
-  const completedTasks = tasks?.filter(task => task.status === 'completed').length || 0
+  const completedTasks = tasks?.filter(task => task.status === 'done').length || 0
   const onTimeCompletions = tasks?.filter(task => 
-    task.status === 'completed' && 
+    task.status === 'done' && 
     task.completed_at && 
     new Date(task.completed_at) <= new Date(task.due_date)
   ).length || 0
@@ -104,7 +106,7 @@ async function getAverageCompletionTimeReport(startDate?: string | null, endDate
         responsibility
       )
     `)
-    .eq('status', 'completed')
+    .eq('status', 'done')
     .not('completed_at', 'is', null)
 
   if (startDate) query = query.gte('due_date', startDate)
@@ -115,7 +117,9 @@ async function getAverageCompletionTimeReport(startDate?: string | null, endDate
       query = query.contains('master_tasks.responsibility', [responsibilityValue])
     }
   }
-  if (category) query = query.contains('master_tasks.categories', [category])
+  if (category && category !== 'all') {
+    query = query.contains('master_tasks.categories', [category])
+  }
 
   const { data: tasks, error } = await query
 
@@ -154,11 +158,8 @@ async function getMissedTasksReport(startDate?: string | null, endDate?: string 
       due_date,
       master_tasks (
         title,
-        category,
-        positions (
-          id,
-          name
-        )
+        categories,
+        responsibility
       )
     `)
     .eq('status', 'missed')
@@ -171,7 +172,9 @@ async function getMissedTasksReport(startDate?: string | null, endDate?: string 
       query = query.contains('master_tasks.responsibility', [responsibilityValue])
     }
   }
-  if (category) query = query.contains('master_tasks.categories', [category])
+  if (category && category !== 'all') {
+    query = query.contains('master_tasks.categories', [category])
+  }
 
   const { data: missedTasks, error } = await query
 
@@ -195,18 +198,17 @@ async function getMissedTasksByPositionReport(startDate?: string | null, endDate
       due_date,
       master_tasks (
         title,
-        category,
-        positions (
-          id,
-          name
-        )
+        categories,
+        responsibility
       )
     `)
     .eq('status', 'missed')
 
   if (startDate) query = query.gte('due_date', startDate)
   if (endDate) query = query.lte('due_date', endDate)
-  if (category) query = query.contains('master_tasks.categories', [category])
+  if (category && category !== 'all') {
+    query = query.contains('master_tasks.categories', [category])
+  }
 
   const { data: missedTasks, error } = await query
 
@@ -215,18 +217,20 @@ async function getMissedTasksByPositionReport(startDate?: string | null, endDate
     return NextResponse.json({ error: 'Failed to fetch missed tasks by position data' }, { status: 500 })
   }
 
-  const positionStats = (missedTasks || []).reduce((acc: any, task: any) => {
-    const positionName = task.master_tasks?.positions?.name || 'Unknown'
-    if (!acc[positionName]) {
-      acc[positionName] = 0
-    }
-    acc[positionName]++
+  const responsibilityStats = (missedTasks || []).reduce((acc: any, task: any) => {
+    const responsibilities = task.master_tasks?.responsibility || []
+    responsibilities.forEach((responsibility: string) => {
+      if (!acc[responsibility]) {
+        acc[responsibility] = 0
+      }
+      acc[responsibility]++
+    })
     return acc
   }, {})
 
   return NextResponse.json({
     totalMissedTasks: missedTasks?.length || 0,
-    positionStats
+    positionStats: responsibilityStats
   })
 }
 
@@ -239,11 +243,8 @@ async function getOutstandingTasksReport(positionId?: string | null, category?: 
       due_date,
       master_tasks (
         title,
-        category,
-        positions (
-          id,
-          name
-        )
+        categories,
+        responsibility
       )
     `)
     .in('status', ['overdue', 'missed'])
@@ -255,7 +256,9 @@ async function getOutstandingTasksReport(positionId?: string | null, category?: 
       query = query.contains('master_tasks.responsibility', [responsibilityValue])
     }
   }
-  if (category) query = query.contains('master_tasks.categories', [category])
+  if (category && category !== 'all') {
+    query = query.contains('master_tasks.categories', [category])
+  }
 
   const { data: outstandingTasks, error } = await query
 
@@ -280,11 +283,8 @@ async function getTaskSummaryReport(startDate?: string | null, endDate?: string 
       completed_at,
       master_tasks (
         title,
-        category,
-        positions (
-          id,
-          name
-        )
+        categories,
+        responsibility
       )
     `)
 
@@ -296,7 +296,9 @@ async function getTaskSummaryReport(startDate?: string | null, endDate?: string 
       query = query.contains('master_tasks.responsibility', [responsibilityValue])
     }
   }
-  if (category) query = query.contains('master_tasks.categories', [category])
+  if (category && category !== 'all') {
+    query = query.contains('master_tasks.categories', [category])
+  }
 
   const { data: tasks, error } = await query
 

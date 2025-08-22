@@ -54,7 +54,7 @@ export function Navigation() {
   const navItems = isAdmin
     ? [
         { href: "/admin", label: "Dashboard" },
-        { href: "/checklist", label: "Checklists" },
+        { href: `/checklist/${toKebabCase(user?.position?.displayName || user?.position?.name || 'admin')}`, label: "Checklist" },
         { href: "/calendar", label: "Calendar" },
         { href: "/admin/reports", label: "Reports" },
       ]

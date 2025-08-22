@@ -67,10 +67,8 @@ interface ReportData {
       due_date: string
       master_tasks: {
         title: string
-        category?: string
-        positions: {
-          name: string
-        }
+        categories?: string[]
+        responsibility?: string[]
       }
     }>
   }
@@ -86,10 +84,8 @@ interface ReportData {
       due_date: string
       master_tasks: {
         title: string
-        category?: string
-        positions: {
-          name: string
-        }
+        categories?: string[]
+        responsibility?: string[]
       }
     }>
   }
@@ -101,8 +97,11 @@ interface ReportData {
 }
 
 const COLORS = {
+  done: '#4CAF50',
   completed: '#4CAF50',
   pending: '#2196F3',
+  not_due: '#2196F3',
+  due_today: '#2196F3',
   overdue: '#FF9800',
   missed: '#F44336',
   primary: '#1976D2'
@@ -239,11 +238,11 @@ export default function ReportsPage() {
       // Export missed tasks data
       if (reportData.missedTasks?.missedTasks) {
         const missedData = [
-          ['Task Title', 'Category', 'Position', 'Due Date'],
+          ['Task Title', 'Category', 'Responsibility', 'Due Date'],
           ...reportData.missedTasks.missedTasks.map(task => [
             task.master_tasks.title,
-            task.master_tasks.category || 'N/A',
-            task.master_tasks.positions.name,
+            task.master_tasks.categories?.join(', ') || 'N/A',
+            task.master_tasks.responsibility?.join(', ') || 'N/A',
             task.due_date
           ])
         ]
@@ -254,12 +253,12 @@ export default function ReportsPage() {
       // Export outstanding tasks data
       if (reportData.outstandingTasks?.outstandingTasks) {
         const outstandingData = [
-          ['Task Title', 'Status', 'Category', 'Position', 'Due Date'],
+          ['Task Title', 'Status', 'Category', 'Responsibility', 'Due Date'],
           ...reportData.outstandingTasks.outstandingTasks.map(task => [
             task.master_tasks.title,
             task.status,
-            task.master_tasks.category || 'N/A',
-            task.master_tasks.positions.name,
+            task.master_tasks.categories?.join(', ') || 'N/A',
+            task.master_tasks.responsibility?.join(', ') || 'N/A',
             task.due_date
           ])
         ]
@@ -377,7 +376,7 @@ export default function ReportsPage() {
             <TableHeader>
               <TableRow>
                 <TableHead>Task</TableHead>
-                <TableHead>Position</TableHead>
+                <TableHead>Responsibility</TableHead>
                 <TableHead>Category</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead>Due Date</TableHead>
@@ -387,8 +386,8 @@ export default function ReportsPage() {
               {reportData.outstandingTasks.outstandingTasks.slice(0, 10).map((task) => (
                 <TableRow key={task.id}>
                   <TableCell className="font-medium">{task.master_tasks.title}</TableCell>
-                  <TableCell>{task.master_tasks.positions.name}</TableCell>
-                  <TableCell>{task.master_tasks.category || 'N/A'}</TableCell>
+                  <TableCell>{task.master_tasks.responsibility?.join(', ') || 'N/A'}</TableCell>
+                  <TableCell>{task.master_tasks.categories?.join(', ') || 'N/A'}</TableCell>
                   <TableCell>
                     <Badge className={
                       task.status === 'overdue' 
@@ -514,8 +513,8 @@ export default function ReportsPage() {
                   <SelectContent>
                     <SelectItem value="all">All Categories</SelectItem>
                     {TASK_CATEGORIES.map(category => (
-                      <SelectItem key={category} value={category}>
-                        {category}
+                      <SelectItem key={category.value} value={category.value}>
+                        {category.label}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -633,7 +632,7 @@ export default function ReportsPage() {
                 <TableHeader>
                   <TableRow>
                     <TableHead>Task</TableHead>
-                    <TableHead>Position</TableHead>
+                    <TableHead>Responsibility</TableHead>
                     <TableHead>Category</TableHead>
                     <TableHead>Due Date</TableHead>
                   </TableRow>
@@ -642,8 +641,8 @@ export default function ReportsPage() {
                   {reportData.missedTasks.missedTasks.map((task) => (
                     <TableRow key={task.id}>
                       <TableCell className="font-medium">{task.master_tasks.title}</TableCell>
-                      <TableCell>{task.master_tasks.positions.name}</TableCell>
-                      <TableCell>{task.master_tasks.category || 'N/A'}</TableCell>
+                      <TableCell>{task.master_tasks.responsibility?.join(', ') || 'N/A'}</TableCell>
+                      <TableCell>{task.master_tasks.categories?.join(', ') || 'N/A'}</TableCell>
                       <TableCell>{new Date(task.due_date).toLocaleDateString()}</TableCell>
                     </TableRow>
                   ))}

@@ -29,12 +29,8 @@ export default function HomePage() {
         router.push('/admin')
       } else {
         // Redirect to role-based checklist route
-        const role = toKebabCase(user.displayName || '')
-        if (role) {
-          router.push(`/checklist/${role}`)
-        } else {
-          router.push('/checklist')
-        }
+        const role = toKebabCase(user.displayName || user.position?.displayName || user.position?.name || 'user')
+        router.push(`/checklist/${role}`)
       }
     }
   }, [user, isLoading, router])

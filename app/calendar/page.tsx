@@ -9,6 +9,7 @@ import { Badge } from "@/components/ui/badge"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { authenticatedGet, positionsApi } from "@/lib/api-client"
 import { toastError } from "@/hooks/use-toast"
+import { toKebabCase } from "@/lib/responsibility-mapper"
 import { 
   ChevronLeft, 
   ChevronRight, 
@@ -200,11 +201,8 @@ export default function CalendarPage() {
     let targetRole = 'pharmacist-in-charge' // default role
     
     if (user?.position?.name) {
-      // Convert position name to kebab-case for URL
-      targetRole = user.position.name
-        .toLowerCase()
-        .replace(/\s+/g, '-')
-        .replace(/[^a-z0-9-]/g, '')
+      // Convert position name to kebab-case for URL using the proper utility function
+      targetRole = toKebabCase(user.position.name)
     }
     
     router.push(`/checklist/${targetRole}?date=${date}`)

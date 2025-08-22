@@ -109,6 +109,14 @@ export default function AdminDashboard() {
       bgColor: "bg-blue-100",
     },
     {
+      title: "Position Checklists",
+      description: "View daily checklists and task status for all positions",
+      icon: ClipboardList,
+      href: "/checklist",
+      color: "text-teal-600",
+      bgColor: "bg-teal-100",
+    },
+    {
       title: "Reports",
       description: "View performance analytics and completion reports",
       icon: BarChart3,
