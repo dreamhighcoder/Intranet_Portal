@@ -9,9 +9,76 @@ const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
 const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey)
 
+// Convert frequencies array to frequency_rules format for the recurrence engine
+function convertFrequenciesToRules(frequencies: string[]): any {
+  if (!frequencies || frequencies.length === 0) {
+    return { type: 'daily' }
+  }
+
+  // Handle the most common cases first
+  if (frequencies.includes('every_day')) {
+    return { type: 'daily', every_n_days: 1, business_days_only: false }
+  }
+
+  if (frequencies.includes('once_off')) {
+    return { type: 'once_off' }
+  }
+
+  // Handle specific weekdays
+  const weekdays = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday']
+  const selectedWeekdays = frequencies.filter(f => weekdays.includes(f))
+  if (selectedWeekdays.length > 0) {
+    // Map weekday names to numbers (1=Monday, 7=Sunday)
+    const weekdayMap: { [key: string]: number } = {
+      'monday': 1, 'tuesday': 2, 'wednesday': 3, 'thursday': 4, 
+      'friday': 5, 'saturday': 6, 'sunday': 7
+    }
+    const weekdayNumbers = selectedWeekdays.map(day => weekdayMap[day]).filter(Boolean)
+    
+    if (weekdayNumbers.length === 1) {
+      return { type: 'weekly', start_day: weekdayNumbers[0], every_n_weeks: 1 }
+    } else {
+      return { type: 'specific_weekdays', weekdays: weekdayNumbers, every_n_weeks: 1 }
+    }
+  }
+
+  // Handle monthly patterns
+  if (frequencies.includes('start_of_every_month')) {
+    return { type: 'start_of_month', day_of_month: 1 }
+  }
+
+  if (frequencies.includes('end_of_every_month')) {
+    return { type: 'end_of_month', days_from_end: 0 }
+  }
+
+  // Handle specific month patterns
+  const monthlyPatterns = frequencies.filter(f => f.startsWith('start_of_month_') || f.startsWith('end_of_month_'))
+  if (monthlyPatterns.length > 0) {
+    const monthMap: { [key: string]: number } = {
+      'jan': 1, 'feb': 2, 'mar': 3, 'apr': 4, 'may': 5, 'jun': 6,
+      'jul': 7, 'aug': 8, 'sep': 9, 'oct': 10, 'nov': 11, 'dec': 12
+    }
+    
+    const months = monthlyPatterns.map(pattern => {
+      const monthKey = pattern.split('_').pop()
+      return monthKey ? monthMap[monthKey] : null
+    }).filter(Boolean)
+
+    if (monthlyPatterns[0].startsWith('start_of_month_')) {
+      return { type: 'start_certain_months', months, day_of_month: 1 }
+    } else {
+      return { type: 'end_certain_months', months, days_from_end: 0 }
+    }
+  }
+
+  // Default fallback
+  return { type: 'daily', every_n_days: 1, business_days_only: false }
+}
+
 export async function GET(request: NextRequest) {
   try {
     const user = await requireAuth(request)
+    
     const searchParams = request.nextUrl.searchParams
     
     const year = parseInt(searchParams.get('year') || new Date().getFullYear().toString())
@@ -59,8 +126,16 @@ export async function GET(request: NextRequest) {
       if (position) {
         responsibility = toKebabCase(position.display_name || position.name)
       }
-    } else if (user.role !== 'admin') {
-      responsibility = toKebabCase(user.position?.displayName || user.position?.name || '')
+    } else if (user.role !== 'admin' && user.position_id) {
+      // Fetch user's position to map to responsibility
+      const { data: position } = await supabaseAdmin
+        .from('positions')
+        .select('name, display_name')
+        .eq('id', user.position_id)
+        .maybeSingle()
+      if (position) {
+        responsibility = toKebabCase(position.display_name || position.name)
+      }
     }
 
     // Get holidays
@@ -87,7 +162,7 @@ export async function GET(request: NextRequest) {
         start_date,
         end_date,
         due_time,
-        frequency_rules,
+        frequencies,
         created_at
       `)
       .eq('publish_status', 'active')
@@ -130,15 +205,24 @@ export async function GET(request: NextRequest) {
     // Fill occurrences using recurrence engine
     const now = new Date()
     for (const task of roleFiltered) {
+      // Convert frequencies array to frequency_rules format for the recurrence engine
+      const frequency_rules = convertFrequenciesToRules(task.frequencies || [])
+      
       // iterate across range and add when due
       const iter = new Date(startDate)
       while (iter <= endDate) {
-        const isDue = recurrenceEngine.isDueOnDate({
-          id: task.id,
-          frequency_rules: task.frequency_rules || {},
-          start_date: task.start_date || task.created_at?.split('T')[0],
-          end_date: task.end_date
-        }, iter)
+        let isDue = false
+        try {
+          isDue = recurrenceEngine.isDueOnDate({
+            id: task.id,
+            frequency_rules: frequency_rules,
+            start_date: task.start_date || task.created_at?.split('T')[0],
+            end_date: task.end_date
+          }, iter)
+        } catch (error) {
+          console.error('Error checking if task is due:', error)
+          isDue = false
+        }
         if (isDue) {
           const ds = iter.toISOString().split('T')[0]
           const day = calendarMap[ds]
@@ -183,7 +267,7 @@ export async function GET(request: NextRequest) {
       ? Math.round((summary.completedTasks / summary.totalTasks) * 100 * 100) / 100
       : 0
 
-    return NextResponse.json({
+    const responseData = {
       calendar: calendarArray,
       summary: { ...summary, completionRate },
       metadata: {
@@ -196,7 +280,18 @@ export async function GET(request: NextRequest) {
         totalDays: calendarArray.length,
         daysWithTasks: calendarArray.filter((d: any) => d.total > 0).length
       }
-    })
+    }
+    
+
+    
+    const response = NextResponse.json(responseData)
+    
+    // Add CORS headers to help with browser requests
+    response.headers.set('Access-Control-Allow-Origin', '*')
+    response.headers.set('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS')
+    response.headers.set('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Position-User-Id, X-Position-User-Role, X-Position-Display-Name')
+    
+    return response
 
   } catch (error) {
     if (error instanceof Error && error.message.includes('Authentication')) {
@@ -204,7 +299,16 @@ export async function GET(request: NextRequest) {
     }
     
     console.error('Unexpected error:', error)
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+    
+    // Return detailed error information for debugging
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+    const errorStack = error instanceof Error ? error.stack : undefined
+    
+    return NextResponse.json({ 
+      error: 'Internal server error',
+      details: errorMessage,
+      stack: errorStack
+    }, { status: 500 })
   }
 }
 
@@ -237,4 +341,16 @@ export async function POST(request: NextRequest) {
     console.error('Unexpected error:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
+}
+
+// OPTIONS handler for CORS preflight requests
+export async function OPTIONS(request: NextRequest) {
+  const response = new NextResponse(null, { status: 200 })
+  
+  response.headers.set('Access-Control-Allow-Origin', '*')
+  response.headers.set('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS')
+  response.headers.set('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Position-User-Id, X-Position-User-Role, X-Position-Display-Name')
+  response.headers.set('Access-Control-Max-Age', '86400')
+  
+  return response
 }

@@ -134,10 +134,13 @@ export default function CalendarPage() {
         params.append('date', currentDate.toISOString().split('T')[0])
       }
 
-      const data = await authenticatedGet(`/api/calendar?${params.toString()}`)
+      const url = `/api/calendar?${params.toString()}`
+      console.log('Calendar Page - Making request to:', url)
+      const data = await authenticatedGet(url)
+      console.log('Calendar Page - Received data:', data)
       setCalendarData(data)
     } catch (error) {
-      console.error('Error loading calendar data:', error)
+      console.error('Calendar Page - Error loading calendar data:', error)
       toastError("Error", "Failed to load calendar data")
     } finally {
       setLoading(false)

@@ -18,12 +18,12 @@ import { supabase } from "@/lib/supabase"
 import * as XLSX from 'xlsx'
 import { toastSuccess, toastError } from "@/hooks/use-toast"
 import type { MasterChecklistTask, CreateMasterTaskRequest, UpdateMasterTaskRequest } from "@/types/checklist"
-import { 
-  Plus, 
-  Edit, 
-  Trash2, 
-  Calendar, 
-  Clock, 
+import {
+  Plus,
+  Edit,
+  Trash2,
+  Calendar,
+  Clock,
   Search,
   Download,
   Upload,
@@ -138,8 +138,8 @@ const getBadgeClass = (item: string, type: string) => {
 
 // Helper function to render truncated array with badges
 const renderTruncatedArray = (
-  items: string[] | undefined, 
-  maxVisible: number = 2, 
+  items: string[] | undefined,
+  maxVisible: number = 2,
   variant: "default" | "secondary" | "outline" = "secondary",
   type: "responsibility" | "category" | "general" = "general"
 ) => {
@@ -167,11 +167,11 @@ const renderTruncatedArray = (
       {visibleItems.map((item, index) => {
         const displayName = getDisplayName(item)
         const badgeClass = getBadgeClass(item, type)
-        
+
         return (
-          <Badge 
-            key={index} 
-            variant={variant} 
+          <Badge
+            key={index}
+            variant={variant}
             className={`text-xs truncate ${badgeClass}`}
             title={displayName}
           >
@@ -180,9 +180,9 @@ const renderTruncatedArray = (
         )
       })}
       {remainingCount > 0 && (
-        <Badge 
-          variant="outline" 
-          className="text-xs bg-gray-100" 
+        <Badge
+          variant="outline"
+          className="text-xs bg-gray-100"
           title={`${remainingCount} more: ${items.slice(maxVisible).map(item => getDisplayName(item)).join(', ')}`}
         >
           + {remainingCount}
@@ -207,7 +207,7 @@ const getFrequencyBadgeColor = (frequency: string | null | undefined) => {
   if (!frequency) {
     return 'bg-gray-100 text-gray-800 border-gray-200'
   }
-  
+
   const colorMap: Record<string, string> = {
     'once_off': 'bg-purple-100 text-purple-800 border-purple-200',
     'once_off_sticky': 'bg-purple-100 text-purple-800 border-purple-200',
@@ -262,7 +262,7 @@ const getFrequencyBadgeColor = (frequency: string | null | undefined) => {
 const renderFrequencyWithDetails = (task: MasterTask) => {
   // Use frequencies array
   const frequencies = task.frequencies || []
-  
+
   if (frequencies.length === 0) {
     return <span className="text-gray-400 text-xs">No frequency set</span>
   }
@@ -280,16 +280,16 @@ const renderFrequencyWithDetails = (task: MasterTask) => {
           </Badge>
         ))}
         {frequencies.length > 2 && (
-          <Badge 
-            variant="outline" 
-            className="text-xs bg-gray-100" 
+          <Badge
+            variant="outline"
+            className="text-xs bg-gray-100"
             title={`${frequencies.length - 2} more: ${frequencies.slice(2).map(f => formatFrequency(f)).join(', ')}`}
           >
             +{frequencies.length - 2}
           </Badge>
         )}
       </div>
-      
+
       {/* Timing */}
       {task.timing && (
         <div className="flex items-center gap-1">
@@ -319,7 +319,7 @@ const TaskDetailsModal = ({ task, positions }: { task: MasterTask, positions: Po
           Task Details
         </DialogTitle>
       </DialogHeader>
-      
+
       {/* Scrollable Content */}
       <div className="flex-1 overflow-y-auto px-1 py-4 space-y-6">
         {/* Basic Information */}
@@ -332,34 +332,27 @@ const TaskDetailsModal = ({ task, positions }: { task: MasterTask, positions: Po
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
+              <div className="items-center  p-4 bg-gray-50 rounded-md border border-gray-100 shadow-sm">
                 <label className="text-sm font-medium text-gray-600">Title</label>
                 <p className="text-sm mt-1 font-medium">{task.title}</p>
               </div>
-              <div>
+              <div className="flex items-center justify-between p-4 bg-gray-50 rounded-md border border-gray-100 shadow-sm">
                 <label className="text-sm font-medium text-gray-600">Status</label>
                 <div className="mt-1">
-                  <Badge className={task.publish_status === 'active' ? 'bg-green-100 text-green-800 border border-green-200' : 
-                                  task.publish_status === 'draft' ? 'bg-yellow-100 text-yellow-800 border border-yellow-200' : 
-                                  'bg-gray-100 text-gray-800 border border-gray-200'}>
+                  <Badge className={task.publish_status === 'active' ? 'bg-green-100 text-green-800 border border-green-200' :
+                    task.publish_status === 'draft' ? 'bg-yellow-100 text-yellow-800 border border-yellow-200' :
+                      'bg-gray-100 text-gray-800 border border-gray-200'}>
                     {task.publish_status}
                   </Badge>
                 </div>
               </div>
             </div>
             {task.description && (
-              <div>
+              <div className="items-center p-4 bg-gray-50 rounded-md border border-gray-100 shadow-sm">
                 <label className="text-sm font-medium text-gray-600">Description</label>
-                <p className="text-sm mt-1 p-3 bg-gray-50 rounded-md">{task.description}</p>
+                <p className="text-sm mt-1 bg-gray-50 rounded-md">{task.description}</p>
               </div>
             )}
-            <div>
-              <label className="text-sm font-medium text-gray-600">Due Time</label>
-              <p className="text-sm mt-1 flex items-center gap-1">
-                <Clock className="h-3 w-3" />
-                {(task as any).default_due_time || 'Not specified'}
-              </p>
-            </div>
           </CardContent>
         </Card>
 
@@ -368,12 +361,12 @@ const TaskDetailsModal = ({ task, positions }: { task: MasterTask, positions: Po
           <CardHeader>
             <CardTitle className="flex items-center space-x-2">
               <Users className="h-5 w-5" />
-              <span>Assignment & Responsibilities</span>
+              <span>Responsibilities & Categories</span>
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
+              <div className="items-center  p-4 bg-gray-50 rounded-md border border-gray-100 shadow-sm">
                 <label className="text-sm font-medium text-gray-600">Responsibilities</label>
                 <div className="mt-1">
                   {task.responsibility && task.responsibility.length > 0 ? (
@@ -396,7 +389,7 @@ const TaskDetailsModal = ({ task, positions }: { task: MasterTask, positions: Po
                   )}
                 </div>
               </div>
-              <div>
+              <div className="items-center  p-4 bg-gray-50 rounded-md border border-gray-100 shadow-sm">
                 <label className="text-sm font-medium text-gray-600">Categories</label>
                 <div className="mt-1">
                   {task.categories && task.categories.length > 0 ? (
@@ -432,8 +425,33 @@ const TaskDetailsModal = ({ task, positions }: { task: MasterTask, positions: Po
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="items-center  p-4 bg-gray-50 rounded-md border border-gray-100 shadow-sm">
+                <label className="text-sm font-medium text-gray-600">Timing</label>
+                <p className="text-sm mt-1">
+                  {task.timing ? (
+                    <Badge variant="outline" className={`
+                      ${task.timing === 'opening' ? 'bg-blue-100 text-blue-800 border-blue-200' :
+                        task.timing === 'anytime' ? 'bg-purple-100 text-purple-800 border-purple-200' :
+                          task.timing === 'before_order_cutoff' ? 'bg-amber-100 text-amber-800 border-amber-200' :
+                            task.timing === 'closing' ? 'bg-indigo-100 text-indigo-800 border-indigo-200' :
+                              'bg-gray-100 text-gray-800 border-gray-200'}
+                    `}>
+                      {task.timing.charAt(0).toUpperCase() + task.timing.slice(1).replace(/_/g, ' ')}
+                    </Badge>
+                  ) : 'Not specified'}
+                </p>
+              </div>
+              <div className="items-center p-4 bg-gray-50 rounded-md border border-gray-100 shadow-sm">
+                <label className="text-sm font-medium text-gray-600">Due Time</label>
+                <p className="text-sm mt-1 flex items-center gap-1">
+                  <Clock className="h-3 w-3" />
+                  {(task as any).default_due_time || 'Not specified'}
+                </p>
+              </div>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-1 gap-4">
+              <div className="items-center  p-4 bg-gray-50 rounded-md border border-gray-100 shadow-sm">
                 <label className="text-sm font-medium text-gray-600">Frequencies</label>
                 <div className="flex flex-wrap gap-1 mt-1">
                   {task.frequencies && task.frequencies.length > 0 ? (
@@ -447,24 +465,8 @@ const TaskDetailsModal = ({ task, positions }: { task: MasterTask, positions: Po
                   )}
                 </div>
               </div>
-              <div>
-                <label className="text-sm font-medium text-gray-600">Timing</label>
-                <p className="text-sm mt-1">
-                  {task.timing ? (
-                    <Badge variant="outline" className={`
-                      ${task.timing === 'opening' ? 'bg-blue-100 text-blue-800 border-blue-200' : 
-                        task.timing === 'anytime' ? 'bg-purple-100 text-purple-800 border-purple-200' : 
-                        task.timing === 'before_order_cutoff' ? 'bg-amber-100 text-amber-800 border-amber-200' : 
-                        task.timing === 'closing' ? 'bg-indigo-100 text-indigo-800 border-indigo-200' : 
-                        'bg-gray-100 text-gray-800 border-gray-200'}
-                    `}>
-                      {task.timing.charAt(0).toUpperCase() + task.timing.slice(1).replace(/_/g, ' ')}
-                    </Badge>
-                  ) : 'Not specified'}
-                </p>
-              </div>
             </div>
-            
+
             {/* Advanced Scheduling */}
             {(task.weekdays && task.weekdays.length > 0) && (
               <div className="p-3 bg-gray-50 rounded-md">
@@ -481,7 +483,7 @@ const TaskDetailsModal = ({ task, positions }: { task: MasterTask, positions: Po
                 </div>
               </div>
             )}
-            
+
             {(task.months && task.months.length > 0) && (
               <div className="p-3 bg-gray-50 rounded-md mt-3">
                 <label className="text-sm font-medium text-gray-600">Specific Months</label>
@@ -550,13 +552,13 @@ const TaskDetailsModal = ({ task, positions }: { task: MasterTask, positions: Po
                   </div>
                 )}
                 {task.start_date && (
-                  <div className="p-3 bg-gray-50 rounded-md border border-gray-100">
+                  <div className="flex items-center justify-between p-4 bg-gray-50 rounded-md border border-gray-100 shadow-sm">
                     <label className="text-sm font-medium text-gray-600">Start Date</label>
                     <p className="text-sm mt-1">{new Date(task.start_date).toLocaleDateString()}</p>
                   </div>
                 )}
                 {task.publish_delay && (
-                  <div className="p-3 bg-gray-50 rounded-md border border-gray-100">
+                  <div className="flex items-center justify-between p-4 bg-gray-50 rounded-md border border-gray-100 shadow-sm">
                     <label className="text-sm font-medium text-gray-600">Publish Delay</label>
                     <p className="text-sm mt-1">{new Date(task.publish_delay).toLocaleDateString()}</p>
                   </div>
@@ -610,7 +612,7 @@ const TaskDetailsModal = ({ task, positions }: { task: MasterTask, positions: Po
           </CardContent>
         </Card>
       </div>
-      
+
       {/* Fixed Footer */}
       <div className="flex-shrink-0 pt-4 border-t mt-auto">
         <div className="flex justify-end">
@@ -670,7 +672,7 @@ export default function AdminMasterTasksPage() {
   const [generatingInstancesId, setGeneratingInstancesId] = useState<string | null>(null)
   const [deleteConfirmModal, setDeleteConfirmModal] = useState<{ isOpen: boolean; task: any | null }>({ isOpen: false, task: null })
   const [generateConfirmModal, setGenerateConfirmModal] = useState<{ isOpen: boolean; task: any | null }>({ isOpen: false, task: null })
-  
+
   // File input ref for import functionality
   const fileInputRef = useRef<HTMLInputElement>(null)
 
@@ -696,7 +698,7 @@ export default function AdminMasterTasksPage() {
       ])
       console.log('Loaded tasks:', tasksData.length)
       console.log('Loaded positions:', positionsData.length)
-      
+
       // Debug: Log the first few tasks to see their structure
       if (tasksData.length > 0) {
         console.log('Sample task data:', {
@@ -709,7 +711,7 @@ export default function AdminMasterTasksPage() {
           positions: tasksData[0].positions,
           position: tasksData[0].position
         })
-        
+
         // Log all tasks to see the pattern
         console.log('All tasks responsibility/categories data:')
         tasksData.forEach((task, index) => {
@@ -724,14 +726,14 @@ export default function AdminMasterTasksPage() {
           })
         })
       }
-      
+
       setTasks(tasksData)
-      
+
       // Filter out administrator positions from the dropdown
       const filteredPositions = positionsData.filter((position: any) => {
-        const isAdmin = position.role === 'admin' || 
-                       position.name.toLowerCase().includes('admin') || 
-                       position.displayName?.toLowerCase().includes('admin')
+        const isAdmin = position.role === 'admin' ||
+          position.name.toLowerCase().includes('admin') ||
+          position.displayName?.toLowerCase().includes('admin')
         return !isAdmin
       })
       setPositions(filteredPositions)
@@ -755,28 +757,28 @@ export default function AdminMasterTasksPage() {
   const handleStatusChange = async (taskId: string, newStatus: 'draft' | 'active' | 'inactive') => {
     try {
       console.log('Updating task status:', { taskId, newStatus })
-      
+
       // Optimistically update the UI first
-      setTasks(tasks.map(task => 
+      setTasks(tasks.map(task =>
         task.id === taskId ? { ...task, publish_status: newStatus } : task
       ))
-      
+
       // Then update the database
       const updatedTask = await masterTasksApi.update(taskId, { publish_status: newStatus })
       console.log('Task status updated:', updatedTask)
-      
+
       // Update with the full response from server (in case there are other changes)
-      setTasks(tasks.map(task => 
+      setTasks(tasks.map(task =>
         task.id === taskId ? updatedTask : task
       ))
-      
+
       showToast('success', 'Status Updated', `Task status changed to ${newStatus}`)
     } catch (error) {
       console.error('Error updating task status:', error)
-      
+
       // Revert the optimistic update on error
       await loadData()
-      
+
       const errorMessage = error instanceof Error ? error.message : 'Unknown error'
       showToast('error', 'Update Failed', `Failed to update task status: ${errorMessage}`)
     }
@@ -793,15 +795,15 @@ export default function AdminMasterTasksPage() {
 
     setDeleteConfirmModal({ isOpen: false, task: null })
     setDeletingTaskId(task.id)
-    
+
     try {
       console.log('Deleting task:', task.id)
       await masterTasksApi.delete(task.id)
       console.log('Task deleted successfully')
-      
+
       // Immediately remove from UI
       setTasks(tasks.filter(t => t.id !== task.id))
-      
+
       showToast('success', 'Task Deleted', `"${task.title}" was deleted successfully`)
     } catch (error) {
       console.error('Error deleting task:', error)
@@ -816,37 +818,37 @@ export default function AdminMasterTasksPage() {
     setFormLoading(true)
     try {
       console.log('Saving task data:', taskData)
-      
+
       if (editingTask) {
         // Update existing task
         console.log('Updating task:', editingTask.id)
         const updatedTask = await masterTasksApi.update(editingTask.id, taskData)
         console.log('Task updated:', updatedTask)
-        
+
         // Immediately update the UI with the new data
-        setTasks(tasks.map(task => 
+        setTasks(tasks.map(task =>
           task.id === editingTask.id ? updatedTask : task
         ))
-        
+
         showToast('success', 'Task Updated', 'Task was updated successfully')
       } else {
         // Create new task
         const newTask = await masterTasksApi.create(taskData)
         console.log('Task created:', newTask)
-        
+
         // Immediately add the new task to the UI
         setTasks([newTask, ...tasks])
-        
+
         showToast('success', 'Task Created', 'New task was created successfully')
       }
-      
+
       // Close dialog and reset state
       setIsTaskDialogOpen(false)
       setEditingTask(null)
-      
+
       // Optionally reload data to ensure consistency
       // await loadData()
-      
+
     } catch (error) {
       console.error('Error saving task:', error)
       const errorMessage = error instanceof Error ? error.message : 'Unknown error'
@@ -859,11 +861,11 @@ export default function AdminMasterTasksPage() {
   const handleCancelEdit = () => {
     // Reset form loading state
     setFormLoading(false)
-    
+
     // Close dialog and reset editing state
     setIsTaskDialogOpen(false)
     setEditingTask(null)
-    
+
     console.log('Edit dialog cancelled')
   }
 
@@ -875,32 +877,32 @@ export default function AdminMasterTasksPage() {
   const confirmGenerateInstances = async () => {
     const task = generateConfirmModal.task
     const taskId = task?.id
-    
+
     setGenerateConfirmModal({ isOpen: false, task: null })
-    
+
     if (taskId) {
       setGeneratingInstancesId(taskId)
     }
-    
+
     try {
       console.log('Generating instances for task:', taskId || 'all tasks')
-      
+
       // Use authenticated API call
       const result = await authenticatedGet(`/api/jobs/generate-instances?mode=custom${taskId ? `&masterTaskId=${taskId}` : ''}`)
-      
+
       if (!result) {
         throw new Error('Failed to generate instances')
       }
-      
+
       if (result.success) {
-        const message = taskId 
+        const message = taskId
           ? `✅ Generated ${result.stats.generated} instances for "${task?.title}"`
           : `✅ Generated ${result.stats.generated} task instances`
-        
-        const details = result.stats.skipped > 0 
+
+        const details = result.stats.skipped > 0
           ? ` (${result.stats.skipped} skipped as they already exist)`
           : ''
-        
+
         showToast('success', 'Instances Generated', message + details)
       } else {
         showToast('error', 'Generation Failed', result.message || 'Failed to generate instances')
@@ -949,7 +951,7 @@ export default function AdminMasterTasksPage() {
       // Generate Excel file and download
       const excelBuffer = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' })
       const blob = new Blob([excelBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
-      
+
       const link = document.createElement('a')
       const url = URL.createObjectURL(blob)
       link.setAttribute('href', url)
@@ -981,21 +983,21 @@ export default function AdminMasterTasksPage() {
         // Handle CSV files
         const text = await file.text()
         const lines = text.split('\n').filter(line => line.trim())
-        
+
         if (lines.length < 2) {
           throw new Error('File must contain at least a header row and one data row')
         }
 
         const headers = lines[0].split(',').map(h => h.trim().replace(/"/g, ''))
-        
+
         for (let i = 1; i < lines.length; i++) {
           const values = lines[i].split(',').map(v => v.trim().replace(/"/g, ''))
           const row: any = {}
-          
+
           headers.forEach((header, index) => {
             row[header] = values[index] || ''
           })
-          
+
           importData.push(row)
         }
       } else if (fileName.endsWith('.xlsx') || fileName.endsWith('.xls')) {
@@ -1017,7 +1019,7 @@ export default function AdminMasterTasksPage() {
       const requiredHeaders = ['Title', 'Position', 'Frequency']
       const firstRow = importData[0]
       const availableHeaders = Object.keys(firstRow)
-      
+
       const missingHeaders = requiredHeaders.filter(header => !availableHeaders.includes(header))
       if (missingHeaders.length > 0) {
         throw new Error(`Missing required columns: ${missingHeaders.join(', ')}`)
@@ -1027,7 +1029,7 @@ export default function AdminMasterTasksPage() {
       const processedData = []
       for (let i = 0; i < importData.length; i++) {
         const row = importData[i]
-        
+
         // Find position ID
         const position = positions.find(p => p.name === row['Position'])
         if (!position) {
@@ -1039,7 +1041,7 @@ export default function AdminMasterTasksPage() {
           title: row['Title']?.toString().trim(),
           description: row['Description']?.toString().trim() || '',
           position_id: position.id,
-          frequency: Object.keys(frequencyLabels).find(key => 
+          frequency: Object.keys(frequencyLabels).find(key =>
             frequencyLabels[key as keyof typeof frequencyLabels] === row['Frequency']
           ) || row['Frequency'],
           category: row['Category']?.toString().trim() || '',
@@ -1047,9 +1049,9 @@ export default function AdminMasterTasksPage() {
           // Map to current column name on server; keep key for import structure
           default_due_time: row['Default Due Time']?.toString().trim() || null,
           timing: row['Timing']?.toString().trim() || '',
-          weekdays: row['Weekdays'] ? 
+          weekdays: row['Weekdays'] ?
             row['Weekdays'].toString().split(',').map((w: string) => parseInt(w.trim())).filter((w: number) => !isNaN(w) && w >= 0 && w <= 6) : [],
-          months: row['Months'] ? 
+          months: row['Months'] ?
             row['Months'].toString().split(',').map((m: string) => parseInt(m.trim())).filter((m: number) => !isNaN(m) && m >= 1 && m <= 12) : [],
           sticky_once_off: row['Sticky Once Off']?.toString().toLowerCase() === 'yes',
           allow_edit_when_locked: row['Allow Edit When Locked']?.toString().toLowerCase() === 'yes',
@@ -1067,7 +1069,7 @@ export default function AdminMasterTasksPage() {
       let successCount = 0
       let errorCount = 0
       const errors: string[] = []
-      
+
       for (let i = 0; i < processedData.length; i++) {
         const taskData = processedData[i]
         try {
@@ -1104,27 +1106,27 @@ export default function AdminMasterTasksPage() {
 
   // Filter tasks based on search and filters
   const filteredTasks = tasks.filter(task => {
-    const matchesSearch = !searchTerm || 
+    const matchesSearch = !searchTerm ||
       task.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
       task.description?.toLowerCase().includes(searchTerm.toLowerCase())
-    
+
     // Check if position matches either in responsibility array or legacy position_id
-    const matchesPosition = filterPosition === 'all' || 
+    const matchesPosition = filterPosition === 'all' ||
       (task.positions?.id || task.position?.id) === filterPosition ||
       (task.responsibility && task.responsibility.some(r => {
         // If filtering by a position ID, check if any responsibility matches that position
         const position = positions.find(p => p.id === filterPosition)
         if (!position) return false
-        
+
         // Convert position name to responsibility format for comparison
         const positionAsResponsibility = position.name.toLowerCase().replace(/\s+/g, '-')
         return r.includes(positionAsResponsibility)
       }))
-    
+
     const matchesStatus = filterStatus === 'all' || task.publish_status === filterStatus
-    
+
     // Check if category matches either in categories array or legacy category field
-    const matchesCategory = filterCategory === 'all' || 
+    const matchesCategory = filterCategory === 'all' ||
       task.category === filterCategory ||
       (task.categories && task.categories.includes(filterCategory))
 
@@ -1133,19 +1135,19 @@ export default function AdminMasterTasksPage() {
 
   // Get unique categories for filter - combine legacy category and new categories array
   const allCategories = new Set<string>()
-  
+
   // Add legacy categories
   tasks.forEach(task => {
     if (task.category) allCategories.add(task.category)
   })
-  
+
   // Add categories from arrays
   tasks.forEach(task => {
     if (task.categories && Array.isArray(task.categories)) {
       task.categories.forEach(cat => allCategories.add(cat))
     }
   })
-  
+
   const categories = Array.from(allCategories).filter(Boolean)
 
   // Show loading spinner while authentication is still loading
@@ -1164,17 +1166,17 @@ export default function AdminMasterTasksPage() {
   if (!user || !isAdmin) {
     // Debug info for troubleshooting
     console.log('Master Tasks page access check:', { user, isAdmin, userRole: user?.role })
-    
+
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
           <h1 className="text-2xl font-bold text-red-600 mb-2">Access Denied</h1>
           <p className="text-gray-600">You don't have permission to access this page.</p>
           <div className="mt-4 p-4 bg-gray-100 rounded text-sm text-left max-w-md">
-            <strong>Debug Info:</strong><br/>
-            User: {user ? 'Present' : 'Missing'}<br/>
-            IsAdmin: {isAdmin ? 'True' : 'False'}<br/>
-            User Role: {user?.role || 'Unknown'}<br/>
+            <strong>Debug Info:</strong><br />
+            User: {user ? 'Present' : 'Missing'}<br />
+            IsAdmin: {isAdmin ? 'True' : 'False'}<br />
+            User Role: {user?.role || 'Unknown'}<br />
             <a href="/admin/auth-test" className="text-blue-600 underline">Run Auth Test</a>
           </div>
         </div>
@@ -1199,8 +1201,8 @@ export default function AdminMasterTasksPage() {
               </div>
               <div className="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-3">
                 <div className="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-2">
-                  <Button 
-                    onClick={() => handleGenerateInstances()} 
+                  <Button
+                    onClick={() => handleGenerateInstances()}
                     variant="outline"
                     disabled={generatingInstancesId !== null}
                     className="text-green-600 border-green-600 hover:bg-green-50 w-full sm:w-auto"
@@ -1265,7 +1267,7 @@ export default function AdminMasterTasksPage() {
                     className="pl-10"
                   />
                 </div>
-                
+
                 {/* Position Filter */}
                 <div className="flex justify-start w-full">
                   <Select value={filterPosition} onValueChange={setFilterPosition}>
@@ -1321,7 +1323,7 @@ export default function AdminMasterTasksPage() {
                     <Download className="w-4 h-4 mr-1" />
                     Export
                   </Button>
-                  
+
                   <div className="relative">
                     <input
                       type="file"
@@ -1330,9 +1332,9 @@ export default function AdminMasterTasksPage() {
                       accept=".csv,.xlsx,.xls"
                       className="hidden"
                     />
-                    <Button 
-                      variant="outline" 
-                      size="sm" 
+                    <Button
+                      variant="outline"
+                      size="sm"
                       onClick={() => fileInputRef.current?.click()}
                       className="w-full"
                     >
@@ -1427,7 +1429,7 @@ export default function AdminMasterTasksPage() {
                             <div className="flex justify-center">
                               <Select
                                 value={task.publish_status}
-                                onValueChange={(value: 'draft' | 'active' | 'inactive') => 
+                                onValueChange={(value: 'draft' | 'active' | 'inactive') =>
                                   handleStatusChange(task.id, value)
                                 }
                               >
@@ -1579,7 +1581,7 @@ export default function AdminMasterTasksPage() {
                                 <span className="text-sm text-gray-500">Status:</span>
                                 <Select
                                   value={task.publish_status}
-                                  onValueChange={(value: 'draft' | 'active' | 'inactive') => 
+                                  onValueChange={(value: 'draft' | 'active' | 'inactive') =>
                                     handleStatusChange(task.id, value)
                                   }
                                 >
