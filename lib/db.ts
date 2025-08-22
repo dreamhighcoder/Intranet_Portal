@@ -103,15 +103,21 @@ export interface InstanceRowWithTask extends InstanceRow {
 
 /**
  * Initialize Supabase client with environment variables
+ * Use service role key for server-side operations to bypass RLS
  */
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
 
-if (!supabaseUrl || !supabaseAnonKey) {
+if (!supabaseUrl || !supabaseServiceKey) {
   throw new Error('Missing Supabase environment variables')
 }
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey)
+export const supabase = createClient(supabaseUrl, supabaseServiceKey, {
+  auth: {
+    autoRefreshToken: false,
+    persistSession: false
+  }
+})
 
 // ========================================
 // MASTER TASK OPERATIONS
@@ -467,7 +473,7 @@ export async function listTasks(
  * }
  * ```
  */
-import { getSearchOptions, filterTasksByResponsibility } from './responsibility-mapper'
+import { getSearchOptions, filterTasksByResponsibility, toKebabCase } from './responsibility-mapper'
 
 export async function getTasksForRoleOnDate(
   role: string,
@@ -479,17 +485,11 @@ export async function getTasksForRoleOnDate(
     
     // Get all possible role variants and shared options to search for
     const searchRoles = getSearchOptions(role);
+    console.log(`DEBUG getTasksForRoleOnDate: role='${role}', searchRoles=${JSON.stringify(searchRoles)}, date='${date}'`)
     
     const { data, error } = await supabase
       .from('master_tasks')
-      .select(`
-        *,
-        positions (
-          id,
-          name,
-          description
-        )
-      `)
+      .select('*')
       .overlaps('responsibility', searchRoles)
       .eq('publish_status', 'active')
       .or(`publish_delay.is.null,publish_delay.lte.${date}`)
@@ -498,7 +498,7 @@ export async function getTasksForRoleOnDate(
       console.error('Error getting tasks for role on date:', error)
       return { data: [], error }
     }
-
+    
     // Filter out tasks that shouldn't be visible to this role using our utility
     const filteredData = filterTasksByResponsibility(data, role);
 

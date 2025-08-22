@@ -12,46 +12,49 @@ ON CONFLICT (name) DO NOTHING;
 -- Note: These are sample positions. Pharmacies can add, modify, or remove positions
 -- through the admin interface. The system dynamically adapts to any position names.
 
--- Insert some sample Master Tasks
+-- Insert some sample Master Tasks (using current schema)
 INSERT INTO master_tasks (
-  title, description, responsibility, categories, frequencies, timing, due_time, 
+  title, description, position_id, frequency, timing, default_due_time, category,
   publish_status
 ) VALUES
   -- Daily tasks for Pharmacist Primary
   ('Daily Register Check', 'Verify controlled substances register is complete and accurate', 
-   ARRAY['pharmacist-primary'], ARRAY['compliance'], ARRAY['every_day'], 'opening', '09:00:00', 
+   (SELECT id FROM positions WHERE name = 'Pharmacist (Primary)'), 'every_day', 'opening', '09:00:00', 'compliance',
    'active'),
    
   ('Daily Temperature Log', 'Record and verify refrigeration temperatures', 
-   ARRAY['pharmacist-primary'], ARRAY['pharmacy-services'], ARRAY['every_day'], 'opening', '08:30:00', 
+   (SELECT id FROM positions WHERE name = 'Pharmacist (Primary)'), 'every_day', 'opening', '08:30:00', 'pharmacy-services',
    'active'),
    
   -- Weekly tasks
   ('Weekly Safety Review', 'Review weekly safety incidents and near misses', 
-   ARRAY['pharmacist-primary'], ARRAY['compliance'], ARRAY['once_weekly'], 'opening', '09:30:00', 
+   (SELECT id FROM positions WHERE name = 'Pharmacist (Primary)'), 'weekly', 'opening', '09:30:00', 'compliance',
    'active'),
    
-  -- Monthly tasks for all positions
+  -- Monthly tasks for dispensary technicians
   ('Monthly Inventory Count', 'Complete monthly inventory count for assigned areas', 
-   ARRAY['dispensary-technicians'], ARRAY['stock-control'], ARRAY['start_of_every_month'], 'opening', '08:00:00', 
+   (SELECT id FROM positions WHERE name = 'Dispensary Technicians'), 'start_every_month', 'opening', '08:00:00', 'stock-control',
    'active'),
    
   -- Once-off sticky task
   ('Annual CPR Training', 'Complete mandatory CPR training certification', 
-   ARRAY['pharmacist-primary'], ARRAY['compliance'], ARRAY['once_off'], 'anytime_during_day', '17:00:00', 
+   (SELECT id FROM positions WHERE name = 'Pharmacist (Primary)'), 'once_off_sticky', 'anytime_during_day', '17:00:00', 'compliance',
    'active'),
    
-  -- Specific weekdays (Monday, Wednesday, Friday)
+  -- Specific weekdays task for operational/managerial (Monday, Wednesday, Friday)
   ('Delivery Schedule Check', 'Review and confirm upcoming delivery schedules', 
-   ARRAY['operational-managerial'], ARRAY['business-management'], ARRAY['monday', 'wednesday', 'friday'], 'opening', '08:15:00', 
-   'active'),
+   (SELECT id FROM positions WHERE name = 'Operational/Managerial'), 'specific_weekdays', 'opening', '08:15:00', 'business-management',
+   'active');
    
   -- End of month task
   ('Monthly P&L Review', 'Review monthly profit and loss statements', 
-   ARRAY['operational-managerial'], ARRAY['business-management'], ARRAY['end_of_every_month'], 'closing', '16:00:00', 
+   (SELECT id FROM positions WHERE name = 'Operational/Managerial'), 'end_every_month', 'closing', '16:00:00', 'business-management',
    'active');
 
--- Note: Weekdays are now handled through the frequencies array
+-- Update weekdays for specific_weekdays tasks
+UPDATE master_tasks 
+SET weekdays = ARRAY[1, 3, 5] -- Monday, Wednesday, Friday
+WHERE title = 'Delivery Schedule Check' AND frequency = 'specific_weekdays';
 
 -- Insert some sample public holidays for Australia
 INSERT INTO public_holidays (date, name, region, source) VALUES

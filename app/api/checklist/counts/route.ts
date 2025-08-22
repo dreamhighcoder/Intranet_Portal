@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabase } from '@/lib/supabase'
+import { supabaseServer } from '@/lib/supabase-server'
 import { getTasksForRoleOnDate } from '@/lib/db'
 import { createRecurrenceEngine } from '@/lib/recurrence-engine'
 import { createHolidayHelper } from '@/lib/public-holidays'
@@ -31,9 +31,11 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Failed to fetch tasks' }, { status: 500 })
     }
     
+    console.log(`DEBUG: Found ${tasks.length} tasks for role '${validatedRole}' on date '${validatedDate}'`)
+    
     // Create holiday helper and recurrence engine for filtering
     // Fetch holidays from database and create helper
-    const { data: holidays, error: holidaysError } = await supabase
+    const { data: holidays, error: holidaysError } = await supabaseServer
       .from('public_holidays')
       .select('*')
       .order('date', { ascending: true })
@@ -65,27 +67,56 @@ export async function GET(request: NextRequest) {
       })
     }
     
-    // Filter tasks based on recurrence rules and date
+    // Filter tasks based on frequencies array and date
     const filteredTasks = tasks.filter(task => {
       try {
-        // Check if the task is due on the specified date using recurrence engine
-        const taskForRecurrence = {
-          id: task.id,
-          frequency_rules: task.frequency_rules || {},
-          start_date: task.created_at,
-          end_date: task.due_date
+        // Check if the task is due on the specified date using frequencies array
+        if (!task.frequencies || task.frequencies.length === 0) {
+          return false
         }
         
-        return recurrenceEngine.isDueOnDate(taskForRecurrence, new Date(validatedDate))
+        const targetDate = new Date(validatedDate)
+        const dayOfWeek = targetDate.getDay() // 0 = Sunday, 1 = Monday, etc.
+        
+        // Check each frequency in the array
+        return task.frequencies.some(frequency => {
+          switch (frequency) {
+            case 'every_day':
+              return dayOfWeek !== 0 // Every day except Sunday
+            case 'once_weekly':
+              return dayOfWeek === 1 // Monday
+            case 'start_of_every_month':
+              return targetDate.getDate() === 1
+            case 'end_of_every_month':
+              const nextMonth = new Date(targetDate.getFullYear(), targetDate.getMonth() + 1, 0)
+              return targetDate.getDate() === nextMonth.getDate()
+            case 'monday':
+              return dayOfWeek === 1
+            case 'tuesday':
+              return dayOfWeek === 2
+            case 'wednesday':
+              return dayOfWeek === 3
+            case 'thursday':
+              return dayOfWeek === 4
+            case 'friday':
+              return dayOfWeek === 5
+            case 'saturday':
+              return dayOfWeek === 6
+            case 'once_off':
+              return true // Always show once-off tasks
+            default:
+              return false
+          }
+        })
       } catch (error) {
-        console.error('Error checking task recurrence:', error)
-        // If there's an error with recurrence calculation, include the task
+        console.error('Error checking task frequency:', error)
+        // If there's an error with frequency calculation, include the task
         return true
       }
     })
     
     // Get existing checklist instances for this role and date
-    const { data: instances, error: instancesError } = await supabase
+    const { data: instances, error: instancesError } = await supabaseServer
       .from('checklist_instances')
       .select('*')
       .eq('role', validatedRole)

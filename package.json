@@ -17,7 +17,11 @@
     "generate-tasks-new": "curl -X GET \"http://localhost:3000/api/jobs/generate-instances-new\"",
     "update-statuses-new": "curl -X GET \"http://localhost:3000/api/jobs/update-statuses-new\"",
     "test-recurrence-engine": "tsx scripts/test-recurrence-engine.ts",
-    "deploy-recurrence-engine": "tsx scripts/deploy-recurrence-engine.ts"
+    "deploy-recurrence-engine": "tsx scripts/deploy-recurrence-engine.ts",
+    "run-migration": "tsx scripts/run-migration.ts",
+    "check-schema": "tsx scripts/check-schema.ts",
+    "test-checklist-api": "tsx scripts/test-checklist-api.ts",
+    "test-api-endpoint": "tsx scripts/test-api-endpoint.ts"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",

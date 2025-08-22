@@ -46,7 +46,7 @@ export async function GET(request: NextRequest) {
     // First, let's check if there are any master tasks at all
     const { data: allTasks, error: allTasksError } = await supabaseAdmin
       .from('master_tasks')
-      .select('id, title, responsibility')
+      .select('id, title, responsibility, categories, frequencies')
       .limit(10)
     
     console.log('All tasks (sample):', allTasks || 'No tasks found')
@@ -55,7 +55,7 @@ export async function GET(request: NextRequest) {
       console.error('Error fetching all tasks:', allTasksError)
     }
 
-    // Base query to fetch active tasks visible by publish_delay_date
+    // Base query to fetch active tasks visible by publish_delay
     let taskQuery = supabaseAdmin
       .from('master_tasks')
       .select(`
@@ -63,20 +63,19 @@ export async function GET(request: NextRequest) {
         title,
         description,
         timing,
-        default_due_time,
-        category,
+        due_time,
         publish_status,
-        publish_delay_date,
+        publish_delay,
+        responsibility,
+        categories,
+        frequencies,
         created_at
       `)
       .eq('publish_status', 'active')
-      .or(`publish_delay_date.is.null,publish_delay_date.lte.${validatedDate}`)
+      .or(`publish_delay.is.null,publish_delay.lte.${validatedDate}`)
       
     // Log the query we're about to execute
     console.log('Executing query with searchRoles:', searchRoles)
-    
-    // Since responsibility field doesn't exist in current schema, filter by position_id instead
-    // For now, get all tasks and we'll filter by position later if needed
 
     const { data: masterTasks, error: tasksError } = await taskQuery
     console.log('Master tasks found:', masterTasks?.length || 0)
@@ -120,7 +119,7 @@ export async function GET(request: NextRequest) {
       try {
         const taskForRecurrence = {
           id: task.id,
-          frequency_rules: { type: 'daily' }, // Default since field doesn't exist
+          frequency_rules: task.frequencies || { type: 'daily' }, // Use actual frequencies or default
           start_date: task.created_at?.split('T')[0],
           end_date: null // Field doesn't exist in current schema
         }
@@ -128,7 +127,7 @@ export async function GET(request: NextRequest) {
         console.log('Checking recurrence for task:', {
           id: task.id,
           title: task.title,
-          frequency_rules: { type: 'daily' },
+          frequency_rules: task.frequencies || { type: 'daily' },
           start_date: task.created_at?.split('T')[0],
           end_date: null
         })
@@ -205,8 +204,10 @@ export async function GET(request: NextRequest) {
           title: task.title || 'Unknown Task',
           description: task.description,
           timing: task.timing || 'anytime_during_day',
-          default_due_time: task.default_due_time,
-          category: task.category || 'general'
+          due_time: task.due_time,
+          responsibility: task.responsibility || [],
+          categories: task.categories || ['general'],
+          frequencies: task.frequencies || { type: 'daily' }
         }
       }
     })

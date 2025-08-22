@@ -52,16 +52,13 @@ export default function ChecklistCard({
         
         const today = new Date().toISOString().split('T')[0]
         
-        // Use public API for task counts (no authentication required)
+        // Use checklist counts API for task counts (no authentication required)
         const queryParams = new URLSearchParams({
           date: today,
-          position_id: positionId
+          role: toKebabCase(role)
         })
         
-        // Always use responsibility filtering with normalized role
-        queryParams.set('responsibility', toKebabCase(role))
-        
-        const response = await fetch(`/api/public/task-counts?${queryParams.toString()}`)
+        const response = await fetch(`/api/checklist/counts?${queryParams.toString()}`)
         
         if (!response.ok) {
           throw new Error(`API request failed: ${response.status} ${response.statusText}`)

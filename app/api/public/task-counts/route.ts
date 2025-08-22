@@ -46,40 +46,42 @@ export async function GET(request: NextRequest) {
       // Continue with normal processing
     }
 
-    // Virtual model: compute counts directly from master_tasks using recurrence engine
-    // Build base query for master_tasks
+    // Use existing task_instances table instead of computing from master_tasks
+    // This works with the current database schema
     const searchRoles = responsibility ? getSearchOptions(responsibility) : null
 
+    // Get task instances for the specified date
     let query = supabaseAdmin
-      .from('master_tasks')
+      .from('task_instances')
       .select(`
         id,
-        title,
-        position_id,
-        responsibility,
-        publish_status,
-        publish_delay,
+        status,
+        due_date,
         due_time,
         created_at,
-        frequency_rules,
-        start_date,
-        end_date
+        completed_at,
+        master_tasks!inner(
+          id,
+          title,
+          responsibility,
+          publish_status
+        )
       `)
-      .eq('publish_status', 'active')
-      .or(`publish_delay.is.null,publish_delay.lte.${date}`)
+      .eq('instance_date', date)
+      .eq('master_tasks.publish_status', 'active')
 
     if (positionId) {
-      query = query.eq('position_id', positionId)
+      query = query.eq('master_tasks.position_id', positionId)
     }
 
     if (searchRoles) {
-      query = query.overlaps('responsibility', searchRoles)
+      query = query.overlaps('master_tasks.responsibility', searchRoles)
     }
 
-    const { data: masterTasks, error } = await query
+    const { data: taskInstances, error } = await query
 
     if (error) {
-      console.error('Error fetching master tasks:', error)
+      console.error('Error fetching task instances:', error)
       return NextResponse.json({
         success: true,
         data: {
@@ -97,63 +99,45 @@ export async function GET(request: NextRequest) {
     // Post-filter tasks based on responsibility rules
     const roleFiltered = responsibility 
       ? filterTasksByResponsibility(
-          (masterTasks || []).map((t: any) => ({ ...t, responsibility: t.responsibility || [] })),
+          (taskInstances || []).map((t: any) => ({ 
+            ...t, 
+            responsibility: t.master_tasks?.responsibility || [] 
+          })),
           responsibility
         )
-      : (masterTasks || [])
+      : (taskInstances || [])
 
-    // Fetch holidays and create recurrence engine
-    const { data: holidays } = await supabaseAdmin
-      .from('public_holidays')
-      .select('*')
-      .order('date', { ascending: true })
-
-    const { createRecurrenceEngine } = await import('@/lib/recurrence-engine')
-    const { createHolidayHelper } = await import('@/lib/public-holidays')
-    const holidayHelper = createHolidayHelper(holidays || [])
-    const recurrenceEngine = createRecurrenceEngine(holidayHelper)
-
-    // Determine which tasks are due today via recurrence rules
-    const dateObj = new Date(date)
-    const dueTodayTasks = roleFiltered.filter((task: any) => {
-      try {
-        const taskForRecurrence = {
-          id: task.id,
-          frequency_rules: task.frequency_rules || {},
-          start_date: task.start_date || task.created_at?.split('T')[0],
-          end_date: task.end_date
-        }
-        return recurrenceEngine.isDueOnDate(taskForRecurrence, dateObj)
-      } catch (e) {
-        console.warn('Recurrence check failed for task', task.id, e)
-        return false
-      }
-    })
-
-    // Calculate counts (virtual model, no persisted completion yet)
+    // Calculate counts from actual task instances
     const now = new Date()
     const nineAM = new Date(`${date}T09:00:00`)
 
     const counts = {
-      total: dueTodayTasks.length,
+      total: roleFiltered.length,
       newSinceNine: 0,
-      dueToday: dueTodayTasks.length,
+      dueToday: roleFiltered.length,
       overdue: 0,
       completed: 0,
       isHoliday: false,
       holidayName: null
     }
 
-    dueTodayTasks.forEach((task: any) => {
-      // Overdue: has due_time and now past due time (for today)
-      if (task.due_time) {
-        const dueTime = new Date(`${date}T${task.due_time}`)
-        if (now > dueTime) counts.overdue++
+    roleFiltered.forEach((instance: any) => {
+      // Count completed tasks
+      if (instance.status === 'completed') {
+        counts.completed++
       }
 
-      // Approximate "new since 9AM": created_after_9am OR publish_delay equals today
-      const createdAt = task.created_at ? new Date(task.created_at) : null
-      if ((createdAt && createdAt >= nineAM) || task.publish_delay === date) {
+      // Count overdue tasks: has due_time and now past due time
+      if (instance.due_time && instance.status !== 'completed') {
+        const dueTime = new Date(`${date}T${instance.due_time}`)
+        if (now > dueTime) {
+          counts.overdue++
+        }
+      }
+
+      // Count new tasks since 9AM: created after 9AM today
+      const createdAt = instance.created_at ? new Date(instance.created_at) : null
+      if (createdAt && createdAt >= nineAM && instance.status !== 'completed') {
         counts.newSinceNine++
       }
     })
