@@ -32,18 +32,25 @@ export function toKebabCase(responsibility: string): string {
  * - Kebab for arbitrary names -> Title-cased best-effort
  * - Otherwise return as-is (assume already a display string)
  */
-export function toDisplayFormat(responsibility: string): string {
-  if (!responsibility) return responsibility
+export function toDisplayFormat(param: string): string {
+  if (!param) return param
 
   // Heuristic: if looks like kebab, title-case it for display fallback
-  if (/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(responsibility)) {
-    return responsibility
+  if (/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(param)) {
+    return param
       .split('-')
       .map(w => w.charAt(0).toUpperCase() + w.slice(1))
       .join(' ')
   }
 
-  return responsibility
+  if (/^[a-z0-9]+([-_][a-z0-9]+)*$/.test(param)) {
+    return param
+      .split(/[-_]/) // split by - or _
+      .map(w => w.charAt(0).toUpperCase() + w.slice(1))
+      .join(' ')
+  }
+
+  return param
 }
 
 /**

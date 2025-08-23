@@ -298,23 +298,20 @@ export default function TaskDetailModal({
                   </div>
                 </div>
 
-                {/* Categories and Responsibilities - Side by side with reduced width */}
+                {/* Responsibilities, Categories and Frequencies */}
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-                  {/* Frequency Rules */}
-                  {task.master_task?.frequency_rules && Object.keys(task.master_task.frequency_rules).length > 0 && (
+
+                  {/* Responsibilities */}
+                  {task.master_task?.responsibility && task.master_task.responsibility.length > 0 && (
                     <div className="bg-indigo-50 p-4 rounded-lg border border-indigo-200">
                       <div className="flex items-center space-x-2 mb-3">
-                        <Settings className="h-4 w-4 text-indigo-600" />
-                        <span className="font-medium text-indigo-800">Frequency Rules</span>
+                        <User className="h-4 w-4 text-indigo-600" />
+                        <span className="font-medium text-indigo-800">All Responsibilities</span>
                       </div>
                       <div className="flex flex-wrap gap-2">
-                        {formatFrequencyRules(task.master_task.frequency_rules).map((badge, index) => (
-                          <Badge
-                            key={index}
-                            // className="bg-white border-indigo-200 text-indigo-800"
-                            className={`${badge.color} border ${badge.isMain ? 'border-indigo-200 text-indigo-800' : 'text-indigo-800'}`}
-                          >
-                            {badge.label}
+                        {task.master_task.responsibility.map((resp: string, index: number) => (
+                          <Badge key={index} variant="outline" className="bg-white border-indigo-200 text-indigo-800">
+                            {toDisplayFormat(resp)}
                           </Badge>
                         ))}
                       </div>
@@ -341,22 +338,42 @@ export default function TaskDetailModal({
                     </div>
                   )}
 
-                  {/* Responsibilities */}
-                  {task.master_task?.responsibility && task.master_task.responsibility.length > 0 && (
+                  {/* Frequencies */}
+                  {task.master_task?.frequencies && Object.keys(task.master_task.frequencies).length > 0 && (
                     <div className="bg-indigo-50 p-4 rounded-lg border border-indigo-200">
                       <div className="flex items-center space-x-2 mb-3">
-                        <User className="h-4 w-4 text-indigo-600" />
-                        <span className="font-medium text-indigo-800">All Responsibilities</span>
+                        <Settings className="h-4 w-4 text-indigo-600" />
+                        <span className="font-medium text-indigo-800">Frequencies</span>
                       </div>
                       <div className="flex flex-wrap gap-2">
-                        {task.master_task.responsibility.map((resp: string, index: number) => (
+                        {task.master_task.frequencies.map((frequencies: string, index: number) => (
                           <Badge key={index} variant="outline" className="bg-white border-indigo-200 text-indigo-800">
-                            {toDisplayFormat(resp)}
+                            {toDisplayFormat(frequencies)}
                           </Badge>
                         ))}
+
+                        {/* {task.master_task.frequencies.map((frequencies: string, index: number) => {
+                          const config = getCategoryConfig(frequencies)
+                          return (
+                            <Badge key={index} className="bg-white border-indigo-200 text-indigo-800">
+                              {config.label}
+                            </Badge>
+                          )
+                        })} */}
+
+                        {/* {formatFrequencyRules(task.master_task.).map((badge, index) => (
+                          <Badge
+                            key={index}
+                            // className="bg-white border-indigo-200 text-indigo-800"
+                            className={`${badge.color} border ${badge.isMain ? 'border-indigo-200 text-indigo-800' : 'text-indigo-800'}`}
+                          >
+                            {badge.label}
+                          </Badge>
+                        ))} */}
                       </div>
                     </div>
                   )}
+
                 </div>
 
                 {/* Task Payload */}
