@@ -25,12 +25,12 @@ interface TaskCounts {
   completed: number
 }
 
-export default function ChecklistCard({ 
-  role, 
-  roleDisplayName, 
-  positionId, 
-  icon: Icon, 
-  iconBg 
+export default function ChecklistCard({
+  role,
+  roleDisplayName,
+  positionId,
+  icon: Icon,
+  iconBg
 }: ChecklistCardProps) {
   const { user, isLoading: authLoading } = usePositionAuth()
   const router = useRouter()
@@ -49,27 +49,27 @@ export default function ChecklistCard({
       try {
         setLoading(true)
         setError(null)
-        
+
         const today = new Date().toISOString().split('T')[0]
-        
+
         // Use checklist counts API for task counts (no authentication required)
         const queryParams = new URLSearchParams({
           date: today,
           role: toKebabCase(role)
         })
-        
+
         const response = await fetch(`/api/checklist/counts?${queryParams.toString()}`)
-        
+
         if (!response.ok) {
           throw new Error(`API request failed: ${response.status} ${response.statusText}`)
         }
-        
+
         const result = await response.json()
-        
+
         if (!result.success) {
           throw new Error(result.error || 'Failed to fetch task counts')
         }
-        
+
         setTaskCounts(result.data)
       } catch (err) {
         console.error('Error fetching task counts:', err)
@@ -86,8 +86,8 @@ export default function ChecklistCard({
   const handleOpenChecklist = () => {
     // Instead of directly navigating, we need to trigger the login modal
     // We'll use a custom event to communicate with the parent component
-    const event = new CustomEvent<{ positionId: string; roleDisplayName: string }>('open-checklist-login', { 
-      detail: { 
+    const event = new CustomEvent<{ positionId: string; roleDisplayName: string }>('open-checklist-login', {
+      detail: {
         positionId,
         roleDisplayName: roleDisplayName
       }
@@ -135,27 +135,24 @@ export default function ChecklistCard({
   const alertLevel = getAlertLevel()
 
   return (
-    <Card className={`card-surface hover:shadow-lg transition-all duration-200 group flex flex-col h-full ${
-      hasNoTasks ? 'opacity-60 bg-gray-50 border-gray-200' : ''
-    }`}>
-      <CardHeader className="pb-3">
+    <Card className={`card-surface hover:shadow-lg transition-all duration-200 group flex flex-col h-full ${hasNoTasks ? 'opacity-60 bg-gray-50 border-gray-200' : ''
+      }`}>
+      <CardHeader className="pb-0">
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-3">
             <div
-              className={`p-2 rounded-lg text-white group-hover:scale-110 transition-transform ${
-                hasNoTasks ? 'opacity-50 bg-gray-400' : ''
-              }`}
+              className={`p-2 rounded-lg text-white group-hover:scale-110 transition-transform ${hasNoTasks ? 'opacity-50 bg-gray-400' : ''
+                }`}
               style={{ backgroundColor: hasNoTasks ? undefined : iconBg }}
             >
               <Icon className="h-5 w-5" />
             </div>
-            <CardTitle className={`text-lg leading-tight ${
-              hasNoTasks ? 'text-gray-500' : ''
-            }`} style={{ color: hasNoTasks ? undefined : "var(--color-text)" }}>
+            <CardTitle className={`text-lg leading-tight ${hasNoTasks ? 'text-gray-500' : ''
+              }`} style={{ color: hasNoTasks ? undefined : "var(--color-text)" }}>
               {roleDisplayName}
             </CardTitle>
           </div>
-          
+
           {/* Alert Badge */}
           {!hasNoTasks && alertLevel !== 'none' && (
             <Badge className={`${getAlertColor(alertLevel)} border`}>
@@ -169,7 +166,7 @@ export default function ChecklistCard({
           )}
         </div>
       </CardHeader>
-      
+
       <CardContent className="pt-0 flex-1 flex flex-col">
         {loading ? (
           <div className="flex items-center justify-center py-8">
@@ -178,9 +175,9 @@ export default function ChecklistCard({
         ) : error ? (
           <div className="text-center py-4">
             <p className="text-sm text-red-600 mb-2">Error loading tasks</p>
-            <Button 
-              variant="outline" 
-              size="sm" 
+            <Button
+              variant="outline"
+              size="sm"
               onClick={() => window.location.reload()}
             >
               Retry
@@ -192,14 +189,16 @@ export default function ChecklistCard({
             <div className="mb-4 space-y-2">
               {/* New tasks alert - any task assigned since 9:00am today, not yet done */}
               {taskCounts.newSinceNine > 0 && (
-                <div className="flex items-center justify-between text-sm p-2 bg-blue-50 rounded border-l-4 border-blue-400">
+                <div className="flex items-center justify-between text-sm px-2 py-1 bg-blue-50 rounded border-l-4 border-blue-400">
                   <span className="text-blue-700 font-medium flex items-center">
                     <span className="mr-1">🆕</span> New task(s)!
                   </span>
-                  <span className="text-blue-600 font-semibold">{taskCounts.newSinceNine}</span>
+                  <Badge  className="bg-blue-600 text-white font-medium">{taskCounts.newSinceNine}</Badge>
+{/* 
+                  <span className="text-blue-600 font-semibold">{taskCounts.newSinceNine}</span> */}
                 </div>
               )}
-              
+
               {/* X tasks to do - total tasks due today (regardless of original due date) */}
               <div className="flex items-center justify-between text-sm px-2 py-1 bg-gray-50 rounded">
                 <span className="text-gray-700 font-medium flex items-center">
@@ -207,7 +206,7 @@ export default function ChecklistCard({
                 </span>
                 <Badge variant="secondary" className="font-medium">{taskCounts.total}</Badge>
               </div>
-              
+
               {/* X tasks due today - tasks specifically due today */}
               {taskCounts.dueToday > 0 && (
                 <div className="flex items-center justify-between text-sm px-2 py-1 bg-orange-50 rounded">
@@ -217,7 +216,7 @@ export default function ChecklistCard({
                   <Badge className="bg-orange-100 text-orange-800 font-medium">{taskCounts.dueToday}</Badge>
                 </div>
               )}
-              
+
               {/* X tasks overdue - tasks past their due date but still completable */}
               {taskCounts.overdue > 0 && (
                 <div className="flex items-center justify-between text-sm px-2 py-1 bg-red-50 rounded">
@@ -227,7 +226,7 @@ export default function ChecklistCard({
                   <Badge className="bg-red-100 text-red-800 font-medium">{taskCounts.overdue}</Badge>
                 </div>
               )}
-              
+
               {/* Completed tasks (if any) */}
               {taskCounts.completed > 0 && (
                 <div className="flex items-center justify-between text-sm p-2 bg-green-50 rounded">
@@ -237,7 +236,7 @@ export default function ChecklistCard({
                   <Badge className="bg-green-100 text-green-800 font-medium">{taskCounts.completed}</Badge>
                 </div>
               )}
-              
+
               {/* No tasks message */}
               {taskCounts.total === 0 && !loading && !error && (
                 <div className="text-center py-2 text-gray-500">
@@ -245,15 +244,14 @@ export default function ChecklistCard({
                 </div>
               )}
             </div>
-            
+
             {/* Action Button */}
             <Button
               onClick={handleOpenChecklist}
-              className={`w-full border-0 mt-auto ${
-                hasNoTasks 
-                  ? 'bg-gray-200 text-gray-500 hover:bg-gray-300' 
+              className={`w-full border-0 mt-auto ${hasNoTasks
+                  ? 'bg-gray-200 text-gray-500 hover:bg-gray-300'
                   : 'bg-[var(--color-primary)] hover:bg-[var(--color-primary)]/90 text-[var(--color-primary-on)]'
-              }`}
+                }`}
               disabled={hasNoTasks}
             >
               {hasNoTasks ? 'No Tasks Available' : 'Open Checklist'}
