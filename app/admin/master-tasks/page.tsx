@@ -889,29 +889,33 @@ export default function AdminMasterTasksPage() {
         return
       }
 
-      // Create export data from current filtered tasks
+      // Export using current DB schema field names, prettifying key columns for readability
+      const toTitle = (s: string) => s ? s.replace(/[-_]/g, ' ').replace(/\b\w/g, c => c.toUpperCase()) : ''
       const exportData = filteredTasks.map(task => ({
-        'Title': task.title,
-        'Description': task.description || '',
-        'Position': task.positions?.name || task.position?.name || '',
-        'Frequencies': task.frequencies ? task.frequencies.map(f => formatFrequency(f)).join(', ') : '',
-        'Category': task.category || '',
-        'Status': task.publish_status,
-        'Default Due Time': (task as any).default_due_time || '',
-        'Timing': task.timing || '',
-        'Weekdays': task.weekdays?.join(',') || '',
-        'Months': task.months?.join(',') || '',
-        'Sticky Once Off': task.sticky_once_off ? 'Yes' : 'No',
-        'Allow Edit When Locked': task.allow_edit_when_locked ? 'Yes' : 'No',
-        'Publish Delay Date': task.publish_delay_date || ''
+        Title: task.title,
+        Description: task.description || '',
+        Responsibility: Array.isArray(task.responsibility) ? task.responsibility.map(v => toTitle(String(v))).join(', ') : '',
+        Categories: Array.isArray(task.categories)
+          ? task.categories.map(v => toTitle(String(v))).join(', ')
+          : (task.category ? toTitle(String(task.category)) : ''), // legacy fallback
+        Frequencies: Array.isArray(task.frequencies) ? task.frequencies.map(f => formatFrequency(f)).join(', ') : '',
+        Timing: task.timing ? toTitle(String(task.timing)) : '',
+        'Due Time': (task as any).due_time || (task as any).default_due_time || '',
+        'Due Date': (task as any).due_date || '',
+        'Start Date': (task as any).start_date || '',
+        'End Date': (task as any).end_date || '',
+        'Publish Status': task.publish_status || 'draft',
+        'Publish Delay': (task as any).publish_delay || (task as any).publish_delay_date || '',
+        Weekdays: Array.isArray((task as any).weekdays) ? (task as any).weekdays.join(',') : '',
+        Months: Array.isArray((task as any).months) ? (task as any).months.join(',') : '',
+        'Sticky Once Off': task.sticky_once_off ? 'TRUE' : 'FALSE',
+        'Allow Edit When Locked': task.allow_edit_when_locked ? 'TRUE' : 'FALSE'
       }))
 
-      // Create Excel workbook
       const worksheet = XLSX.utils.json_to_sheet(exportData)
       const workbook = XLSX.utils.book_new()
-      XLSX.utils.book_append_sheet(workbook, worksheet, 'Master Tasks')
+      XLSX.utils.book_append_sheet(workbook, worksheet, 'master_tasks')
 
-      // Generate Excel file and download
       const excelBuffer = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' })
       const blob = new Blob([excelBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
 
@@ -978,54 +982,162 @@ export default function AdminMasterTasksPage() {
         throw new Error('No data found in the file')
       }
 
-      // Validate required headers
-      const requiredHeaders = ['Title', 'Position', 'Frequency']
-      const firstRow = importData[0]
-      const availableHeaders = Object.keys(firstRow)
-
-      const missingHeaders = requiredHeaders.filter(header => !availableHeaders.includes(header))
+      // Validate required headers (case-insensitive, order-agnostic)
+      const headerKeys = Object.keys(importData[0] || {})
+      const hasAny = (variants: string[]) => headerKeys.some(h => variants.includes(h) || variants.includes(h.toString().toLowerCase()) || variants.includes(h.toString().replace(/\s+/g, '_').toLowerCase()))
+      // Only these are required per spec; order may vary
+      const requiredHeaderSets: Record<string, string[]> = {
+        Description: ['Description', 'description'],
+        Responsibility: ['Responsibility', 'responsibility'],
+        Categories: ['Categories', 'Category', 'categories', 'category'],
+        Frequencies: ['Frequencies', 'Frequency', 'frequencies', 'frequency'],
+        Timing: ['Timing', 'timing'],
+      }
+      const missingHeaders = Object.entries(requiredHeaderSets)
+        .filter(([, variants]) => !hasAny(variants.map(v => v.toLowerCase())))
+        .map(([label]) => label)
       if (missingHeaders.length > 0) {
         throw new Error(`Missing required columns: ${missingHeaders.join(', ')}`)
       }
 
-      // Process and validate data
-      const processedData = []
+      // Helper: normalize object keys (lowercase, remove spaces/underscores)
+      const normalizeKeys = (obj: Record<string, any>) => {
+        const out: Record<string, any> = {}
+        Object.keys(obj).forEach(k => {
+          const nk = k.toString().toLowerCase().replace(/\s+/g, '_')
+          out[nk] = obj[k]
+        })
+        return out
+      }
+
+      // Process and validate data according to new schema
+      const processedData: any[] = []
       for (let i = 0; i < importData.length; i++) {
-        const row = importData[i]
+        const originalRow = importData[i]
+        const row = normalizeKeys(originalRow)
 
-        // Find position ID
-        const position = positions.find(p => p.name === row['Position'])
-        if (!position) {
-          throw new Error(`Position "${row['Position']}" not found in row ${i + 2}`)
+        // Support legacy column names by mapping where possible
+        const title = (row.title ?? originalRow['Title'])?.toString().trim()
+        const description = (row.description ?? originalRow['Description'] ?? '').toString().trim()
+
+        // responsibilities/categories/frequencies can be comma-separated strings
+        const responsibilityRaw = (row.responsibility ?? originalRow['Responsibility'] ?? '').toString()
+        const categoriesRaw = (row.categories ?? originalRow['Category'] ?? originalRow['Categories'] ?? '').toString()
+        const frequenciesRaw = (row.frequencies ?? originalRow['Frequency'] ?? originalRow['Frequencies'] ?? '').toString()
+
+        // helpers
+        const toArray = (val: string) => val
+          ? val.split(',').map(v => v.trim()).filter(Boolean)
+          : []
+        const toKebab = (s: string) => s
+          .toLowerCase()
+          .trim()
+          .replace(/[^a-z0-9]+/g, '-')
+          .replace(/^-+|-+$/g, '')
+        const normalizeTiming = (s: string) => {
+          if (!s) return 'anytime_during_day'
+          const t = s.toString().trim().toLowerCase().replace(/\s+/g, '_')
+          // explicit mapping for common display variants
+          const map: Record<string, string> = {
+            'opening': 'opening',
+            'anytime_during_day': 'anytime_during_day',
+            'anytime': 'anytime_during_day',
+            'before_order_cut_off': 'before_order_cut_off',
+            'before_order_cutoff': 'before_order_cut_off',
+            'closing': 'closing',
+          }
+          return map[t] || t
+        }
+        const normalizeFrequency = (s: string) => {
+          if (!s) return ''
+          const f = s.toString().trim().toLowerCase().replace(/\s+/g, '_')
+          const map: Record<string, string> = {
+            'once_off': 'once_off',
+            'once-off': 'once_off',
+            'once_off_sticky': 'once_off_sticky',
+            'once-off_sticky': 'once_off_sticky',
+            'every_day': 'every_day',
+            'daily': 'every_day',
+            'weekly': 'weekly',
+            'specific_weekdays': 'specific_weekdays',
+            'start_every_month': 'start_every_month',
+            'start_of_month': 'start_every_month',
+            'start_certain_months': 'start_certain_months',
+            'every_month': 'every_month',
+            'certain_months': 'certain_months',
+            'end_every_month': 'end_every_month',
+            'end_of_month': 'end_every_month',
+            'end_certain_months': 'end_certain_months',
+          }
+          return map[f] || f
         }
 
-        // Map data to master task format
-        const taskData = {
-          title: row['Title']?.toString().trim(),
-          description: row['Description']?.toString().trim() || '',
-          position_id: position.id,
-          frequency: Object.keys(frequencyLabels).find(key =>
-            frequencyLabels[key as keyof typeof frequencyLabels] === row['Frequency']
-          ) || row['Frequency'],
-          category: row['Category']?.toString().trim() || '',
-          publish_status: (['draft', 'active', 'inactive'].includes(row['Status']) ? row['Status'] : 'draft') as 'draft' | 'active' | 'inactive',
-          // Map to current column name on server; keep key for import structure
-          default_due_time: row['Default Due Time']?.toString().trim() || null,
-          timing: row['Timing']?.toString().trim() || '',
-          weekdays: row['Weekdays'] ?
-            row['Weekdays'].toString().split(',').map((w: string) => parseInt(w.trim())).filter((w: number) => !isNaN(w) && w >= 0 && w <= 6) : [],
-          months: row['Months'] ?
-            row['Months'].toString().split(',').map((m: string) => parseInt(m.trim())).filter((m: number) => !isNaN(m) && m >= 1 && m <= 12) : [],
-          sticky_once_off: row['Sticky Once Off']?.toString().toLowerCase() === 'yes',
-          allow_edit_when_locked: row['Allow Edit When Locked']?.toString().toLowerCase() === 'yes',
-          publish_delay_date: row['Publish Delay Date']?.toString().trim() || null
-        }
+        // normalize arrays
+        const responsibility = toArray(responsibilityRaw).map(toKebab)
+        const categories = toArray(categoriesRaw).map(toKebab)
+        const frequencies = toArray(frequenciesRaw).map(normalizeFrequency)
 
-        if (!taskData.title) {
+        // timing with default (map display -> enum value)
+        const timing = normalizeTiming(row.timing ?? originalRow['Timing'] ?? 'anytime_during_day')
+
+        // optional dates/times
+        const due_time = (row.due_time ?? originalRow['Default Due Time'] ?? '').toString().trim() || undefined
+        const due_date = (row.due_date ?? originalRow['Due Date'] ?? '').toString().trim() || undefined
+        const start_date = (row.start_date ?? originalRow['Start Date'] ?? '').toString().trim() || undefined
+        const end_date = (row.end_date ?? originalRow['End Date'] ?? '').toString().trim() || undefined
+
+        // status and publish delay
+        const publish_status_raw = (row.publish_status ?? originalRow['Status'] ?? 'draft').toString().trim().toLowerCase()
+        const publish_status = ['draft', 'active', 'inactive'].includes(publish_status_raw) ? publish_status_raw : 'draft'
+        const publish_delay = (row.publish_delay ?? originalRow['Publish Delay'] ?? originalRow['Publish Delay Date'] ?? '').toString().trim() || undefined
+
+        // weekdays/months
+        const parseNums = (v: any) => v
+          ? v.toString().split(',').map((n: string) => parseInt(n.trim(), 10)).filter((n: number) => !isNaN(n))
+          : []
+        const weekdays = parseNums(row.weekdays ?? originalRow['Weekdays'])
+        const months = parseNums(row.months ?? originalRow['Months'])
+
+        // booleans
+        const toBool = (v: any) => {
+          const s = (v ?? '').toString().trim().toLowerCase()
+          return ['true', 'yes', 'y', '1'].includes(s)
+        }
+        const sticky_once_off = toBool(row.sticky_once_off ?? originalRow['Sticky Once Off'])
+        const allow_edit_when_locked = toBool(row.allow_edit_when_locked ?? originalRow['Allow Edit When Locked'])
+
+        // validations
+        if (!title) {
           throw new Error(`Title is required in row ${i + 2}`)
         }
+        if (!responsibility.length) {
+          throw new Error(`At least one responsibility is required in row ${i + 2}`)
+        }
+        if (!categories.length) {
+          throw new Error(`At least one category is required in row ${i + 2}`)
+        }
+        if (!frequencies.length) {
+          throw new Error(`At least one frequency is required in row ${i + 2}`)
+        }
 
-        processedData.push(taskData)
+        processedData.push({
+          title,
+          description,
+          responsibility,
+          categories,
+          frequencies,
+          timing,
+          due_time,
+          due_date,
+          start_date,
+          end_date,
+          publish_status,
+          publish_delay,
+          weekdays,
+          months,
+          sticky_once_off,
+          allow_edit_when_locked,
+        })
       }
 
       // Import tasks one by one
