@@ -9,14 +9,13 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
-import { Users, ClipboardList, Calendar, Settings, BarChart3, RefreshCw, Play } from "lucide-react"
+import { Users, ClipboardList, Calendar, Settings, BarChart3 } from "lucide-react"
 import { authenticatedGet } from "@/lib/api-client"
-import { toastSuccess, toastError } from "@/hooks/use-toast"
 
 export default function AdminDashboard() {
   const { user, isLoading, isAdmin } = usePositionAuth()
   const router = useRouter()
-  const [isGenerating, setIsGenerating] = useState(false)
+
   const [diagnostics, setDiagnostics] = useState<{
     masterTasks: number
     taskInstances: number
@@ -76,26 +75,7 @@ export default function AdminDashboard() {
     )
   }
 
-  const handleGenerateTaskInstances = async () => {
-    setIsGenerating(true)
-    try {
-      const result = await authenticatedGet('/api/jobs/generate-instances?mode=custom&forceRegenerate=false')
-      if (result && result.success) {
-        toastSuccess("Task Generation Complete", 
-          `Generated ${result.stats.generated} task instances, skipped ${result.stats.skipped}`)
-        // Reload diagnostics and refresh the page to update KPI widgets
-        await loadDiagnostics()
-        window.location.reload()
-      } else {
-        toastError("Generation Failed", result?.message || "Failed to generate task instances")
-      }
-    } catch (error) {
-      console.error('Error generating task instances:', error)
-      toastError("Generation Error", "An error occurred while generating task instances")
-    } finally {
-      setIsGenerating(false)
-    }
-  }
+
 
   if (!user || !isAdmin) return null
 
@@ -178,19 +158,6 @@ export default function AdminDashboard() {
                   </div>
                 )}
               </div>
-              <Button
-                onClick={handleGenerateTaskInstances}
-                disabled={isGenerating}
-                variant="outline"
-                className="bg-white/10 border-white/20 text-white hover:bg-white/20 flex items-center space-x-2 w-full sm:w-auto"
-              >
-                {isGenerating ? (
-                  <RefreshCw className="w-4 h-4 animate-spin" />
-                ) : (
-                  <Play className="w-4 h-4" />
-                )}
-                <span>{isGenerating ? 'Generating...' : 'Generate Task Instances'}</span>
-              </Button>
             </div>
           </div>
         </div>
