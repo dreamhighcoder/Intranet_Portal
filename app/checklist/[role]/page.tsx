@@ -12,7 +12,7 @@ import { Badge } from '@/components/ui/badge'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Input } from '@/components/ui/input'
-import { Check, X, Eye, LogOut, Settings, ChevronRight, Search } from 'lucide-react'
+import { Check, X, Eye, LogOut, Settings, ChevronRight, Search, Clock } from 'lucide-react'
 import Link from 'next/link'
 import { toastError, toastSuccess } from '@/hooks/use-toast'
 import { toKebabCase } from '@/lib/responsibility-mapper'
@@ -174,6 +174,115 @@ const renderBadgesWithTruncation = (
         +{hiddenCount}
       </Badge>
     </>
+  )
+}
+
+// Helper function to format frequency for display
+const formatFrequency = (frequency: string | null | undefined) => {
+  if (!frequency) {
+    return 'Not set'
+  }
+  return frequency.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())
+}
+
+// Helper function to get frequency badge color
+const getFrequencyBadgeColor = (frequency: string | null | undefined) => {
+  if (!frequency) {
+    return 'bg-gray-100 text-gray-800 border-gray-200'
+  }
+
+  const colorMap: Record<string, string> = {
+    'once_off': 'bg-purple-100 text-purple-800 border-purple-200',
+    'once_off_sticky': 'bg-purple-100 text-purple-800 border-purple-200',
+    'every_day': 'bg-blue-100 text-blue-800 border-blue-200',
+    'weekly': 'bg-green-100 text-green-800 border-green-200',
+    'specific_weekdays': 'bg-green-100 text-green-800 border-green-200',
+    'monday': 'bg-green-100 text-green-800 border-green-200',
+    'tuesday': 'bg-green-100 text-green-800 border-green-200',
+    'wednesday': 'bg-green-100 text-green-800 border-green-200',
+    'thursday': 'bg-green-100 text-green-800 border-green-200',
+    'friday': 'bg-green-100 text-green-800 border-green-200',
+    'saturday': 'bg-green-100 text-green-800 border-green-200',
+    'once_weekly': 'bg-green-100 text-green-800 border-green-200',
+    'start_every_month': 'bg-amber-100 text-amber-800 border-amber-200',
+    'start_of_every_month': 'bg-amber-100 text-amber-800 border-amber-200',
+    'start_certain_months': 'bg-amber-100 text-amber-800 border-amber-200',
+    'start_of_month_jan': 'bg-amber-100 text-amber-800 border-amber-200',
+    'start_of_month_feb': 'bg-amber-100 text-amber-800 border-amber-200',
+    'start_of_month_mar': 'bg-amber-100 text-amber-800 border-amber-200',
+    'start_of_month_apr': 'bg-amber-100 text-amber-800 border-amber-200',
+    'start_of_month_may': 'bg-amber-100 text-amber-800 border-amber-200',
+    'start_of_month_jun': 'bg-amber-100 text-amber-800 border-amber-200',
+    'start_of_month_jul': 'bg-amber-100 text-amber-800 border-amber-200',
+    'start_of_month_aug': 'bg-amber-100 text-amber-800 border-amber-200',
+    'start_of_month_sep': 'bg-amber-100 text-amber-800 border-amber-200',
+    'start_of_month_oct': 'bg-amber-100 text-amber-800 border-amber-200',
+    'start_of_month_nov': 'bg-amber-100 text-amber-800 border-amber-200',
+    'start_of_month_dec': 'bg-amber-100 text-amber-800 border-amber-200',
+    'every_month': 'bg-orange-100 text-orange-800 border-orange-200',
+    'certain_months': 'bg-orange-100 text-orange-800 border-orange-200',
+    'once_monthly': 'bg-orange-100 text-orange-800 border-orange-200',
+    'end_every_month': 'bg-red-100 text-red-800 border-red-200',
+    'end_of_every_month': 'bg-red-100 text-red-800 border-red-200',
+    'end_certain_months': 'bg-red-100 text-red-800 border-red-200',
+    'end_of_month_jan': 'bg-red-100 text-red-800 border-red-200',
+    'end_of_month_feb': 'bg-red-100 text-red-800 border-red-200',
+    'end_of_month_mar': 'bg-red-100 text-red-800 border-red-200',
+    'end_of_month_apr': 'bg-red-100 text-red-800 border-red-200',
+    'end_of_month_may': 'bg-red-100 text-red-800 border-red-200',
+    'end_of_month_jun': 'bg-red-100 text-red-800 border-red-200',
+    'end_of_month_jul': 'bg-red-100 text-red-800 border-red-200',
+    'end_of_month_aug': 'bg-red-100 text-red-800 border-red-200',
+    'end_of_month_sep': 'bg-red-100 text-red-800 border-red-200',
+    'end_of_month_oct': 'bg-red-100 text-red-800 border-red-200',
+    'end_of_month_nov': 'bg-red-100 text-red-800 border-red-200',
+    'end_of_month_dec': 'bg-red-100 text-red-800 border-red-200'
+  }
+  return colorMap[frequency] || 'bg-indigo-100 text-indigo-800 border-indigo-200'
+}
+
+// Helper function to render frequency with additional details
+const renderFrequencyWithDetails = (task: ChecklistTask) => {
+  // Use frequencies array
+  const frequencies = task.master_task.frequencies || []
+
+  if (frequencies.length === 0) {
+    return <span className="text-gray-400 text-xs">No frequency set</span>
+  }
+
+  return (
+    <div className="space-y-2">
+      {/* Frequencies */}
+      <div className="flex flex-wrap gap-1">
+        {frequencies.slice(0, 2).map((freq, index) => (
+          <Badge
+            key={index}
+            className={`text-xs ${getFrequencyBadgeColor(freq)}`}
+          >
+            {formatFrequency(freq)}
+          </Badge>
+        ))}
+        {frequencies.length > 2 && (
+          <Badge
+            variant="outline"
+            className="text-xs bg-gray-100"
+            title={`${frequencies.length - 2} more: ${frequencies.slice(2).map(f => formatFrequency(f)).join(', ')}`}
+          >
+            +{frequencies.length - 2}
+          </Badge>
+        )}
+      </div>
+
+      {/* Timing */}
+      {task.master_task.timing && (
+        <div className="flex items-center gap-1">
+          <Clock className="h-3 w-3 text-gray-400" />
+          <span className="text-xs text-gray-600">
+            {task.master_task.timing.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
+          </span>
+        </div>
+      )}
+    </div>
   )
 }
 
@@ -752,7 +861,7 @@ export default function RoleChecklistPage() {
                         <TableHead className={isAdmin ? "w-[25%] py-3" : "w-[40%] py-3"}>Title & Description</TableHead>
                         {isAdmin && <TableHead className="w-[15%] py-3">Responsibility</TableHead>}
                         <TableHead className="w-[15%] py-3">Category</TableHead>
-                        <TableHead className="w-[10%] py-3">Timing</TableHead>
+                        <TableHead className="w-[10%] py-3">Frequencies & Timing</TableHead>
                         <TableHead className="w-[10%] py-3">Due Time</TableHead>
                         <TableHead className="w-[10%] py-3">Status</TableHead>
                         <TableHead className="w-[10%] py-3 text-center">Actions</TableHead>
@@ -790,9 +899,7 @@ export default function RoleChecklistPage() {
                             </div>
                           </TableCell>
                           <TableCell className="py-3">
-                            <Badge className={`capitalize ${getTimingColor(task.master_task.timing)}`}>
-                              {task.master_task.timing.replace(/_/g, ' ')}
-                            </Badge>
+                            {renderFrequencyWithDetails(task)}
                           </TableCell>
                           <TableCell className="py-3">
                             {task.master_task.due_time ? (
@@ -889,11 +996,9 @@ export default function RoleChecklistPage() {
                               </div>
                             </div>
                             <div>
-                              <span className="text-gray-500">Timing:</span>
+                              <span className="text-gray-500">Frequencies & Timing:</span>
                               <div className="mt-1">
-                                <Badge className={`capitalize text-xs ${getTimingColor(task.master_task.timing)}`}>
-                                  {task.master_task.timing.replace(/_/g, ' ')}
-                                </Badge>
+                                {renderFrequencyWithDetails(task)}
                               </div>
                             </div>
                             <div>

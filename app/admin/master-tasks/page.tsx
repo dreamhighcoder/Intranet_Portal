@@ -424,7 +424,7 @@ const TaskDetailsModal = ({ task, positions }: { task: MasterTask, positions: Po
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="items-center  p-4 bg-gray-50 rounded-md border border-gray-100 shadow-sm">
                 <label className="text-sm font-medium text-gray-600">Timing</label>
                 <p className="text-sm mt-1">
@@ -703,9 +703,9 @@ export default function AdminMasterTasksPage() {
           value: position.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, ''),
           label: position.name
         }))
-      
+
       // No longer adding shared options - they have been removed
-      
+
       RESPONSIBILITY_OPTIONS.length = 0 // Clear existing array
       RESPONSIBILITY_OPTIONS.push(...responsibilityOptions) // Add new options
 
@@ -1488,8 +1488,8 @@ export default function AdminMasterTasksPage() {
                       <TableRow>
                         <TableHead className="w-[25%] py-3 bg-gray-50">Title & Description</TableHead>
                         <TableHead className="w-[15%] py-3 bg-gray-50">Responsibilities</TableHead>
-                        <TableHead className="w-[15%] py-3 bg-gray-50">Frequencies</TableHead>
                         <TableHead className="w-[15%] py-3 bg-gray-50">Categories</TableHead>
+                        <TableHead className="w-[15%] py-3 bg-gray-50">Frequencies & Timing</TableHead>
                         <TableHead className="w-[10%] py-3 bg-gray-50 text-center">Status</TableHead>
                         <TableHead className="w-[10%] py-3 bg-gray-50 text-center">Due Time</TableHead>
                         <TableHead className="w-[10%] py-3 bg-gray-50 text-center">Actions</TableHead>
@@ -1524,11 +1524,6 @@ export default function AdminMasterTasksPage() {
                           </TableCell>
                           <TableCell className="py-3">
                             <div className="max-w-full overflow-hidden">
-                              {renderFrequencyWithDetails(task)}
-                            </div>
-                          </TableCell>
-                          <TableCell className="py-3">
-                            <div className="max-w-full overflow-hidden">
                               {task.categories && task.categories.length > 0 ? (
                                 renderTruncatedArray(task.categories, 2, "outline", "category")
                               ) : task.category ? (
@@ -1539,6 +1534,12 @@ export default function AdminMasterTasksPage() {
                               ) : (
                                 <span className="text-gray-400 text-xs">None</span>
                               )}
+                            </div>
+                          </TableCell>
+
+                          <TableCell className="py-3">
+                            <div className="max-w-full overflow-hidden">
+                              {renderFrequencyWithDetails(task)}
                             </div>
                           </TableCell>
                           <TableCell className="text-center">
@@ -1814,8 +1815,6 @@ export default function AdminMasterTasksPage() {
             </div>
           </DialogContent>
         </Dialog>
-
-
       </main>
     </div>
   )
