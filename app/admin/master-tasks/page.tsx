@@ -1536,7 +1536,6 @@ export default function AdminMasterTasksPage() {
                               )}
                             </div>
                           </TableCell>
-
                           <TableCell className="py-3">
                             <div className="max-w-full overflow-hidden">
                               {renderFrequencyWithDetails(task)}
@@ -1616,7 +1615,6 @@ export default function AdminMasterTasksPage() {
                     </TableBody>
                   </Table>
                 </div>
-
                 {/* Mobile Card Layout */}
                 <div className="lg:hidden space-y-4 w-full px-4 sm:px-6">
                   {filteredTasks.map((task) => (
@@ -1630,7 +1628,6 @@ export default function AdminMasterTasksPage() {
                               <p className="text-sm text-gray-600 mt-1">{task.description}</p>
                             )}
                           </div>
-
                           {/* Details Grid */}
                           <div className="space-y-3 text-sm">
                             <div>
@@ -1699,7 +1696,6 @@ export default function AdminMasterTasksPage() {
                                   </SelectContent>
                                 </Select>
                               </div>
-
                               <div className="flex space-x-1">
                                 <Dialog>
                                   <DialogTrigger asChild>
@@ -1745,7 +1741,6 @@ export default function AdminMasterTasksPage() {
                     </Card>
                   ))}
                 </div>
-
                 {filteredTasks.length === 0 && (
                   <div className="text-center py-8">
                     <p className="text-gray-600">No tasks found matching your filters.</p>
@@ -1755,7 +1750,6 @@ export default function AdminMasterTasksPage() {
             )}
           </CardContent>
         </Card>
-
         {/* Task Creation/Edit Dialog */}
         <Dialog open={isTaskDialogOpen} onOpenChange={setIsTaskDialogOpen}>
           <DialogContent className="dialog-content create-task-modal overflow-hidden flex flex-col" style={{ maxWidth: "64rem", width: "70vw", maxHeight: "95vh", height: "95vh" }}>
@@ -1773,7 +1767,6 @@ export default function AdminMasterTasksPage() {
             </div>
           </DialogContent>
         </Dialog>
-
         {/* Delete Confirmation Modal */}
         <Dialog open={deleteConfirmModal.isOpen} onOpenChange={(open) => !open && setDeleteConfirmModal({ isOpen: false, task: null })}>
           <DialogContent className="max-w-md">

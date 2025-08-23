@@ -619,16 +619,13 @@ export default function RoleChecklistPage() {
           }
           return false
         }
-        
         if (selectedStatus === "due_today") {
           return task.status !== "completed"
         }
-        
         if (selectedStatus === "completed") {
           return task.status === "completed"
         }
       }
-
       return true
     })
   }, [tasks, searchTerm, selectedResponsibility, selectedCategory, selectedStatus, currentDate, isAdmin])
@@ -861,9 +858,9 @@ export default function RoleChecklistPage() {
                         <TableHead className={isAdmin ? "w-[25%] py-3" : "w-[40%] py-3"}>Title & Description</TableHead>
                         {isAdmin && <TableHead className="w-[15%] py-3">Responsibility</TableHead>}
                         <TableHead className="w-[15%] py-3">Category</TableHead>
-                        <TableHead className="w-[10%] py-3">Frequencies & Timing</TableHead>
-                        <TableHead className="w-[10%] py-3">Due Time</TableHead>
-                        <TableHead className="w-[10%] py-3">Status</TableHead>
+                        <TableHead className="w-[15%] py-3">Frequencies & Timing</TableHead>
+                        <TableHead className="w-[7%] py-3">Due Time</TableHead>
+                        <TableHead className="w-[8%] py-3">Status</TableHead>
                         <TableHead className="w-[10%] py-3 text-center">Actions</TableHead>
                       </TableRow>
                     </TableHeader>
