@@ -12,7 +12,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Alert, AlertDescription } from "@/components/ui/alert"
 
 import { publicHolidaysApi } from "@/lib/api-client"
-import { Plus, Trash2, Download, Upload, Calendar, RefreshCw } from "lucide-react"
+import { Plus, Trash2, Edit, Download, Upload, Calendar, RefreshCw } from "lucide-react"
 import { toastError, toastSuccess } from "@/hooks/use-toast"
 
 interface PublicHoliday {
@@ -424,7 +424,7 @@ export default function AdminPublicHolidaysPage() {
             <CardHeader>
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between space-y-2 sm:space-y-0">
                 <CardTitle className="text-lg lg:text-xl">
-                  Holidays ({holidays.length} of {holidays.length})
+                  Holidays ({Math.min(currentPage * 15, holidays.length)} of {holidays.length})
                   {totalPages > 1 && (
                     <span className="text-sm font-normal text-gray-600 ml-2">
                       - Page {currentPage} of {totalPages}
@@ -486,7 +486,7 @@ export default function AdminPublicHolidaysPage() {
                                 variant="outline"
                                 onClick={() => handleEditHoliday(holiday)}
                               >
-                                Edit
+                                <Edit className="w-3 h-3" />
                               </Button>
                               <Button
                                 size="sm"

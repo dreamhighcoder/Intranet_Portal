@@ -956,7 +956,7 @@ export default function RoleChecklistPage() {
             <CardHeader>
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between space-y-2 sm:space-y-0">
                 <CardTitle className="text-lg lg:text-xl">
-                  Tasks ({filteredTasks.length} of {tasks.length})
+                  Tasks ({Math.min(currentPage * 15, tasks.length)} of {tasks.length})
                   {totalPages > 1 && (
                     <span className="text-sm font-normal text-gray-600 ml-2">
                       - Page {currentPage} of {totalPages}
