@@ -1,78 +1,57 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/auth-middleware'
 import { toKebabCase, filterTasksByResponsibility } from '@/lib/responsibility-mapper'
-import { createRecurrenceEngine } from '@/lib/recurrence-engine'
-import { createHolidayHelper } from '@/lib/public-holidays'
+import { createTaskRecurrenceStatusEngine, type MasterTask, type FrequencyType } from '@/lib/task-recurrence-status-engine'
 import { createClient } from '@supabase/supabase-js'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
 const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey)
 
-// Convert frequencies array to frequency_rules format for the recurrence engine
-function convertFrequenciesToRules(frequencies: string[]): any {
-  if (!frequencies || frequencies.length === 0) {
-    return { type: 'daily' }
+// Convert string frequencies to FrequencyType enum values
+function convertStringFrequenciesToEnum(frequencies: string[]): FrequencyType[] {
+  const frequencyMap: { [key: string]: FrequencyType } = {
+    'once_off': 'once_off' as FrequencyType,
+    'every_day': 'every_day' as FrequencyType,
+    'once_weekly': 'once_weekly' as FrequencyType,
+    'monday': 'monday' as FrequencyType,
+    'tuesday': 'tuesday' as FrequencyType,
+    'wednesday': 'wednesday' as FrequencyType,
+    'thursday': 'thursday' as FrequencyType,
+    'friday': 'friday' as FrequencyType,
+    'saturday': 'saturday' as FrequencyType,
+    'once_monthly': 'once_monthly' as FrequencyType,
+    'start_of_every_month': 'start_of_every_month' as FrequencyType,
+    'start_of_month_jan': 'start_of_month_jan' as FrequencyType,
+    'start_of_month_feb': 'start_of_month_feb' as FrequencyType,
+    'start_of_month_mar': 'start_of_month_mar' as FrequencyType,
+    'start_of_month_apr': 'start_of_month_apr' as FrequencyType,
+    'start_of_month_may': 'start_of_month_may' as FrequencyType,
+    'start_of_month_jun': 'start_of_month_jun' as FrequencyType,
+    'start_of_month_jul': 'start_of_month_jul' as FrequencyType,
+    'start_of_month_aug': 'start_of_month_aug' as FrequencyType,
+    'start_of_month_sep': 'start_of_month_sep' as FrequencyType,
+    'start_of_month_oct': 'start_of_month_oct' as FrequencyType,
+    'start_of_month_nov': 'start_of_month_nov' as FrequencyType,
+    'start_of_month_dec': 'start_of_month_dec' as FrequencyType,
+    'end_of_every_month': 'end_of_every_month' as FrequencyType,
+    'end_of_month_jan': 'end_of_month_jan' as FrequencyType,
+    'end_of_month_feb': 'end_of_month_feb' as FrequencyType,
+    'end_of_month_mar': 'end_of_month_mar' as FrequencyType,
+    'end_of_month_apr': 'end_of_month_apr' as FrequencyType,
+    'end_of_month_may': 'end_of_month_may' as FrequencyType,
+    'end_of_month_jun': 'end_of_month_jun' as FrequencyType,
+    'end_of_month_jul': 'end_of_month_jul' as FrequencyType,
+    'end_of_month_aug': 'end_of_month_aug' as FrequencyType,
+    'end_of_month_sep': 'end_of_month_sep' as FrequencyType,
+    'end_of_month_oct': 'end_of_month_oct' as FrequencyType,
+    'end_of_month_nov': 'end_of_month_nov' as FrequencyType,
+    'end_of_month_dec': 'end_of_month_dec' as FrequencyType
   }
 
-  // Handle the most common cases first
-  if (frequencies.includes('every_day')) {
-    return { type: 'daily', every_n_days: 1, business_days_only: false }
-  }
-
-  if (frequencies.includes('once_off')) {
-    return { type: 'once_off' }
-  }
-
-  // Handle specific weekdays
-  const weekdays = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday']
-  const selectedWeekdays = frequencies.filter(f => weekdays.includes(f))
-  if (selectedWeekdays.length > 0) {
-    // Map weekday names to numbers (1=Monday, 7=Sunday)
-    const weekdayMap: { [key: string]: number } = {
-      'monday': 1, 'tuesday': 2, 'wednesday': 3, 'thursday': 4, 
-      'friday': 5, 'saturday': 6, 'sunday': 7
-    }
-    const weekdayNumbers = selectedWeekdays.map(day => weekdayMap[day]).filter(Boolean)
-    
-    if (weekdayNumbers.length === 1) {
-      return { type: 'weekly', start_day: weekdayNumbers[0], every_n_weeks: 1 }
-    } else {
-      return { type: 'specific_weekdays', weekdays: weekdayNumbers, every_n_weeks: 1 }
-    }
-  }
-
-  // Handle monthly patterns
-  if (frequencies.includes('start_of_every_month')) {
-    return { type: 'start_of_month', day_of_month: 1 }
-  }
-
-  if (frequencies.includes('end_of_every_month')) {
-    return { type: 'end_of_month', days_from_end: 0 }
-  }
-
-  // Handle specific month patterns
-  const monthlyPatterns = frequencies.filter(f => f.startsWith('start_of_month_') || f.startsWith('end_of_month_'))
-  if (monthlyPatterns.length > 0) {
-    const monthMap: { [key: string]: number } = {
-      'jan': 1, 'feb': 2, 'mar': 3, 'apr': 4, 'may': 5, 'jun': 6,
-      'jul': 7, 'aug': 8, 'sep': 9, 'oct': 10, 'nov': 11, 'dec': 12
-    }
-    
-    const months = monthlyPatterns.map(pattern => {
-      const monthKey = pattern.split('_').pop()
-      return monthKey ? monthMap[monthKey] : null
-    }).filter(Boolean)
-
-    if (monthlyPatterns[0].startsWith('start_of_month_')) {
-      return { type: 'start_certain_months', months, day_of_month: 1 }
-    } else {
-      return { type: 'end_certain_months', months, days_from_end: 0 }
-    }
-  }
-
-  // Default fallback
-  return { type: 'daily', every_n_days: 1, business_days_only: false }
+  return frequencies
+    .map(freq => frequencyMap[freq])
+    .filter(Boolean)
 }
 
 // Build a comprehensive set of responsibility variants to match DB values
@@ -168,15 +147,8 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // Get holidays
-    const { data: holidays } = await supabaseAdmin
-      .from('public_holidays')
-      .select('*')
-      .gte('date', startDateStr)
-      .lte('date', endDateStr)
-
-    const holidayHelper = createHolidayHelper(holidays || [])
-    const recurrenceEngine = createRecurrenceEngine(holidayHelper)
+    // Create the new recurrence engine
+    const recurrenceEngine = await createTaskRecurrenceStatusEngine()
 
     // Build master_tasks query
     let taskQuery = supabaseAdmin
@@ -237,29 +209,38 @@ export async function GET(request: NextRequest) {
       cur.setDate(cur.getDate() + 1)
     }
 
-    // Fill occurrences using recurrence engine
+    // Fill occurrences using new recurrence engine
     const now = new Date()
     for (const task of roleFiltered) {
-      // Convert frequencies array to frequency_rules format for the recurrence engine
-      const frequency_rules = convertFrequenciesToRules(task.frequencies || [])
+      // Convert task to MasterTask format for new engine
+      const masterTask: MasterTask = {
+        id: task.id,
+        title: task.title || '',
+        description: task.description || '',
+        responsibility: task.responsibility || [],
+        categories: task.categories || [],
+        frequencies: convertStringFrequenciesToEnum(task.frequencies || []),
+        timing: task.due_time || '09:00',
+        active: true,
+        publish_at: task.publish_delay || undefined,
+        start_date: task.start_date || task.created_at?.split('T')[0],
+        end_date: task.end_date || undefined
+      }
       
       // iterate across range and add when due
       const iter = new Date(startDate)
       while (iter <= endDate) {
-        let isDue = false
+        const ds = iter.toISOString().split('T')[0]
+        let shouldAppear = false
+        
         try {
-          isDue = recurrenceEngine.isDueOnDate({
-            id: task.id,
-            frequency_rules: frequency_rules,
-            start_date: task.start_date || task.created_at?.split('T')[0],
-            end_date: task.end_date
-          }, iter)
+          shouldAppear = recurrenceEngine.shouldTaskAppearOnDate(masterTask, ds)
         } catch (error) {
-          console.error('Error checking if task is due:', error)
-          isDue = false
+          console.error('Error checking if task should appear:', error)
+          shouldAppear = false
         }
-        if (isDue) {
-          const ds = iter.toISOString().split('T')[0]
+        
+        if (shouldAppear) {
           const day = calendarMap[ds]
           if (day) {
             day.total++
@@ -281,6 +262,13 @@ export async function GET(request: NextRequest) {
     }
 
     const calendarArray = Object.values(calendarMap)
+
+    // Get holidays for overlay
+    const { data: holidays } = await supabaseAdmin
+      .from('public_holidays')
+      .select('*')
+      .gte('date', startDateStr)
+      .lte('date', endDateStr)
 
     // Holidays overlay
     const holidayMap = (holidays || []).reduce((acc: any, h: any) => { acc[h.date] = h.name; return acc }, {})

@@ -96,6 +96,10 @@ export enum TaskStatus {
  */
 export interface MasterTask {
   id: string
+  title: string
+  description: string
+  responsibility: string[]
+  categories: string[]
   active: boolean
   frequencies: FrequencyType[]
   timing: string // Default due time (HH:MM format)
@@ -183,8 +187,16 @@ export class TaskRecurrenceStatusEngine {
     const carry_instances: TaskInstance[] = []
 
     for (const task of masterTasks) {
-      // Skip if not active or before publish_at date
+      // Skip if not active
       if (!task.active) continue
+      
+      // Skip if before start_date
+      if (task.start_date && targetDate < new Date(task.start_date + 'T00:00:00')) continue
+      
+      // Skip if after end_date
+      if (task.end_date && targetDate > new Date(task.end_date + 'T00:00:00')) continue
+      
+      // Skip if before publish_at date
       if (task.publish_at && targetDate < new Date(task.publish_at + 'T00:00:00')) continue
 
       // Process each frequency in the task
@@ -318,8 +330,21 @@ export class TaskRecurrenceStatusEngine {
       return { should_appear: false, is_carry_instance: false, due_date: '' }
     }
 
-    const dueDate = new Date(task.due_date + 'T00:00:00')
-    const firstEligibleDate = task.publish_at ? new Date(task.publish_at + 'T00:00:00') : dueDate
+    // First eligible date is when task becomes active and after publish_at
+    let firstEligibleDate = new Date()
+    
+    // Consider start_date if provided
+    if (task.start_date) {
+      firstEligibleDate = new Date(task.start_date + 'T00:00:00')
+    }
+    
+    // Consider publish_at if provided and later than start_date
+    if (task.publish_at) {
+      const publishDate = new Date(task.publish_at + 'T00:00:00')
+      if (publishDate > firstEligibleDate) {
+        firstEligibleDate = publishDate
+      }
+    }
 
     // Appears from first eligible date onwards (same instance continues)
     if (date >= firstEligibleDate) {
@@ -591,7 +616,7 @@ export class TaskRecurrenceStatusEngine {
   }
 
   /**
-   * End of specific month (Jan, Feb, etc.)
+   * End of specific month (Jan, Feb, etc.) - Same as Once Monthly carry behavior
    */
   private calculateEndOfSpecificMonth(task: MasterTask, frequency: FrequencyType, date: Date): AppearanceResult {
     const monthMap: { [key: string]: number } = {
@@ -610,7 +635,36 @@ export class TaskRecurrenceStatusEngine {
     }
 
     const targetMonth = monthMap[frequency]
-    return this.calculateEndOfMonth(task, date, targetMonth)
+    
+    // Only process if we're in the target month
+    if (date.getMonth() !== targetMonth) {
+      return { should_appear: false, is_carry_instance: false, due_date: '' }
+    }
+    
+    // Find appearance date: latest Monday with ≥5 remaining workdays
+    const appearanceDate = this.findEndOfMonthAppearanceDate(date)
+    
+    // Due date: last Saturday of month (or nearest earlier non-PH)
+    const lastSaturday = this.getLastSaturdayOfMonth(date)
+    let dueDate = new Date(lastSaturday)
+    if (this.holidayChecker.isHoliday(dueDate)) {
+      const earlierDate = this.findNearestEarlierWeekdayInMonth(dueDate)
+      if (earlierDate) {
+        dueDate = earlierDate
+      }
+    }
+
+    // Appears from appearance date through due date only (same as Once Monthly)
+    if (date >= appearanceDate && date <= dueDate) {
+      return {
+        should_appear: true,
+        is_carry_instance: date > appearanceDate,
+        due_date: this.formatDate(dueDate),
+        original_appearance_date: this.formatDate(appearanceDate)
+      }
+    }
+
+    return { should_appear: false, is_carry_instance: false, due_date: '' }
   }
 
   /**
@@ -690,6 +744,9 @@ export class TaskRecurrenceStatusEngine {
       case FrequencyType.ONCE_WEEKLY:
       case FrequencyType.ONCE_MONTHLY:
       case FrequencyType.END_OF_EVERY_MONTH:
+        // Lock at 23:59 on due date
+        return currentDate === dueDate && currentTime >= '23:59'
+        
       case FrequencyType.END_OF_MONTH_JAN:
       case FrequencyType.END_OF_MONTH_FEB:
       case FrequencyType.END_OF_MONTH_MAR:
@@ -702,7 +759,7 @@ export class TaskRecurrenceStatusEngine {
       case FrequencyType.END_OF_MONTH_OCT:
       case FrequencyType.END_OF_MONTH_NOV:
       case FrequencyType.END_OF_MONTH_DEC:
-        // Lock at 23:59 on due date
+        // Lock at 23:59 on due date (same as Once Monthly)
         return currentDate === dueDate && currentTime >= '23:59'
         
       case FrequencyType.MONDAY:
@@ -724,8 +781,8 @@ export class TaskRecurrenceStatusEngine {
       case FrequencyType.START_OF_MONTH_OCT:
       case FrequencyType.START_OF_MONTH_NOV:
       case FrequencyType.START_OF_MONTH_DEC:
-        // Lock at Saturday cutoff (or earlier PH stop)
-        return this.isPastSaturdayCutoff(instance, currentDateTime)
+        // Lock at last Saturday of month cutoff (or earlier PH stop)
+        return this.isPastMonthlySaturdayCutoff(instance, currentDateTime)
         
       default:
         return false
@@ -831,8 +888,12 @@ export class TaskRecurrenceStatusEngine {
     }
     
     // If the computed due date lands on a PH → extend to the day after the PH
-    while (this.holidayChecker.isHoliday(current)) {
+    if (this.holidayChecker.isHoliday(current)) {
       current.setDate(current.getDate() + 1)
+      // If the day after is also a PH, keep extending until non-PH
+      while (this.holidayChecker.isHoliday(current)) {
+        current.setDate(current.getDate() + 1)
+      }
     }
     
     return current
@@ -879,12 +940,12 @@ export class TaskRecurrenceStatusEngine {
       }
     }
     
-    // Find the latest Monday with at least 5 workdays remaining
+    // Find the latest Monday with at least 5 workdays from Monday to end of month
     for (let i = mondays.length - 1; i >= 0; i--) {
       const monday = mondays[i]
-      const workdaysRemaining = this.countWorkdaysAfter(monday, lastDay)
+      const workdaysFromMondayToEndOfMonth = this.countWorkdaysFromToEndOfMonth(monday)
       
-      if (workdaysRemaining >= 5) {
+      if (workdaysFromMondayToEndOfMonth >= 5) {
         // If this Monday is PH, shift to next non-PH weekday
         if (this.holidayChecker.isHoliday(monday)) {
           return this.findNextWeekday(monday)
@@ -903,6 +964,24 @@ export class TaskRecurrenceStatusEngine {
     current.setDate(current.getDate() + 1)
     
     while (current <= endDate) {
+      if (!this.holidayChecker.isHoliday(current) && !this.isWeekend(current)) {
+        count++
+      }
+      current.setDate(current.getDate() + 1)
+    }
+    
+    return count
+  }
+
+  private countWorkdaysFromToEndOfMonth(startDate: Date): number {
+    const year = startDate.getFullYear()
+    const month = startDate.getMonth()
+    const lastDay = new Date(year, month + 1, 0)
+    
+    let count = 0
+    let current = new Date(startDate)
+    
+    while (current <= lastDay) {
       if (!this.holidayChecker.isHoliday(current) && !this.isWeekend(current)) {
         count++
       }
@@ -941,6 +1020,56 @@ export class TaskRecurrenceStatusEngine {
     cutoffDate.setHours(23, 59, 59, 999)
     
     return currentDateTime >= cutoffDate
+  }
+
+  private isPastMonthlySaturdayCutoff(instance: TaskInstance, currentDateTime: Date): boolean {
+    // Calculate the last Saturday of the month cutoff for this instance
+    const instanceDate = new Date(instance.date + 'T00:00:00')
+    const lastSaturday = this.getLastSaturdayOfMonth(instanceDate)
+    
+    // Find actual cutoff (last Saturday or earlier if PH)
+    let cutoffDate = new Date(lastSaturday)
+    if (this.holidayChecker.isHoliday(cutoffDate)) {
+      const earlierDate = this.findNearestEarlierWeekdayInMonth(cutoffDate)
+      if (earlierDate) {
+        cutoffDate = earlierDate
+      }
+    }
+    
+    // Set cutoff time to 23:59
+    cutoffDate.setHours(23, 59, 59, 999)
+    
+    return currentDateTime >= cutoffDate
+  }
+
+  /**
+   * Check if a task should appear on a specific date for any of its frequencies
+   * This is a public method for calendar and checklist views
+   */
+  shouldTaskAppearOnDate(task: MasterTask, date: string): boolean {
+    const targetDate = new Date(date + 'T00:00:00')
+    
+    // Skip if not active
+    if (!task.active) return false
+    
+    // Skip if before start_date
+    if (task.start_date && targetDate < new Date(task.start_date + 'T00:00:00')) return false
+    
+    // Skip if after end_date
+    if (task.end_date && targetDate > new Date(task.end_date + 'T00:00:00')) return false
+    
+    // Skip if before publish_at date
+    if (task.publish_at && targetDate < new Date(task.publish_at + 'T00:00:00')) return false
+    
+    // Check each frequency
+    for (const frequency of task.frequencies) {
+      const result = this.calculateAppearance(task, frequency, targetDate)
+      if (result.should_appear) {
+        return true
+      }
+    }
+    
+    return false
   }
 
   private getLockReason(frequency: FrequencyType): string {
