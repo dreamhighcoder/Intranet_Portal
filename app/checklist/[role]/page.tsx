@@ -749,13 +749,13 @@ export default function RoleChecklistPage() {
                   <Table className="table-fixed w-full">
                     <TableHeader>
                       <TableRow>
-                        <TableHead className={isAdmin ? "w-[20%] py-3" : "w-[25%] py-3"}>Title & Description</TableHead>
+                        <TableHead className={isAdmin ? "w-[25%] py-3" : "w-[40%] py-3"}>Title & Description</TableHead>
                         {isAdmin && <TableHead className="w-[15%] py-3">Responsibility</TableHead>}
                         <TableHead className="w-[15%] py-3">Category</TableHead>
-                        <TableHead className="w-[15%] py-3">Timing</TableHead>
+                        <TableHead className="w-[10%] py-3">Timing</TableHead>
                         <TableHead className="w-[10%] py-3">Due Time</TableHead>
                         <TableHead className="w-[10%] py-3">Status</TableHead>
-                        <TableHead className={isAdmin ? "w-[10%] py-3 text-center" : "w-[30%] py-3 text-center"}>Actions</TableHead>
+                        <TableHead className="w-[10%] py-3 text-center">Actions</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -763,7 +763,9 @@ export default function RoleChecklistPage() {
                         <TableRow key={`${task.id}-${refreshKey}`}>
                           <TableCell className="py-3">
                             <div className="max-w-full">
-                              <div className="font-medium truncate">{task.master_task.title}</div>
+                              {task.master_task.title && task.master_task.title.trim() && (
+                                <div className="font-medium truncate">{task.master_task.title}</div>
+                              )}
                               {task.master_task.description && (
                                 <div className="text-sm text-gray-600 truncate">
                                   {task.master_task.description}
@@ -862,7 +864,9 @@ export default function RoleChecklistPage() {
                         <div className="space-y-3">
                           {/* Title and Description */}
                           <div>
-                            <h3 className="font-medium text-base truncate">{task.master_task.title}</h3>
+                            {task.master_task.title && task.master_task.title.trim() && (
+                              <h3 className="font-medium text-base truncate">{task.master_task.title}</h3>
+                            )}
                             {task.master_task.description && (
                               <p className="text-sm text-gray-600 mt-1 truncate">{task.master_task.description}</p>
                             )}

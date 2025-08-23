@@ -213,7 +213,7 @@ export async function GET(request: NextRequest) {
         updated_at: task.created_at,
         master_task: {
           id: task.id,
-          title: task.title || 'Unknown Task',
+          title: task.title,
           description: task.description,
           timing: task.timing || 'anytime_during_day',
           due_time: task.due_time,

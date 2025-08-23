@@ -113,7 +113,7 @@ async function testChecklistAPI() {
       updated_at: new Date().toISOString(),
       master_task: {
         id: task.id,
-        title: task.title || 'Unknown Task',
+        title: task.title,
         description: task.description,
         timing: task.timing || 'anytime_during_day',
         due_time: task.due_time,
