@@ -746,57 +746,61 @@ export default function RoleChecklistPage() {
               <>
                 {/* Desktop Table */}
                 <div className="hidden lg:block overflow-x-auto px-4">
-                  <Table>
+                  <Table className="table-fixed w-full">
                     <TableHeader>
                       <TableRow>
-                        <TableHead className={isAdmin ? "min-w-[20%] px-4 sm:px-6" : "min-w-[25%] px-4 sm:px-6"}>Task Title</TableHead>
-                        {isAdmin && <TableHead className="min-w-[15%] px-4">Responsibility</TableHead>}
-                        <TableHead className="min-w-[15%] px-4">Category</TableHead>
-                        <TableHead className="min-w-[13.5%%] px-4">Timing</TableHead>
-                        <TableHead className="min-w-[13%] px-4">Due Time</TableHead>
-                        <TableHead className="min-w-[13.5%] px-4">Status</TableHead>
-                        <TableHead className="min-w-[20%] px-4 sm:px-6">Actions</TableHead>
+                        <TableHead className={isAdmin ? "w-[20%] py-3" : "w-[25%] py-3"}>Title & Description</TableHead>
+                        {isAdmin && <TableHead className="w-[15%] py-3">Responsibility</TableHead>}
+                        <TableHead className="w-[15%] py-3">Category</TableHead>
+                        <TableHead className="w-[15%] py-3">Timing</TableHead>
+                        <TableHead className="w-[10%] py-3">Due Time</TableHead>
+                        <TableHead className="w-[10%] py-3">Status</TableHead>
+                        <TableHead className={isAdmin ? "w-[10%] py-3 text-center" : "w-[30%] py-3 text-center"}>Actions</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
                       {filteredTasks.map((task) => (
                         <TableRow key={`${task.id}-${refreshKey}`}>
-                          <TableCell className="px-4 sm:px-6">
-                            <div className="space-y-1">
-                              <div className="font-medium">{task.master_task.title}</div>
+                          <TableCell className="py-3">
+                            <div className="max-w-full">
+                              <div className="font-medium truncate">{task.master_task.title}</div>
                               {task.master_task.description && (
-                                <p className="text-sm text-gray-600 line-clamp-2">
+                                <div className="text-sm text-gray-600 truncate">
                                   {task.master_task.description}
-                                </p>
+                                </div>
                               )}
                             </div>
                           </TableCell>
                           {isAdmin && (
-                            <TableCell className="px-4">
-                              <div className="flex flex-wrap gap-1">
-                                {renderBadgesWithTruncation(task.master_task.responsibility, 2, 'responsibility')}
+                            <TableCell className="py-3">
+                              <div className="max-w-full overflow-hidden">
+                                <div className="flex flex-wrap gap-1">
+                                  {renderBadgesWithTruncation(task.master_task.responsibility, 2, 'responsibility')}
+                                </div>
                               </div>
                             </TableCell>
                           )}
-                          <TableCell className="px-4">
-                            <div className="flex flex-wrap gap-1">
-                              {renderBadgesWithTruncation(task.master_task.categories, 2, 'category')}
+                          <TableCell className="py-3">
+                            <div className="max-w-full overflow-hidden">
+                              <div className="flex flex-wrap gap-1">
+                                {renderBadgesWithTruncation(task.master_task.categories, 2, 'category')}
+                              </div>
                             </div>
                           </TableCell>
-                          <TableCell className="px-4">
+                          <TableCell className="py-3">
                             <Badge className={`capitalize ${getTimingColor(task.master_task.timing)}`}>
                               {task.master_task.timing.replace(/_/g, ' ')}
                             </Badge>
                           </TableCell>
-                          <TableCell className="px-4">
+                          <TableCell className="py-3">
                             {task.master_task.due_time ? (
                               <span className="text-sm font-medium">{task.master_task.due_time}</span>
                             ) : (
                               <span className="text-sm text-gray-500">No due time</span>
                             )}
                           </TableCell>
-                          <TableCell className="px-4">{getStatusBadge(task)}</TableCell>
-                          <TableCell className="px-4 sm:px-6 justify-between ">
+                          <TableCell className="py-3">{getStatusBadge(task)}</TableCell>
+                          <TableCell className="py-3">
                             <div className="flex items-center space-x-2">
                               {task.status === "completed" ? (
                                 <Button
@@ -858,9 +862,9 @@ export default function RoleChecklistPage() {
                         <div className="space-y-3">
                           {/* Title and Description */}
                           <div>
-                            <h3 className="font-medium text-base">{task.master_task.title}</h3>
+                            <h3 className="font-medium text-base truncate">{task.master_task.title}</h3>
                             {task.master_task.description && (
-                              <p className="text-sm text-gray-600 mt-1">{task.master_task.description}</p>
+                              <p className="text-sm text-gray-600 mt-1 truncate">{task.master_task.description}</p>
                             )}
                           </div>
 

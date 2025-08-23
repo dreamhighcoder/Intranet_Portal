@@ -1486,7 +1486,7 @@ export default function AdminMasterTasksPage() {
                   <Table className="table-fixed w-full">
                     <TableHeader>
                       <TableRow>
-                        <TableHead className="w-[25%] py-3 bg-gray-50">Task</TableHead>
+                        <TableHead className="w-[25%] py-3 bg-gray-50">Title & Description</TableHead>
                         <TableHead className="w-[15%] py-3 bg-gray-50">Responsibilities</TableHead>
                         <TableHead className="w-[15%] py-3 bg-gray-50">Frequencies</TableHead>
                         <TableHead className="w-[15%] py-3 bg-gray-50">Categories</TableHead>
