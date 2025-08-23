@@ -204,9 +204,21 @@ export default function ReportsPage() {
           outstandingTasks: results[3]
         })
       } else {
-        setReportData({
-          [activeReportType.replace('-', '')]: results[0]
-        })
+        // Map the single result to the correct key in reportData
+        const keyMap: Record<string, keyof ReportData> = {
+          'completion-rate': 'completionRate',
+          'average-completion-time': 'averageCompletionTime',
+          'missed-tasks': 'missedTasks',
+          'missed-by-position': 'missedByPosition',
+          'outstanding-tasks': 'outstandingTasks',
+          'task-summary': 'taskSummary',
+        }
+        const mappedKey = keyMap[activeReportType]
+        if (mappedKey) {
+          setReportData({ [mappedKey]: results[0] } as ReportData)
+        } else {
+          setReportData({})
+        }
       }
       
     } catch (error) {
@@ -489,7 +501,7 @@ export default function ReportsPage() {
               <div className="space-y-2">
                 <label className="text-sm font-medium">Position</label>
                 <Select value={selectedPosition} onValueChange={setSelectedPosition}>
-                  <SelectTrigger>
+                  <SelectTrigger className="w-full">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -507,7 +519,7 @@ export default function ReportsPage() {
               <div className="space-y-2">
                 <label className="text-sm font-medium">Category</label>
                 <Select value={selectedCategory} onValueChange={setSelectedCategory}>
-                  <SelectTrigger>
+                  <SelectTrigger className="w-full">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>

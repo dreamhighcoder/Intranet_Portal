@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabase } from '@/lib/supabase'
+import { supabaseServer } from '@/lib/supabase-server'
 import { getResponsibilityForPosition } from '@/lib/position-utils'
 
 export async function GET(request: NextRequest) {
@@ -40,7 +40,7 @@ export async function GET(request: NextRequest) {
 }
 
 async function getCompletionRateReport(startDate?: string | null, endDate?: string | null, positionId?: string | null, category?: string | null) {
-  let query = supabase
+  let query = supabaseServer
     .from('task_instances')
     .select(`
       id,
@@ -93,7 +93,7 @@ async function getCompletionRateReport(startDate?: string | null, endDate?: stri
 }
 
 async function getAverageCompletionTimeReport(startDate?: string | null, endDate?: string | null, positionId?: string | null, category?: string | null) {
-  let query = supabase
+  let query = supabaseServer
     .from('task_instances')
     .select(`
       id,
@@ -150,7 +150,7 @@ async function getAverageCompletionTimeReport(startDate?: string | null, endDate
 }
 
 async function getMissedTasksReport(startDate?: string | null, endDate?: string | null, positionId?: string | null, category?: string | null) {
-  let query = supabase
+  let query = supabaseServer
     .from('task_instances')
     .select(`
       id,
@@ -190,7 +190,7 @@ async function getMissedTasksReport(startDate?: string | null, endDate?: string 
 }
 
 async function getMissedTasksByPositionReport(startDate?: string | null, endDate?: string | null, category?: string | null) {
-  let query = supabase
+  let query = supabaseServer
     .from('task_instances')
     .select(`
       id,
@@ -235,7 +235,7 @@ async function getMissedTasksByPositionReport(startDate?: string | null, endDate
 }
 
 async function getOutstandingTasksReport(positionId?: string | null, category?: string | null) {
-  let query = supabase
+  let query = supabaseServer
     .from('task_instances')
     .select(`
       id,
@@ -274,7 +274,7 @@ async function getOutstandingTasksReport(positionId?: string | null, category?: 
 }
 
 async function getTaskSummaryReport(startDate?: string | null, endDate?: string | null, positionId?: string | null, category?: string | null) {
-  let query = supabase
+  let query = supabaseServer
     .from('task_instances')
     .select(`
       id,
