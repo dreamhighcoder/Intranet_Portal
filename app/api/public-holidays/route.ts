@@ -1,8 +1,21 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabase } from '@/lib/supabase'
+import { requireAuth } from '@/lib/auth-middleware'
+import { createClient } from '@supabase/supabase-js'
+
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
+const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
 
 export async function GET(request: NextRequest) {
   try {
+    console.log('Public holidays GET - Starting request processing')
+    
+    // Authenticate the user
+    const user = await requireAuth(request)
+    console.log('Public holidays GET - Authentication successful for:', user.email)
+    
+    // Create admin Supabase client for database operations
+    const supabase = createClient(supabaseUrl, supabaseServiceKey)
+    
     const searchParams = request.nextUrl.searchParams
     const year = searchParams.get('year')
     const region = searchParams.get('region')
@@ -22,13 +35,15 @@ export async function GET(request: NextRequest) {
       query = query.eq('region', region)
     }
 
+    console.log('Public holidays GET - Executing query...')
     const { data: holidays, error } = await query
 
     if (error) {
-      console.error('Error fetching public holidays:', error)
+      console.error('Public holidays GET - Database error:', error)
       return NextResponse.json({ error: 'Failed to fetch public holidays' }, { status: 500 })
     }
 
+    console.log('Public holidays GET - Query successful, found', holidays?.length || 0, 'holidays')
     return NextResponse.json(holidays || [])
   } catch (error) {
     console.error('Unexpected error:', error)
@@ -38,6 +53,12 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: Request) {
   try {
+    // Authenticate the user
+    const user = await requireAuth(request)
+    
+    // Create admin Supabase client for database operations
+    const supabase = createClient(supabaseUrl, supabaseServiceKey)
+    
     const body = await request.json()
     const { date, name, region, source } = body
 
@@ -65,6 +86,12 @@ export async function POST(request: Request) {
 
 export async function PATCH(request: Request) {
   try {
+    // Authenticate the user
+    const user = await requireAuth(request)
+    
+    // Create admin Supabase client for database operations
+    const supabase = createClient(supabaseUrl, supabaseServiceKey)
+    
     const body = await request.json()
     const { date, name, region, source } = body
 
@@ -93,6 +120,12 @@ export async function PATCH(request: Request) {
 
 export async function DELETE(request: Request) {
   try {
+    // Authenticate the user
+    const user = await requireAuth(request)
+    
+    // Create admin Supabase client for database operations
+    const supabase = createClient(supabaseUrl, supabaseServiceKey)
+    
     const body = await request.json()
     const { date } = body
 

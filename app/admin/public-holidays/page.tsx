@@ -40,21 +40,36 @@ export default function AdminPublicHolidaysPage() {
   const [alert, setAlert] = useState<{ type: 'success' | 'error'; message: string } | null>(null)
 
   useEffect(() => {
+    console.log('Public Holidays Page - useEffect triggered:', { authLoading, user: !!user })
     // Wait for authentication to complete before loading data
     if (!authLoading && user) {
+      console.log('Public Holidays Page - Authentication complete, loading holidays')
       loadHolidays()
+    } else {
+      console.log('Public Holidays Page - Waiting for authentication...', { authLoading, hasUser: !!user })
     }
   }, [authLoading, user])
 
   const loadHolidays = async () => {
+    console.log('Public Holidays Page - Starting to load holidays...')
     setLoading(true)
     try {
+      console.log('Public Holidays Page - Calling publicHolidaysApi.getAll()')
       const data = await publicHolidaysApi.getAll()
-      setHolidays(data.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()))
+      console.log('Public Holidays Page - Received data:', data)
+      if (data && Array.isArray(data)) {
+        console.log('Public Holidays Page - Data is valid array with', data.length, 'items')
+        setHolidays(data.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()))
+      } else {
+        console.warn('Public Holidays Page - No holidays data received or data is not an array:', data)
+        setHolidays([])
+      }
     } catch (error) {
-      console.error('Error loading holidays:', error)
+      console.error('Public Holidays Page - Error loading holidays:', error)
       toastError('Error', 'Failed to load public holidays')
+      setHolidays([])
     } finally {
+      console.log('Public Holidays Page - Finished loading holidays')
       setLoading(false)
     }
   }
@@ -277,7 +292,7 @@ export default function AdminPublicHolidaysPage() {
 
         {/* Actions */}
         <Card className="card-surface mb-6">
-          <CardContent className="pt-6">
+          <CardContent>
             <div className="flex justify-between items-center">
               <div className="flex space-x-2">
                 <Button variant="outline" onClick={exportHolidays}>
@@ -313,12 +328,12 @@ export default function AdminPublicHolidaysPage() {
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Date</TableHead>
-                      <TableHead>Day</TableHead>
-                      <TableHead>Holiday Name</TableHead>
-                      <TableHead>Region</TableHead>
-                      <TableHead>Source</TableHead>
-                      <TableHead>Actions</TableHead>
+                      <TableHead className="w-[15%] py-3 bg-gray-50 text-center">Date</TableHead>
+                      <TableHead className="w-[10%] py-3 bg-gray-50 text-center">Day</TableHead>
+                      <TableHead className="w-[25%] py-3 bg-gray-50 text-center">Holiday Name</TableHead>
+                      <TableHead className="w-[15%] py-3 bg-gray-50 text-center">Region</TableHead>
+                      <TableHead className="w-[15%] py-3 bg-gray-50 text-center">Source</TableHead>
+                      <TableHead className="w-[20%] py-3 bg-gray-50 text-center">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -331,24 +346,24 @@ export default function AdminPublicHolidaysPage() {
                       return (
                         <TableRow key={holiday.date} className={isPast ? 'opacity-60' : ''}>
                           <TableCell>
-                            <div className={`font-mono ${isUpcoming ? 'text-blue-600 font-medium' : ''}`}>
+                            <div className={`font-mono ${isUpcoming ? 'flex justify-center text-blue-600 font-medium' : 'flex justify-center'}`}>
                               {date.toLocaleDateString('en-AU')}
                             </div>
                           </TableCell>
                           <TableCell>
-                            <span className="text-sm">{dayOfWeek}</span>
+                            <span className="flex justify-center text-sm">{dayOfWeek}</span>
                           </TableCell>
                           <TableCell>
-                            <span className="font-medium">{holiday.name}</span>
+                            <span className="flex justify-center font-medium">{holiday.name}</span>
                           </TableCell>
                           <TableCell>
-                            <span className="text-sm">{holiday.region || '-'}</span>
+                            <span className="flex justify-center text-sm">{holiday.region || '-'}</span>
                           </TableCell>
                           <TableCell>
-                            <span className="text-sm text-gray-600">{holiday.source || 'manual'}</span>
+                            <span className="flex justify-center text-sm text-gray-600">{holiday.source || 'manual'}</span>
                           </TableCell>
                           <TableCell>
-                            <div className="flex space-x-1">
+                            <div className="flex justify-center space-x-1">
                               <Button
                                 size="sm"
                                 variant="outline"

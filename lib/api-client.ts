@@ -16,14 +16,14 @@ export async function authenticatedFetch(url: string, options: RequestInit = {})
   const { data: { session } } = await supabase.auth.getSession()
   const positionUser = await PositionAuthService.getCurrentUser()
   
-  // console.log('API Client - Authentication check for:', url)
-  // console.log('API Client - Supabase session:', !!session?.access_token)
-  // console.log('API Client - Position user:', positionUser ? {
-  //   id: positionUser.id,
-  //   role: positionUser.role,
-  //   displayName: positionUser.displayName,
-  //   isAuthenticated: positionUser.isAuthenticated
-  // } : 'None')
+  console.log('API Client - Authentication check for:', url)
+  console.log('API Client - Supabase session:', !!session?.access_token)
+  console.log('API Client - Position user:', positionUser ? {
+    id: positionUser.id,
+    role: positionUser.role,
+    displayName: positionUser.displayName,
+    isAuthenticated: positionUser.isAuthenticated
+  } : 'None')
   
   // Check if we have any authentication method available
   const hasAuth = (positionUser && positionUser.isAuthenticated) || !!session?.access_token
@@ -37,16 +37,16 @@ export async function authenticatedFetch(url: string, options: RequestInit = {})
     headers['X-Position-User-Id'] = positionUser.id
     headers['X-Position-User-Role'] = positionUser.role
     headers['X-Position-Display-Name'] = positionUser.displayName
-    // console.log('API Client - Using position-based auth for:', positionUser.displayName)
+    console.log('API Client - Using position-based auth for:', positionUser.displayName)
   }
   
   // Include Supabase auth if present as well
   if (session?.access_token) {
     headers.Authorization = `Bearer ${session.access_token}`
-    // console.log('API Client - Including Supabase auth token')
+    console.log('API Client - Including Supabase auth token')
   }
   
-  // console.log('API Client - Final headers for', url, ':', Object.fromEntries(Object.entries(headers)))
+  console.log('API Client - Final headers for', url, ':', Object.fromEntries(Object.entries(headers)))
 
   return fetch(url, {
     ...options,
@@ -310,7 +310,10 @@ export const publicHolidaysApi = {
   },
 
   async update(date: string, data: { date: string; name: string; region?: string; source?: string }) {
-    return await authenticatedPut(`/api/public-holidays/${date}`, data)
+    return await authenticatedFetch('/api/public-holidays', {
+      method: 'PATCH',
+      body: JSON.stringify({ ...data, date }),
+    }).then(response => response.ok ? response.json() : null)
   },
 
   async delete(date: string) {
