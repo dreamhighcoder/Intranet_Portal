@@ -184,7 +184,7 @@ export function PositionLoginModal({
 
   return (
     <Dialog open={isOpen} onOpenChange={handleClose}>
-      <DialogContent className="w-full max-w-xs bg-[var(--color-surface)] border-[var(--color-border)]">
+      <DialogContent className="w-full max-w-sm bg-[var(--color-surface)] border-[var(--color-border)]">
         <DialogHeader className="text-center space-y-4">
           {/* Logo */}
           <div className="mx-auto w-16 h-16 bg-[var(--color-primary)] rounded-lg flex items-center justify-center">
@@ -202,7 +202,7 @@ export function PositionLoginModal({
               />
             </svg>
           </div>
-          <DialogTitle className="text-2xl font-semibold text-[var(--color-text)] text-center">
+          <DialogTitle className="text-2xl font-semibold text-[var(--color-text)] text-center mb-0">
             {getModalTitle()}
           </DialogTitle>
           {modalType === "general" && (
@@ -233,7 +233,7 @@ export function PositionLoginModal({
           </div>
 
           {/* Password */}
-          <div className="space-y-2">
+          <div className="space-y-2 mb-8">
             <Label htmlFor="password" className="text-[var(--color-text)]">
               Password
             </Label>
@@ -258,22 +258,6 @@ export function PositionLoginModal({
             {isSubmitting ? "logging in..." : "Login"}
           </Button>
         </form>
-
-        {/* Demo Helper (only for development) */}
-        {process.env.NODE_ENV === "development" && (
-          <div className="mt-6 p-4 bg-[var(--color-tertiary)] rounded-lg">
-            <p className="text-sm text-[var(--color-text)] mb-2 font-medium">Demo Passwords:</p>
-            <div className="text-xs space-y-1 text-[var(--color-text-muted)]">
-              <p>Administrator: admin123</p>
-              {availablePositions
-                .filter(pos => pos.role !== 'admin' && !pos.displayName.toLowerCase().includes('admin'))
-                .map(pos => (
-                  <p key={pos.id}>{pos.displayName}: {pos.displayName.toLowerCase().replace(/[^a-z0-9]/g, '')}</p>
-                ))
-              }
-            </div>
-          </div>
-        )}
       </DialogContent>
     </Dialog>
   )

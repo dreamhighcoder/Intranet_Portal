@@ -98,6 +98,15 @@ export default function AdminDashboard() {
       bgColor: "bg-teal-100",
     },
     {
+      title: "Calendar",
+      description: "View and manage scheduled tasks across all positions",
+      icon: Calendar,
+      href: "/calendar",
+      color: "text-orange-600",
+      bgColor: "bg-orange-100",
+    },
+
+    {
       title: "Reports",
       description: "View performance analytics and completion reports",
       icon: BarChart3,
@@ -106,28 +115,20 @@ export default function AdminDashboard() {
       bgColor: "bg-green-100",
     },
     {
-      title: "User Management",
-      description: "Manage user positions and access permissions",
-      icon: Users,
-      href: "/admin/users-positions",
-      color: "text-purple-600",
-      bgColor: "bg-purple-100",
-    },
-    {
-      title: "Calendar",
-      description: "View and manage scheduled tasks across all positions",
-      icon: Calendar,
-      href: "/calendar",
-      color: "text-orange-600",
-      bgColor: "bg-orange-100",
-    },
-    {
       title: "Public Holidays",
       description: "Configure public holidays and special dates",
       icon: Calendar,
       href: "/admin/public-holidays",
       color: "text-indigo-600",
       bgColor: "bg-indigo-100",
+    },
+    {
+      title: "User Management",
+      description: "Manage user positions and access permissions",
+      icon: Users,
+      href: "/admin/users-positions",
+      color: "text-purple-600",
+      bgColor: "bg-purple-100",
     },
     {
       title: "Settings",
@@ -171,7 +172,7 @@ export default function AdminDashboard() {
         {/* Quick Actions Grid */}
         <div className="mb-6 sm:mb-8">
           <h2 className="text-xl sm:text-2xl font-bold mb-4 sm:mb-6 text-[var(--color-text)]">Quick Actions</h2>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
             {quickActions.map((action) => {
               const IconComponent = action.icon
               return (
