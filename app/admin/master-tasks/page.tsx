@@ -13,7 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 
-import { masterTasksApi, positionsApi, authenticatedGet } from "@/lib/api-client"
+import { masterTasksApi, positionsApi } from "@/lib/api-client"
 import { supabase } from "@/lib/supabase"
 import * as XLSX from 'xlsx'
 import { toastSuccess, toastError } from "@/hooks/use-toast"
@@ -668,9 +668,7 @@ export default function AdminMasterTasksPage() {
   const [formLoading, setFormLoading] = useState(false)
   const [showMobileFilters, setShowMobileFilters] = useState(false)
   const [deletingTaskId, setDeletingTaskId] = useState<string | null>(null)
-  const [generatingInstancesId, setGeneratingInstancesId] = useState<string | null>(null)
   const [deleteConfirmModal, setDeleteConfirmModal] = useState<{ isOpen: boolean; task: any | null }>({ isOpen: false, task: null })
-  const [generateConfirmModal, setGenerateConfirmModal] = useState<{ isOpen: boolean; task: any | null }>({ isOpen: false, task: null })
 
   // File input ref for import functionality
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -881,54 +879,7 @@ export default function AdminMasterTasksPage() {
     console.log('Edit dialog cancelled')
   }
 
-  const handleGenerateInstances = (taskId?: string) => {
-    const task = taskId ? tasks.find(t => t.id === taskId) : null
-    setGenerateConfirmModal({ isOpen: true, task })
-  }
-
-  const confirmGenerateInstances = async () => {
-    const task = generateConfirmModal.task
-    const taskId = task?.id
-
-    setGenerateConfirmModal({ isOpen: false, task: null })
-
-    if (taskId) {
-      setGeneratingInstancesId(taskId)
-    }
-
-    try {
-      console.log('Generating instances for task:', taskId || 'all tasks')
-
-      // Use authenticated API call
-      const result = await authenticatedGet(`/api/jobs/generate-instances?mode=custom${taskId ? `&masterTaskId=${taskId}` : ''}`)
-
-      if (!result) {
-        throw new Error('Failed to generate instances')
-      }
-
-      if (result.success) {
-        const message = taskId
-          ? `✅ Generated ${result.stats.generated} instances for "${task?.title}"`
-          : `✅ Generated ${result.stats.generated} task instances`
-
-        const details = result.stats.skipped > 0
-          ? ` (${result.stats.skipped} skipped as they already exist)`
-          : ''
-
-        showToast('success', 'Instances Generated', message + details)
-      } else {
-        showToast('error', 'Generation Failed', result.message || 'Failed to generate instances')
-      }
-    } catch (error) {
-      console.error('Error generating instances:', error)
-      const errorMessage = error instanceof Error ? error.message : 'Failed to generate instances'
-      showToast('error', 'Generation Failed', errorMessage)
-    } finally {
-      if (taskId) {
-        setGeneratingInstancesId(null)
-      }
-    }
-  }
+  // Removed instance generation handlers and UI per requirement
 
   // Export handler function
   const handleExport = async () => {
@@ -1212,24 +1163,7 @@ export default function AdminMasterTasksPage() {
               </div>
               <div className="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-3">
                 <div className="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-2">
-                  <Button
-                    onClick={() => handleGenerateInstances()}
-                    variant="outline"
-                    disabled={generatingInstancesId !== null}
-                    className="text-green-600 border-green-600 hover:bg-green-50 w-full sm:w-auto"
-                  >
-                    {generatingInstancesId === null ? (
-                      <>
-                        <Calendar className="w-4 h-4 mr-2" />
-                        Generate All Instances
-                      </>
-                    ) : (
-                      <>
-                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-green-600 mr-2"></div>
-                        Generating...
-                      </>
-                    )}
-                  </Button>
+
                   <Button
                     onClick={() => {
                       setEditingTask(null)
@@ -1476,20 +1410,7 @@ export default function AdminMasterTasksPage() {
                                 </DialogTrigger>
                                 <TaskDetailsModal task={task} positions={positions} />
                               </Dialog>
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() => handleGenerateInstances(task.id)}
-                                disabled={generatingInstancesId === task.id}
-                                title="Generate instances for this task"
-                                className="h-7 w-7 p-0"
-                              >
-                                {generatingInstancesId === task.id ? (
-                                  <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-blue-600"></div>
-                                ) : (
-                                  <Calendar className="w-3 h-3" />
-                                )}
-                              </Button>
+
                               <Button
                                 size="sm"
                                 variant="outline"
@@ -1620,19 +1541,7 @@ export default function AdminMasterTasksPage() {
                                   </DialogTrigger>
                                   <TaskDetailsModal task={task} positions={positions} />
                                 </Dialog>
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  onClick={() => handleGenerateInstances(task.id)}
-                                  disabled={generatingInstancesId === task.id}
-                                  title="Generate instances"
-                                >
-                                  {generatingInstancesId === task.id ? (
-                                    <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-blue-600"></div>
-                                  ) : (
-                                    <Calendar className="w-3 h-3" />
-                                  )}
-                                </Button>
+
                                 <Button
                                   size="sm"
                                   variant="outline"
@@ -1735,51 +1644,7 @@ export default function AdminMasterTasksPage() {
           </DialogContent>
         </Dialog>
 
-        {/* Generate Instances Confirmation Modal */}
-        <Dialog open={generateConfirmModal.isOpen} onOpenChange={(open) => !open && setGenerateConfirmModal({ isOpen: false, task: null })}>
-          <DialogContent className="max-w-md">
-            <DialogHeader>
-              <DialogTitle className="text-green-600 flex items-center">
-                <Calendar className="w-5 h-5 mr-2" />
-                Generate Task Instances
-              </DialogTitle>
-            </DialogHeader>
-            <div className="space-y-4">
-              {generateConfirmModal.task ? (
-                <p className="text-gray-700">
-                  Generate task instances for <strong>"{generateConfirmModal.task.title}"</strong>?
-                </p>
-              ) : (
-                <p className="text-gray-700">
-                  Generate task instances for <strong>all active tasks</strong>?
-                </p>
-              )}
-              <div className="bg-green-50 border border-green-200 rounded-lg p-3">
-                <p className="text-green-800 text-sm font-medium mb-2">This will:</p>
-                <ul className="text-green-700 text-sm space-y-1">
-                  <li>• Create new task instances based on frequency settings</li>
-                  <li>• Generate instances for the next 365 days</li>
-                  <li>• Skip instances that already exist</li>
-                </ul>
-              </div>
-              <div className="flex justify-end space-x-2">
-                <Button
-                  variant="outline"
-                  onClick={() => setGenerateConfirmModal({ isOpen: false, task: null })}
-                >
-                  Cancel
-                </Button>
-                <Button
-                  onClick={confirmGenerateInstances}
-                  className="bg-green-600 hover:bg-green-700"
-                >
-                  <Calendar className="w-4 h-4 mr-2" />
-                  Generate Instances
-                </Button>
-              </div>
-            </div>
-          </DialogContent>
-        </Dialog>
+
       </main>
     </div>
   )
