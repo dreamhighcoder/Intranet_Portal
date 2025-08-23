@@ -302,6 +302,95 @@ const renderFrequencyWithDetails = (task: MasterTask) => {
   )
 }
 
+// Pagination Component
+const Pagination = ({ 
+  currentPage, 
+  totalPages, 
+  onPageChange 
+}: { 
+  currentPage: number
+  totalPages: number
+  onPageChange: (page: number) => void 
+}) => {
+  if (totalPages <= 1) return null
+
+  const getVisiblePages = () => {
+    const pages = []
+    const maxVisible = 5
+    
+    if (totalPages <= maxVisible) {
+      for (let i = 1; i <= totalPages; i++) {
+        pages.push(i)
+      }
+    } else {
+      if (currentPage <= 3) {
+        for (let i = 1; i <= 4; i++) {
+          pages.push(i)
+        }
+        pages.push('...')
+        pages.push(totalPages)
+      } else if (currentPage >= totalPages - 2) {
+        pages.push(1)
+        pages.push('...')
+        for (let i = totalPages - 3; i <= totalPages; i++) {
+          pages.push(i)
+        }
+      } else {
+        pages.push(1)
+        pages.push('...')
+        for (let i = currentPage - 1; i <= currentPage + 1; i++) {
+          pages.push(i)
+        }
+        pages.push('...')
+        pages.push(totalPages)
+      }
+    }
+    
+    return pages
+  }
+
+  return (
+    <div className="flex items-center justify-center space-x-2 py-4">
+      <Button
+        variant="outline"
+        size="sm"
+        onClick={() => onPageChange(currentPage - 1)}
+        disabled={currentPage === 1}
+        className="px-3 py-1"
+      >
+        Prev
+      </Button>
+      
+      {getVisiblePages().map((page, index) => (
+        <div key={index}>
+          {page === '...' ? (
+            <span className="px-3 py-1 text-gray-500">...</span>
+          ) : (
+            <Button
+              variant={currentPage === page ? "default" : "outline"}
+              size="sm"
+              onClick={() => onPageChange(page as number)}
+              className="px-3 py-1 min-w-[40px]"
+            >
+              {page}
+            </Button>
+          )}
+        </div>
+      ))}
+      
+      <Button
+        variant="outline"
+        size="sm"
+        onClick={() => onPageChange(currentPage + 1)}
+        disabled={currentPage === totalPages}
+        className="px-3 py-1"
+      >
+        Next
+      </Button>
+    </div>
+  )
+}
+
 // Task Details Modal Component
 const TaskDetailsModal = ({ task, positions }: { task: MasterTask, positions: Position[] }) => {
   const getPositionName = (positionId: string) => {
@@ -669,6 +758,10 @@ export default function AdminMasterTasksPage() {
   const [showMobileFilters, setShowMobileFilters] = useState(false)
   const [deletingTaskId, setDeletingTaskId] = useState<string | null>(null)
   const [deleteConfirmModal, setDeleteConfirmModal] = useState<{ isOpen: boolean; task: any | null }>({ isOpen: false, task: null })
+  
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1)
+  const tasksPerPage = 15
 
   // File input ref for import functionality
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -1266,6 +1359,17 @@ export default function AdminMasterTasksPage() {
     return matchesSearch && matchesPosition && matchesStatus && matchesCategory
   })
 
+  // Pagination calculations
+  const totalPages = Math.ceil(filteredTasks.length / tasksPerPage)
+  const startIndex = (currentPage - 1) * tasksPerPage
+  const endIndex = startIndex + tasksPerPage
+  const paginatedTasks = filteredTasks.slice(startIndex, endIndex)
+
+  // Reset to first page when filters change
+  useEffect(() => {
+    setCurrentPage(1)
+  }, [searchTerm, filterPosition, filterStatus, filterCategory])
+
   // Get unique categories for filter - combine legacy category and new categories array
   const allCategories = new Set<string>()
 
@@ -1470,6 +1574,11 @@ export default function AdminMasterTasksPage() {
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between space-y-2 sm:space-y-0">
               <CardTitle className="text-lg lg:text-xl">
                 Master Tasks ({filteredTasks.length} of {tasks.length})
+                {totalPages > 1 && (
+                  <span className="text-sm font-normal text-gray-600 ml-2">
+                    - Page {currentPage} of {totalPages}
+                  </span>
+                )}
               </CardTitle>
             </div>
           </CardHeader>
@@ -1496,7 +1605,7 @@ export default function AdminMasterTasksPage() {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {filteredTasks.map((task) => (
+                      {paginatedTasks.map((task) => (
                         <TableRow key={task.id} className="hover:bg-gray-50">
                           <TableCell className="py-3">
                             <div className="max-w-full">
@@ -1617,7 +1726,7 @@ export default function AdminMasterTasksPage() {
                 </div>
                 {/* Mobile Card Layout */}
                 <div className="lg:hidden space-y-4 w-full px-4 sm:px-6">
-                  {filteredTasks.map((task) => (
+                  {paginatedTasks.map((task) => (
                     <Card key={task.id} className="border border-gray-200 w-full">
                       <CardContent className="mobile-card p-4">
                         <div className="space-y-3 w-full">
@@ -1741,6 +1850,16 @@ export default function AdminMasterTasksPage() {
                     </Card>
                   ))}
                 </div>
+                
+                {/* Pagination */}
+                {filteredTasks.length > 0 && (
+                  <Pagination
+                    currentPage={currentPage}
+                    totalPages={totalPages}
+                    onPageChange={setCurrentPage}
+                  />
+                )}
+                
                 {filteredTasks.length === 0 && (
                   <div className="text-center py-8">
                     <p className="text-gray-600">No tasks found matching your filters.</p>
