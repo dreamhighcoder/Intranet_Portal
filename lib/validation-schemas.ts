@@ -115,7 +115,7 @@ export const FrequencyRuleSchema = z.discriminatedUnion('type', [
  * Zod schema for creating/updating master checklist tasks
  */
 export const CreateMasterTaskSchema = z.object({
-  title: z.string().min(1, 'Title is required').max(200, 'Title too long'),
+  title: z.string().max(200, 'Title too long').optional(),
   description: z.string().optional(),
   position_id: z.string().uuid('Invalid position ID').optional(),
   responsibility: z.array(z.string()).min(1, 'At least one responsibility is required'),

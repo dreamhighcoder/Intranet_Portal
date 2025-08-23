@@ -1020,6 +1020,9 @@ export default function AdminMasterTasksPage() {
         const title = (row.title ?? originalRow['Title'])?.toString().trim()
         const description = (row.description ?? originalRow['Description'] ?? '').toString().trim()
 
+        // Title is optional; keep as provided or empty
+        const finalTitle = title ?? ''
+
         // responsibilities/categories/frequencies can be comma-separated strings
         const responsibilityRaw = (row.responsibility ?? originalRow['Responsibility'] ?? '').toString()
         const categoriesRaw = (row.categories ?? originalRow['Category'] ?? originalRow['Categories'] ?? '').toString()
@@ -1059,15 +1062,73 @@ export default function AdminMasterTasksPage() {
             'every_day': 'every_day',
             'daily': 'every_day',
             'weekly': 'weekly',
+            'once_weekly': 'once_weekly',
             'specific_weekdays': 'specific_weekdays',
-            'start_every_month': 'start_every_month',
-            'start_of_month': 'start_every_month',
+            'monday': 'monday',
+            'tuesday': 'tuesday',
+            'wednesday': 'wednesday',
+            'thursday': 'thursday',
+            'friday': 'friday',
+            'saturday': 'saturday',
+            'once_monthly': 'once_monthly',
+            'start_every_month': 'start_of_every_month',
+            'start_of_every_month': 'start_of_every_month',
+            'start_of_month': 'start_of_every_month',
             'start_certain_months': 'start_certain_months',
+            // Specific month mappings for start of month
+            'start_of_january': 'start_of_month_jan',
+            'start_of_jan': 'start_of_month_jan',
+            'start_of_february': 'start_of_month_feb',
+            'start_of_feb': 'start_of_month_feb',
+            'start_of_march': 'start_of_month_mar',
+            'start_of_mar': 'start_of_month_mar',
+            'start_of_april': 'start_of_month_apr',
+            'start_of_apr': 'start_of_month_apr',
+            'start_of_may': 'start_of_month_may',
+            'start_of_june': 'start_of_month_jun',
+            'start_of_jun': 'start_of_month_jun',
+            'start_of_july': 'start_of_month_jul',
+            'start_of_jul': 'start_of_month_jul',
+            'start_of_august': 'start_of_month_aug',
+            'start_of_aug': 'start_of_month_aug',
+            'start_of_september': 'start_of_month_sep',
+            'start_of_sep': 'start_of_month_sep',
+            'start_of_october': 'start_of_month_oct',
+            'start_of_oct': 'start_of_month_oct',
+            'start_of_november': 'start_of_month_nov',
+            'start_of_nov': 'start_of_month_nov',
+            'start_of_december': 'start_of_month_dec',
+            'start_of_dec': 'start_of_month_dec',
             'every_month': 'every_month',
             'certain_months': 'certain_months',
-            'end_every_month': 'end_every_month',
-            'end_of_month': 'end_every_month',
+            'end_every_month': 'end_of_every_month',
+            'end_of_every_month': 'end_of_every_month',
+            'end_of_month': 'end_of_every_month',
             'end_certain_months': 'end_certain_months',
+            // Specific month mappings for end of month
+            'end_of_january': 'end_of_month_jan',
+            'end_of_jan': 'end_of_month_jan',
+            'end_of_february': 'end_of_month_feb',
+            'end_of_feb': 'end_of_month_feb',
+            'end_of_march': 'end_of_month_mar',
+            'end_of_mar': 'end_of_month_mar',
+            'end_of_april': 'end_of_month_apr',
+            'end_of_apr': 'end_of_month_apr',
+            'end_of_may': 'end_of_month_may',
+            'end_of_june': 'end_of_month_jun',
+            'end_of_jun': 'end_of_month_jun',
+            'end_of_july': 'end_of_month_jul',
+            'end_of_jul': 'end_of_month_jul',
+            'end_of_august': 'end_of_month_aug',
+            'end_of_aug': 'end_of_month_aug',
+            'end_of_september': 'end_of_month_sep',
+            'end_of_sep': 'end_of_month_sep',
+            'end_of_october': 'end_of_month_oct',
+            'end_of_oct': 'end_of_month_oct',
+            'end_of_november': 'end_of_month_nov',
+            'end_of_nov': 'end_of_month_nov',
+            'end_of_december': 'end_of_month_dec',
+            'end_of_dec': 'end_of_month_dec',
           }
           return map[f] || f
         }
@@ -1107,9 +1168,7 @@ export default function AdminMasterTasksPage() {
         const allow_edit_when_locked = toBool(row.allow_edit_when_locked ?? originalRow['Allow Edit When Locked'])
 
         // validations
-        if (!title) {
-          throw new Error(`Title is required in row ${i + 2}`)
-        }
+        // Title is optional; do not enforce presence
         if (!responsibility.length) {
           throw new Error(`At least one responsibility is required in row ${i + 2}`)
         }
@@ -1121,7 +1180,7 @@ export default function AdminMasterTasksPage() {
         }
 
         processedData.push({
-          title,
+          title: finalTitle,
           description,
           responsibility,
           categories,

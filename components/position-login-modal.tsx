@@ -268,7 +268,7 @@ export function PositionLoginModal({
               {availablePositions
                 .filter(pos => pos.role !== 'admin' && !pos.displayName.toLowerCase().includes('admin'))
                 .map(pos => (
-                  <p key={pos.id}>{pos.displayName}: {pos.displayName.toLowerCase().replace(/[^a-z0-9]/g, '')}123</p>
+                  <p key={pos.id}>{pos.displayName}: {pos.displayName.toLowerCase().replace(/[^a-z0-9]/g, '')}</p>
                 ))
               }
             </div>

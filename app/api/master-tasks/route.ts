@@ -155,10 +155,7 @@ export async function POST(request: NextRequest) {
     
     console.log('Request body:', body)
 
-    // Check for required fields
-    if (!title) {
-      return NextResponse.json({ error: 'Title is required' }, { status: 400 })
-    }
+    // Check for required fields (Title is optional)
     if (!description) {
       return NextResponse.json({ error: 'Description is required' }, { status: 400 })
     }
@@ -192,7 +189,7 @@ export async function POST(request: NextRequest) {
     
     // Prepare data for insertion using the new schema
     const insertData: any = {
-      title,
+      title: (title ?? '').toString(),
       description,
       responsibility: responsibility && responsibility.length > 0 ? responsibility : [],
       categories: categories && categories.length > 0 ? categories : ['general-pharmacy-operations'],
