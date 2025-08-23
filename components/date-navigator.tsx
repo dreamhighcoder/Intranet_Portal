@@ -2,10 +2,9 @@
 
 import { Button } from "@/components/ui/button"
 import { Calendar } from "@/components/ui/calendar"
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { formatDate, getDateNavigation, formatLocalDate } from "@/lib/task-utils"
 import { ChevronLeft, ChevronRight, CalendarIcon } from "lucide-react"
-import { useState } from "react"
+import { useState, useEffect, useRef } from "react"
 
 interface DateNavigatorProps {
   currentDate: string
@@ -14,6 +13,28 @@ interface DateNavigatorProps {
 
 export function DateNavigator({ currentDate, onDateChange }: DateNavigatorProps) {
   const [isCalendarOpen, setIsCalendarOpen] = useState(false)
+  const mobileCalendarRef = useRef<HTMLDivElement | null>(null)
+  const desktopCalendarRef = useRef<HTMLDivElement | null>(null)
+
+  // Close calendar when clicking outside (both mobile and desktop)
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      const target = event.target as Node
+      const mobileOpen = mobileCalendarRef.current && mobileCalendarRef.current.contains(target)
+      const desktopOpen = desktopCalendarRef.current && desktopCalendarRef.current.contains(target)
+      // If clicking outside of both dropdown containers and outside the trigger buttons
+      if (!mobileOpen && !desktopOpen) {
+        setIsCalendarOpen(false)
+      }
+    }
+
+    if (isCalendarOpen) {
+      document.addEventListener('mousedown', handleClickOutside)
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside)
+    }
+  }, [isCalendarOpen])
   const { previous, next, today } = getDateNavigation(currentDate)
   const isToday = currentDate === today
 
@@ -53,7 +74,7 @@ export function DateNavigator({ currentDate, onDateChange }: DateNavigatorProps)
           </Button>
         </div>
 
-        <div className="flex items-center justify-center relative">
+        <div className="flex items-center justify-center relative" ref={mobileCalendarRef}>
           <Button
             type="button"
             variant="outline"
@@ -99,7 +120,7 @@ export function DateNavigator({ currentDate, onDateChange }: DateNavigatorProps)
             <span>Previous</span>
           </Button>
 
-          <div className="relative">
+          <div className="relative" ref={desktopCalendarRef}>
             <Button
               type="button"
               variant="outline"
