@@ -23,12 +23,107 @@ interface PublicHoliday {
   created_at: string
 }
 
+// Pagination Component
+const Pagination = ({ 
+  currentPage, 
+  totalPages, 
+  onPageChange 
+}: { 
+  currentPage: number
+  totalPages: number
+  onPageChange: (page: number) => void 
+}) => {
+  if (totalPages <= 1) return null
+
+  const getVisiblePages = () => {
+    const pages = []
+    const maxVisible = 5
+    
+    if (totalPages <= maxVisible) {
+      for (let i = 1; i <= totalPages; i++) {
+        pages.push(i)
+      }
+    } else {
+      if (currentPage <= 3) {
+        for (let i = 1; i <= 4; i++) {
+          pages.push(i)
+        }
+        pages.push('...')
+        pages.push(totalPages)
+      } else if (currentPage >= totalPages - 2) {
+        pages.push(1)
+        pages.push('...')
+        for (let i = totalPages - 3; i <= totalPages; i++) {
+          pages.push(i)
+        }
+      } else {
+        pages.push(1)
+        pages.push('...')
+        for (let i = currentPage - 1; i <= currentPage + 1; i++) {
+          pages.push(i)
+        }
+        pages.push('...')
+        pages.push(totalPages)
+      }
+    }
+    
+    return pages
+  }
+
+  return (
+    <div className="flex items-center justify-center space-x-2 py-4">
+      <Button
+        variant="outline"
+        size="sm"
+        onClick={() => onPageChange(currentPage - 1)}
+        disabled={currentPage === 1}
+        className="px-3 py-1"
+      >
+        Prev
+      </Button>
+      
+      {getVisiblePages().map((page, index) => (
+        <div key={index}>
+          {page === '...' ? (
+            <span className="px-3 py-1 text-gray-500">...</span>
+          ) : (
+            <Button
+              variant={currentPage === page ? "default" : "outline"}
+              size="sm"
+              onClick={() => onPageChange(page as number)}
+              className={`px-3 py-1 min-w-[40px] ${
+                currentPage === page ? "text-white" : ""
+              }`}
+            >
+              {page}
+            </Button>
+          )}
+        </div>
+      ))}
+      
+      <Button
+        variant="outline"
+        size="sm"
+        onClick={() => onPageChange(currentPage + 1)}
+        disabled={currentPage === totalPages}
+        className="px-3 py-1"
+      >
+        Next
+      </Button>
+    </div>
+  )
+}
+
 export default function AdminPublicHolidaysPage() {
   const { user, isLoading: authLoading, isAdmin } = usePositionAuth()
   const [holidays, setHolidays] = useState<PublicHoliday[]>([])
   const [loading, setLoading] = useState(true)
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [editingHoliday, setEditingHoliday] = useState<PublicHoliday | null>(null)
+  
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1)
+  const holidaysPerPage = 15
 
   const [newHoliday, setNewHoliday] = useState({
     date: '',
@@ -169,6 +264,17 @@ export default function AdminPublicHolidaysPage() {
     window.URL.revokeObjectURL(url)
   }
 
+  // Pagination calculations
+  const totalPages = Math.ceil(holidays.length / holidaysPerPage)
+  const startIndex = (currentPage - 1) * holidaysPerPage
+  const endIndex = startIndex + holidaysPerPage
+  const paginatedHolidays = holidays.slice(startIndex, endIndex)
+
+  // Reset to first page when holidays change
+  useEffect(() => {
+    setCurrentPage(1)
+  }, [holidays.length])
+
   // Group holidays by year for display
   const holidaysByYear = holidays.reduce((acc, holiday) => {
     const year = new Date(holiday.date).getFullYear()
@@ -249,8 +355,8 @@ export default function AdminPublicHolidaysPage() {
 
         {/* Stats */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-          <Card className="card-surface">
-            <CardContent className="p-4">
+          <Card className="card-surface py-6">
+            <CardContent className="px-8 py-4">
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm text-gray-600">Total Holidays</p>
@@ -262,7 +368,8 @@ export default function AdminPublicHolidaysPage() {
           </Card>
           
           <Card className="card-surface">
-            <CardContent className="p-4">
+            
+            <CardContent className="px-8 py-4">
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm text-gray-600">This Year</p>
@@ -276,7 +383,7 @@ export default function AdminPublicHolidaysPage() {
           </Card>
           
           <Card className="card-surface">
-            <CardContent className="p-4">
+            <CardContent className="px-8 py-4">
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm text-gray-600">Next Year</p>
@@ -314,9 +421,19 @@ export default function AdminPublicHolidaysPage() {
 
         {/* Holidays Table */}
         <Card className="card-surface">
-          <CardHeader>
-            <CardTitle>Public Holidays ({holidays.length})</CardTitle>
-          </CardHeader>
+            <CardHeader>
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between space-y-2 sm:space-y-0">
+                <CardTitle className="text-lg lg:text-xl">
+                  Holidays ({holidays.length} of {holidays.length})
+                  {totalPages > 1 && (
+                    <span className="text-sm font-normal text-gray-600 ml-2">
+                      - Page {currentPage} of {totalPages}
+                    </span>
+                  )}
+                </CardTitle>
+              </div>
+            </CardHeader>
+
           <CardContent>
             {loading ? (
               <div className="text-center py-8">
@@ -337,7 +454,7 @@ export default function AdminPublicHolidaysPage() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {holidays.map((holiday) => {
+                    {paginatedHolidays.map((holiday) => {
                       const date = new Date(holiday.date)
                       const dayOfWeek = date.toLocaleDateString('en-AU', { weekday: 'short' })
                       const isUpcoming = date > new Date()
@@ -386,6 +503,15 @@ export default function AdminPublicHolidaysPage() {
                     })}
                   </TableBody>
                 </Table>
+
+                {/* Pagination */}
+                {holidays.length > 0 && (
+                  <Pagination
+                    currentPage={currentPage}
+                    totalPages={totalPages}
+                    onPageChange={setCurrentPage}
+                  />
+                )}
 
                 {holidays.length === 0 && (
                   <div className="text-center py-8">

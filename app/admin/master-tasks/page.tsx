@@ -370,9 +370,8 @@ const Pagination = ({
               variant={currentPage === page ? "default" : "outline"}
               size="sm"
               onClick={() => onPageChange(page as number)}
-              className={`px-3 py-1 min-w-[40px] ${
-                currentPage === page ? "text-white" : ""
-              }`}
+              className={`px-3 py-1 min-w-[40px] ${currentPage === page ? "text-white" : ""
+                }`}
             >
               {page}
             </Button>

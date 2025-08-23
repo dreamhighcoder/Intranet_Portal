@@ -6,7 +6,7 @@ import { usePositionAuth } from '@/lib/position-auth-context'
 import { Navigation } from '@/components/navigation'
 import { DateNavigator } from '@/components/date-navigator'
 import { TaskFilters } from '@/components/task-filters'
-import { Card, CardContent } from '@/components/ui/card'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
@@ -286,12 +286,102 @@ const renderFrequencyWithDetails = (task: ChecklistTask) => {
   )
 }
 
+// Pagination Component
+const Pagination = ({
+  currentPage,
+  totalPages,
+  onPageChange
+}: {
+  currentPage: number
+  totalPages: number
+  onPageChange: (page: number) => void
+}) => {
+  if (totalPages <= 1) return null
+
+  const getVisiblePages = () => {
+    const pages = []
+    const maxVisible = 5
+
+    if (totalPages <= maxVisible) {
+      for (let i = 1; i <= totalPages; i++) {
+        pages.push(i)
+      }
+    } else {
+      if (currentPage <= 3) {
+        for (let i = 1; i <= 4; i++) {
+          pages.push(i)
+        }
+        pages.push('...')
+        pages.push(totalPages)
+      } else if (currentPage >= totalPages - 2) {
+        pages.push(1)
+        pages.push('...')
+        for (let i = totalPages - 3; i <= totalPages; i++) {
+          pages.push(i)
+        }
+      } else {
+        pages.push(1)
+        pages.push('...')
+        for (let i = currentPage - 1; i <= currentPage + 1; i++) {
+          pages.push(i)
+        }
+        pages.push('...')
+        pages.push(totalPages)
+      }
+    }
+
+    return pages
+  }
+
+  return (
+    <div className="flex items-center justify-center space-x-2 py-4">
+      <Button
+        variant="outline"
+        size="sm"
+        onClick={() => onPageChange(currentPage - 1)}
+        disabled={currentPage === 1}
+        className="px-3 py-1"
+      >
+        Prev
+      </Button>
+
+      {getVisiblePages().map((page, index) => (
+        <div key={index}>
+          {page === '...' ? (
+            <span className="px-3 py-1 text-gray-500">...</span>
+          ) : (
+            <Button
+              variant={currentPage === page ? "default" : "outline"}
+              size="sm"
+              onClick={() => onPageChange(page as number)}
+              className={`px-3 py-1 min-w-[40px] ${currentPage === page ? "text-white" : ""
+                }`}
+            >
+              {page}
+            </Button>
+          )}
+        </div>
+      ))}
+
+      <Button
+        variant="outline"
+        size="sm"
+        onClick={() => onPageChange(currentPage + 1)}
+        disabled={currentPage === totalPages}
+        className="px-3 py-1"
+      >
+        Next
+      </Button>
+    </div>
+  )
+}
+
 export default function RoleChecklistPage() {
   const { user, isLoading, signOut, isAdmin } = usePositionAuth()
   const params = useParams()
   const router = useRouter()
   const searchParams = useSearchParams()
-  
+
   const rawRole = params.role as string
   const userRole = isAdmin ? 'admin' : 'viewer'
 
@@ -355,6 +445,10 @@ export default function RoleChecklistPage() {
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false)
   const [processingTasks, setProcessingTasks] = useState<Set<string>>(new Set())
 
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1)
+  const tasksPerPage = 15
+
   // Handle auth redirect
   useEffect(() => {
     if (!isLoading && !user) {
@@ -365,10 +459,10 @@ export default function RoleChecklistPage() {
   // Get unique responsibilities from tasks for admin filter
   const uniqueResponsibilities = useMemo(() => {
     if (!isAdmin) return []
-    
+
     const responsibilities = new Set<string>()
     tasks.forEach(task => {
-      ;(task.master_task.responsibility || []).forEach(resp => responsibilities.add(resp))
+      ; (task.master_task.responsibility || []).forEach(resp => responsibilities.add(resp))
     })
     return Array.from(responsibilities).sort()
   }, [tasks, isAdmin])
@@ -379,47 +473,47 @@ export default function RoleChecklistPage() {
       if (isLoading || !user || !role) {
         return
       }
-      
+
       // Additional check to ensure user is properly authenticated
       if (!user.isAuthenticated) {
         console.log('User not authenticated, skipping task load')
         return
       }
-      
+
       setLoading(true)
       try {
         // Normalize role to ensure it's in the kebab-case format
         const normalizedRole = toKebabCase(role);
-        
+
         // Build query parameters
         const params = new URLSearchParams({
           role: normalizedRole,
           date: currentDate
         })
-        
+
         // Add admin mode for admins (but don't filter by responsibility on server-side)
         if (isAdmin) {
           params.append('admin_mode', 'true')
           // Note: We'll filter by responsibility on the client-side to keep all responsibilities available in the dropdown
         }
-        
+
         console.log('Fetching tasks with params:', params.toString())
-        
+
         const data = await authenticatedGet(`/api/checklist?${params.toString()}`)
-        
+
         console.log('Raw API response:', data)
         console.log('Response type:', typeof data)
         console.log('Response keys:', data ? Object.keys(data) : 'null')
-        
+
         if (!data || !data.success) {
           console.error('API reported failure:', data?.error)
           console.error('Full response object:', JSON.stringify(data, null, 2))
           throw new Error(data?.error || 'Failed to fetch tasks')
         }
-        
+
         console.log('Tasks received:', data.data?.length || 0)
         setTasks(data.data || [])
-        
+
         // Calculate task counts
         const counts = {
           total: data.data.length,
@@ -428,14 +522,14 @@ export default function RoleChecklistPage() {
           overdue: 0,
           missed: 0
         }
-        
+
         const now = new Date()
         const today = currentDate
-        
+
         data.data.forEach((task: ChecklistTask) => {
           if (task.status !== 'completed') {
             counts.due_today++
-            
+
             // Check if overdue
             if (task.master_task?.due_time) {
               const dueTime = new Date(`${today}T${task.master_task.due_time}`)
@@ -445,12 +539,12 @@ export default function RoleChecklistPage() {
             }
           }
         })
-        
+
         setTaskCounts(counts)
       } catch (error) {
         console.error('Error loading tasks:', error)
         setTasks([])
-        
+
         // More specific error handling
         if (error instanceof Error) {
           if (error.message.includes('ChunkLoadError') || error.message.includes('Loading chunk')) {
@@ -493,9 +587,9 @@ export default function RoleChecklistPage() {
     setProcessingTasks(prev => new Set(prev).add(taskId))
 
     // Optimistic update
-    setTasks(prevTasks => 
-      prevTasks.map(task => 
-        task.id === taskId 
+    setTasks(prevTasks =>
+      prevTasks.map(task =>
+        task.id === taskId
           ? { ...task, status: 'completed', completed_at: new Date().toISOString() }
           : task
       )
@@ -537,9 +631,9 @@ export default function RoleChecklistPage() {
     setProcessingTasks(prev => new Set(prev).add(taskId))
 
     // Optimistic update
-    setTasks(prevTasks => 
-      prevTasks.map(task => 
-        task.id === taskId 
+    setTasks(prevTasks =>
+      prevTasks.map(task =>
+        task.id === taskId
           ? { ...task, status: 'pending', completed_at: undefined, completed_by: undefined }
           : task
       )
@@ -630,11 +724,22 @@ export default function RoleChecklistPage() {
     })
   }, [tasks, searchTerm, selectedResponsibility, selectedCategory, selectedStatus, currentDate, isAdmin])
 
+  // Pagination calculations
+  const totalPages = Math.ceil(filteredTasks.length / tasksPerPage)
+  const startIndex = (currentPage - 1) * tasksPerPage
+  const endIndex = startIndex + tasksPerPage
+  const paginatedTasks = filteredTasks.slice(startIndex, endIndex)
+
+  // Reset to first page when filters change
+  useEffect(() => {
+    setCurrentPage(1)
+  }, [searchTerm, selectedResponsibility, selectedCategory, selectedStatus, currentDate])
+
   // Get unique categories for filter (use full catalog when empty)
   const uniqueCategories = useMemo(() => {
     const categories = new Set<string>()
     tasks.forEach(task => {
-      ;(task.master_task.categories || []).forEach(cat => categories.add(cat))
+      ; (task.master_task.categories || []).forEach(cat => categories.add(cat))
     })
     const list = Array.from(categories)
     if (list.length === 0) {
@@ -655,7 +760,7 @@ export default function RoleChecklistPage() {
 
   // Show loading if auth is still loading OR local loading OR user is not authenticated
   const shouldShowLoading = isLoading || loading || (!user || !user.isAuthenticated)
-  
+
   if (shouldShowLoading && isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -668,7 +773,7 @@ export default function RoleChecklistPage() {
       </div>
     )
   }
-  
+
   if (shouldShowLoading && loading && user && user.isAuthenticated) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -744,7 +849,7 @@ export default function RoleChecklistPage() {
                 })}
               </h1>
             </div>
-            
+
             {/* Checklist Management Button for Administrators */}
             {userRole === 'admin' && (
               <Button
@@ -761,6 +866,11 @@ export default function RoleChecklistPage() {
           </div>
           <p className="text-[var(--color-text-secondary)]">
             {filteredTasks.length} tasks • {filteredTasks.filter((t) => t.status === "completed").length} completed
+            {totalPages > 1 && (
+              <span className="ml-2">
+                • Page {currentPage} of {totalPages}
+              </span>
+            )}
           </p>
         </div>
 
@@ -843,276 +953,297 @@ export default function RoleChecklistPage() {
 
         {/* Task List */}
         <Card className="card-surface mb-6">
-          <CardContent className="p-0">
-            {filteredTasks.length === 0 ? (
-              <div className="py-12 text-center">
-                <p className="text-[var(--color-text-secondary)] text-lg">No tasks found for the selected filters.</p>
+            <CardHeader>
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between space-y-2 sm:space-y-0">
+                <CardTitle className="text-lg lg:text-xl">
+                  Tasks ({filteredTasks.length} of {tasks.length})
+                  {totalPages > 1 && (
+                    <span className="text-sm font-normal text-gray-600 ml-2">
+                      - Page {currentPage} of {totalPages}
+                    </span>
+                  )}
+                </CardTitle>
               </div>
-            ) : (
-              <>
-                {/* Desktop Table */}
-                <div className="hidden lg:block overflow-x-auto px-4">
-                  <Table className="table-fixed w-full">
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead className={isAdmin ? "w-[25%] py-3" : "w-[40%] py-3"}>Title & Description</TableHead>
-                        {isAdmin && <TableHead className="w-[15%] py-3">Responsibility</TableHead>}
-                        <TableHead className="w-[15%] py-3">Category</TableHead>
-                        <TableHead className="w-[15%] py-3">Frequencies & Timing</TableHead>
-                        <TableHead className="w-[7%] py-3">Due Time</TableHead>
-                        <TableHead className="w-[8%] py-3">Status</TableHead>
-                        <TableHead className="w-[10%] py-3 text-center">Actions</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {filteredTasks.map((task) => (
-                        <TableRow key={`${task.id}-${refreshKey}`}>
-                          <TableCell className="py-3">
-                            <div className="max-w-full">
-                              {task.master_task.title && task.master_task.title.trim() && (
-                                <div className="font-medium truncate">{task.master_task.title}</div>
-                              )}
-                              {task.master_task.description && (
-                                <div className="text-sm text-gray-600 truncate">
-                                  {task.master_task.description}
+            </CardHeader>
+            <CardContent className="p-0">
+              {filteredTasks.length === 0 ? (
+                <div className="py-12 text-center">
+                  <p className="text-[var(--color-text-secondary)] text-lg">No tasks found for the selected filters.</p>
+                </div>
+              ) : (
+                <>
+                  {/* Desktop Table */}
+                  <div className="hidden lg:block overflow-x-auto px-4">
+                    <Table className="table-fixed w-full">
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead className={isAdmin ? "w-[25%] py-3 bg-gray-50" : "w-[40%] py-3"}>Title & Description</TableHead>
+                          {isAdmin && <TableHead className="w-[15%] py-3 bg-gray-50">Responsibility</TableHead>}
+                          <TableHead className="w-[15%] py-3 bg-gray-50">Category</TableHead>
+                          <TableHead className="w-[15%] py-3 bg-gray-50">Frequencies & Timing</TableHead>
+                          <TableHead className="w-[7%] py-3 bg-gray-50">Due Time</TableHead>
+                          <TableHead className="w-[8%] py-3 bg-gray-50">Status</TableHead>
+                          <TableHead className="w-[10%] py-3 bg-gray-50 text-center">Actions</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {paginatedTasks.map((task) => (
+                          <TableRow key={`${task.id}-${refreshKey}`}>
+                            <TableCell className="py-3">
+                              <div className="max-w-full">
+                                {task.master_task.title && task.master_task.title.trim() && (
+                                  <div className="font-medium truncate">{task.master_task.title}</div>
+                                )}
+                                {task.master_task.description && (
+                                  <div className="text-sm text-gray-600 truncate">
+                                    {task.master_task.description}
+                                  </div>
+                                )}
+                              </div>
+                            </TableCell>
+                            {isAdmin && (
+                              <TableCell className="py-3">
+                                <div className="max-w-full overflow-hidden">
+                                  <div className="flex flex-wrap gap-1">
+                                    {renderBadgesWithTruncation(task.master_task.responsibility, 2, 'responsibility')}
+                                  </div>
                                 </div>
-                              )}
-                            </div>
-                          </TableCell>
-                          {isAdmin && (
+                              </TableCell>
+                            )}
                             <TableCell className="py-3">
                               <div className="max-w-full overflow-hidden">
                                 <div className="flex flex-wrap gap-1">
-                                  {renderBadgesWithTruncation(task.master_task.responsibility, 2, 'responsibility')}
+                                  {renderBadgesWithTruncation(task.master_task.categories, 2, 'category')}
                                 </div>
                               </div>
                             </TableCell>
-                          )}
-                          <TableCell className="py-3">
-                            <div className="max-w-full overflow-hidden">
-                              <div className="flex flex-wrap gap-1">
-                                {renderBadgesWithTruncation(task.master_task.categories, 2, 'category')}
-                              </div>
-                            </div>
-                          </TableCell>
-                          <TableCell className="py-3">
-                            {renderFrequencyWithDetails(task)}
-                          </TableCell>
-                          <TableCell className="py-3">
-                            {task.master_task.due_time ? (
-                              <span className="text-sm font-medium">{task.master_task.due_time}</span>
-                            ) : (
-                              <span className="text-sm text-gray-500">No due time</span>
-                            )}
-                          </TableCell>
-                          <TableCell className="py-3">{getStatusBadge(task)}</TableCell>
-                          <TableCell className="py-3">
-                            <div className="flex items-center space-x-2">
-                              {task.status === "completed" ? (
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  onClick={() => handleTaskUndo(task.id)}
-                                  disabled={processingTasks.has(task.id)}
-                                  className="border-green-300 bg-green-100 text-green-800 hover:bg-green-200 hover:border-green-400 font-medium disabled:opacity-50"
-                                >
-                                  {processingTasks.has(task.id) ? (
-                                    <span className="flex items-center">
-                                      <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-green-800 mr-1"></div>
-                                      Processing...
-                                    </span>
-                                  ) : (
-                                    <span>✓ Done</span>
-                                  )}
-                                </Button>
+                            <TableCell className="py-3">
+                              {renderFrequencyWithDetails(task)}
+                            </TableCell>
+                            <TableCell className="py-3">
+                              {task.master_task.due_time ? (
+                                <span className="text-sm font-medium">{task.master_task.due_time}</span>
                               ) : (
+                                <span className="text-sm text-gray-500">No due time</span>
+                              )}
+                            </TableCell>
+                            <TableCell className="py-3">{getStatusBadge(task)}</TableCell>
+                            <TableCell className="py-3">
+                              <div className="flex items-center space-x-2">
+                                {task.status === "completed" ? (
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => handleTaskUndo(task.id)}
+                                    disabled={processingTasks.has(task.id)}
+                                    className="border-green-300 bg-green-100 text-green-800 hover:bg-green-200 hover:border-green-400 font-medium disabled:opacity-50"
+                                  >
+                                    {processingTasks.has(task.id) ? (
+                                      <span className="flex items-center">
+                                        <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-green-800 mr-1"></div>
+                                        Processing...
+                                      </span>
+                                    ) : (
+                                      <span>✓ Done</span>
+                                    )}
+                                  </Button>
+                                ) : (
+                                  <Button
+                                    size="sm"
+                                    onClick={() => handleTaskComplete(task.id)}
+                                    disabled={processingTasks.has(task.id)}
+                                    className="bg-blue-600 text-white hover:bg-blue-700 border-blue-600 hover:border-blue-700 font-medium disabled:opacity-50"
+                                  >
+                                    {processingTasks.has(task.id) ? (
+                                      <span className="flex items-center">
+                                        <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-white mr-1"></div>
+                                        Processing...
+                                      </span>
+                                    ) : (
+                                      <span>Done ?</span>
+                                    )}
+                                  </Button>
+                                )}
                                 <Button
                                   size="sm"
-                                  onClick={() => handleTaskComplete(task.id)}
-                                  disabled={processingTasks.has(task.id)}
-                                  className="bg-blue-600 text-white hover:bg-blue-700 border-blue-600 hover:border-blue-700 font-medium disabled:opacity-50"
+                                  variant="ghost"
+                                  onClick={() => handleViewDetails(task)}
+                                  title="View Details"
+                                  className="hover:bg-gray-100"
                                 >
-                                  {processingTasks.has(task.id) ? (
-                                    <span className="flex items-center">
-                                      <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-white mr-1"></div>
-                                      Processing...
-                                    </span>
-                                  ) : (
-                                    <span>Done ?</span>
-                                  )}
+                                  <Eye className="h-4 w-4" />
+                                  <span className="ml-1">Details</span>
                                 </Button>
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+
+                  {/* Mobile/Tablet Card Layout */}
+                  <div className="lg:hidden space-y-4 p-4">
+                    {paginatedTasks.map((task) => (
+                      <Card key={`${task.id}-${refreshKey}`} className="border border-gray-200">
+                        <CardContent className="p-4">
+                          <div className="space-y-3">
+                            {/* Title and Description */}
+                            <div>
+                              {task.master_task.title && task.master_task.title.trim() && (
+                                <h3 className="font-medium text-base truncate">{task.master_task.title}</h3>
                               )}
-                              <Button
-                                size="sm"
-                                variant="ghost"
-                                onClick={() => handleViewDetails(task)}
-                                title="View Details"
-                                className="hover:bg-gray-100"
-                              >
-                                <Eye className="h-4 w-4" />
-                                <span className="ml-1">Details</span>
-                              </Button>
+                              {task.master_task.description && (
+                                <p className="text-sm text-gray-600 mt-1 truncate">{task.master_task.description}</p>
+                              )}
                             </div>
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </div>
 
-                {/* Mobile/Tablet Card Layout */}
-                <div className="lg:hidden space-y-4 p-4">
-                  {filteredTasks.map((task) => (
-                    <Card key={`${task.id}-${refreshKey}`} className="border border-gray-200">
-                      <CardContent className="p-4">
-                        <div className="space-y-3">
-                          {/* Title and Description */}
-                          <div>
-                            {task.master_task.title && task.master_task.title.trim() && (
-                              <h3 className="font-medium text-base truncate">{task.master_task.title}</h3>
-                            )}
-                            {task.master_task.description && (
-                              <p className="text-sm text-gray-600 mt-1 truncate">{task.master_task.description}</p>
-                            )}
-                          </div>
-
-                          {/* Details Grid */}
-                          <div className="space-y-3 text-sm">
-                            {isAdmin && (
+                            {/* Details Grid */}
+                            <div className="space-y-3 text-sm">
+                              {isAdmin && (
+                                <div>
+                                  <span className="text-gray-500">Responsibility:</span>
+                                  <div className="flex flex-wrap gap-1 mt-1">
+                                    {renderBadgesWithTruncation(task.master_task.responsibility, 3, 'responsibility')}
+                                  </div>
+                                </div>
+                              )}
                               <div>
-                                <span className="text-gray-500">Responsibility:</span>
+                                <span className="text-gray-500">Categories:</span>
                                 <div className="flex flex-wrap gap-1 mt-1">
-                                  {renderBadgesWithTruncation(task.master_task.responsibility, 3, 'responsibility')}
+                                  {renderBadgesWithTruncation(task.master_task.categories, 3, 'category')}
                                 </div>
                               </div>
-                            )}
-                            <div>
-                              <span className="text-gray-500">Categories:</span>
-                              <div className="flex flex-wrap gap-1 mt-1">
-                                {renderBadgesWithTruncation(task.master_task.categories, 3, 'category')}
+                              <div>
+                                <span className="text-gray-500">Frequencies & Timing:</span>
+                                <div className="mt-1">
+                                  {renderFrequencyWithDetails(task)}
+                                </div>
+                              </div>
+                              <div>
+                                <span className="text-gray-500">Due Time:</span>
+                                <div className="mt-1 font-medium">
+                                  {task.master_task.due_time ? (
+                                    <span>{task.master_task.due_time}</span>
+                                  ) : (
+                                    <span className="text-gray-400">No due time</span>
+                                  )}
+                                </div>
                               </div>
                             </div>
-                            <div>
-                              <span className="text-gray-500">Frequencies & Timing:</span>
-                              <div className="mt-1">
-                                {renderFrequencyWithDetails(task)}
+
+                            {/* Status and Actions */}
+                            <div className="flex flex-col space-y-3 pt-3 border-t">
+                              <div className="flex items-center justify-between">
+                                <div className="flex items-center space-x-2">
+                                  <span className="text-sm text-gray-500">Status:</span>
+                                  {getStatusBadge(task)}
+                                </div>
                               </div>
-                            </div>
-                            <div>
-                              <span className="text-gray-500">Due Time:</span>
-                              <div className="mt-1 font-medium">
-                                {task.master_task.due_time ? (
-                                  <span>{task.master_task.due_time}</span>
+
+                              <div className="flex space-x-2">
+                                {task.status === "completed" ? (
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => handleTaskUndo(task.id)}
+                                    disabled={processingTasks.has(task.id)}
+                                    className="flex-1 border-green-300 bg-green-100 text-green-800 hover:bg-green-200 hover:border-green-400 font-medium disabled:opacity-50"
+                                  >
+                                    {processingTasks.has(task.id) ? (
+                                      <span className="flex items-center justify-center">
+                                        <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-green-800 mr-1"></div>
+                                        Processing...
+                                      </span>
+                                    ) : (
+                                      <span>✓ Done</span>
+                                    )}
+                                  </Button>
                                 ) : (
-                                  <span className="text-gray-400">No due time</span>
+                                  <Button
+                                    size="sm"
+                                    onClick={() => handleTaskComplete(task.id)}
+                                    disabled={processingTasks.has(task.id)}
+                                    className="flex-1 bg-blue-600 text-white hover:bg-blue-700 border-blue-600 hover:border-blue-700 font-medium disabled:opacity-50"
+                                  >
+                                    {processingTasks.has(task.id) ? (
+                                      <span className="flex items-center justify-center">
+                                        <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-white mr-1"></div>
+                                        Processing...
+                                      </span>
+                                    ) : (
+                                      <span>Done ?</span>
+                                    )}
+                                  </Button>
                                 )}
-                              </div>
-                            </div>
-                          </div>
-
-                          {/* Status and Actions */}
-                          <div className="flex flex-col space-y-3 pt-3 border-t">
-                            <div className="flex items-center justify-between">
-                              <div className="flex items-center space-x-2">
-                                <span className="text-sm text-gray-500">Status:</span>
-                                {getStatusBadge(task)}
-                              </div>
-                            </div>
-
-                            <div className="flex space-x-2">
-                              {task.status === "completed" ? (
                                 <Button
                                   size="sm"
                                   variant="outline"
-                                  onClick={() => handleTaskUndo(task.id)}
-                                  disabled={processingTasks.has(task.id)}
-                                  className="flex-1 border-green-300 bg-green-100 text-green-800 hover:bg-green-200 hover:border-green-400 font-medium disabled:opacity-50"
+                                  onClick={() => handleViewDetails(task)}
+                                  title="View Details"
+                                  className="hover:bg-gray-100"
                                 >
-                                  {processingTasks.has(task.id) ? (
-                                    <span className="flex items-center justify-center">
-                                      <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-green-800 mr-1"></div>
-                                      Processing...
-                                    </span>
-                                  ) : (
-                                    <span>✓ Done</span>
-                                  )}
+                                  <Eye className="h-4 w-4" />
+                                  <span className="ml-1">Details</span>
                                 </Button>
-                              ) : (
-                                <Button
-                                  size="sm"
-                                  onClick={() => handleTaskComplete(task.id)}
-                                  disabled={processingTasks.has(task.id)}
-                                  className="flex-1 bg-blue-600 text-white hover:bg-blue-700 border-blue-600 hover:border-blue-700 font-medium disabled:opacity-50"
-                                >
-                                  {processingTasks.has(task.id) ? (
-                                    <span className="flex items-center justify-center">
-                                      <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-white mr-1"></div>
-                                      Processing...
-                                    </span>
-                                  ) : (
-                                    <span>Done ?</span>
-                                  )}
-                                </Button>
-                              )}
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() => handleViewDetails(task)}
-                                title="View Details"
-                                className="hover:bg-gray-100"
-                              >
-                                <Eye className="h-4 w-4" />
-                                <span className="ml-1">Details</span>
-                              </Button>
+                              </div>
                             </div>
                           </div>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  ))}
-                </div>
-              </>
-            )}
-          </CardContent>
-        </Card>
+                        </CardContent>
+                      </Card>
+                    ))}
+                  </div>
 
-        {/* Finish Button - Auto-logout when all tasks completed (only for non-admin users) */}
-        {!isAdmin && allTasksCompleted && (
-          <div className="text-center mb-6">
-            <Card className="card-surface inline-block">
-              <CardContent className="p-6">
-                <h3 className="text-lg font-semibold text-green-600 mb-2">All Tasks Completed! 🎉</h3>
-                <p className="text-[var(--color-text-secondary)] mb-4">
-                  Great job! You've completed all your tasks for today.
-                </p>
-                <Button onClick={handleFinish} className="bg-green-600 hover:bg-green-700 text-white">
-                  <LogOut className="h-4 w-4 mr-2" />
-                  Finish & Logout
-                </Button>
-              </CardContent>
-            </Card>
-          </div>
-        )}
+                  {/* Pagination */}
+                  {filteredTasks.length > 0 && (
+                    <Pagination
+                      currentPage={currentPage}
+                      totalPages={totalPages}
+                      onPageChange={setCurrentPage}
+                    />
+                  )}
+                </>
+              )}
+            </CardContent>
+          </Card>
 
-        {/* Summary Footer */}
-        <div className="p-4 bg-white rounded-lg border border-[var(--color-border)]">
-          <div className="flex items-center justify-between text-sm">
-            <span className="text-[var(--color-text-secondary)]">
-              Summary for {new Date(currentDate).toLocaleDateString("en-AU")}
-            </span>
-            <div className="flex items-center space-x-4">
-              <span className="text-green-600">
-                {taskCounts.done} Done
+          {/* Finish Button - Auto-logout when all tasks completed (only for non-admin users) */}
+          {!isAdmin && allTasksCompleted && (
+            <div className="text-center mb-6">
+              <Card className="card-surface inline-block">
+                <CardContent className="p-6">
+                  <h3 className="text-lg font-semibold text-green-600 mb-2">All Tasks Completed! 🎉</h3>
+                  <p className="text-[var(--color-text-secondary)] mb-4">
+                    Great job! You've completed all your tasks for today.
+                  </p>
+                  <Button onClick={handleFinish} className="bg-green-600 hover:bg-green-700 text-white">
+                    <LogOut className="h-4 w-4 mr-2" />
+                    Finish & Logout
+                  </Button>
+                </CardContent>
+              </Card>
+            </div>
+          )}
+
+          {/* Summary Footer */}
+          <div className="p-4 bg-white rounded-lg border border-[var(--color-border)]">
+            <div className="flex items-center justify-between text-sm">
+              <span className="text-[var(--color-text-secondary)]">
+                Summary for {new Date(currentDate).toLocaleDateString("en-AU")}
               </span>
-              <span className="text-orange-600">
-                {taskCounts.due_today} Due Today
-              </span>
-              <span className="text-red-600">
-                {taskCounts.overdue} Overdue
-              </span>
+              <div className="flex items-center space-x-4">
+                <span className="text-green-600">
+                  {taskCounts.done} Done
+                </span>
+                <span className="text-orange-600">
+                  {taskCounts.due_today} Due Today
+                </span>
+                <span className="text-red-600">
+                  {taskCounts.overdue} Overdue
+                </span>
+              </div>
             </div>
           </div>
-        </div>
       </main>
 
       {/* Task Detail Modal */}
