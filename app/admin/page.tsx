@@ -11,6 +11,7 @@ import { useRouter } from "next/navigation"
 import Link from "next/link"
 import { Users, ClipboardList, Calendar, Settings, BarChart3 } from "lucide-react"
 import { authenticatedGet } from "@/lib/api-client"
+import { toKebabCase } from "@/lib/responsibility-mapper"
 
 export default function AdminDashboard() {
   const { user, isLoading, isAdmin } = usePositionAuth()
@@ -92,7 +93,7 @@ export default function AdminDashboard() {
       title: "Position Checklists",
       description: "View daily checklists and task status for all positions",
       icon: ClipboardList,
-      href: "/checklist",
+      href: `/checklist/${toKebabCase(user?.position?.displayName || user?.position?.name || 'admin')}`,
       color: "text-teal-600",
       bgColor: "bg-teal-100",
     },
