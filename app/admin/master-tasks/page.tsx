@@ -12,12 +12,14 @@ import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
+import { Checkbox } from "@/components/ui/checkbox"
 
 import { masterTasksApi, positionsApi } from "@/lib/api-client"
 import { supabase } from "@/lib/supabase"
 import * as XLSX from 'xlsx'
 import { toastSuccess, toastError } from "@/hooks/use-toast"
 import type { MasterChecklistTask, CreateMasterTaskRequest, UpdateMasterTaskRequest } from "@/types/checklist"
+import { PublishStatus } from "@/types/checklist"
 import {
   Plus,
   Edit,
@@ -37,7 +39,10 @@ import {
   Users,
   CheckCircle2,
   Info,
-  CalendarDays
+  CalendarDays,
+  MoreHorizontal,
+  Check,
+  X
 } from "lucide-react"
 
 // Using the proper type from checklist.ts
@@ -314,21 +319,21 @@ const renderFrequencyWithDetails = (task: MasterTask) => {
 }
 
 // Pagination Component
-const Pagination = ({ 
-  currentPage, 
-  totalPages, 
-  onPageChange 
-}: { 
+const Pagination = ({
+  currentPage,
+  totalPages,
+  onPageChange
+}: {
   currentPage: number
   totalPages: number
-  onPageChange: (page: number) => void 
+  onPageChange: (page: number) => void
 }) => {
   if (totalPages <= 1) return null
 
   const getVisiblePages = () => {
     const pages = []
     const maxVisible = 5
-    
+
     if (totalPages <= maxVisible) {
       for (let i = 1; i <= totalPages; i++) {
         pages.push(i)
@@ -356,7 +361,7 @@ const Pagination = ({
         pages.push(totalPages)
       }
     }
-    
+
     return pages
   }
 
@@ -371,7 +376,7 @@ const Pagination = ({
       >
         Prev
       </Button>
-      
+
       {getVisiblePages().map((page, index) => (
         <div key={index}>
           {page === '...' ? (
@@ -381,7 +386,7 @@ const Pagination = ({
               variant={currentPage === page ? "default" : "outline"}
               size="sm"
               onClick={() => onPageChange(page as number)}
-              className={`px-3 py-1 min-w-[40px] ${currentPage === page ? "text-white" : ""
+              className={`px-3 py-1 min-w-[40px] ${currentPage === page ? "bg-blue-500 text-white" : ""
                 }`}
             >
               {page}
@@ -389,7 +394,7 @@ const Pagination = ({
           )}
         </div>
       ))}
-      
+
       <Button
         variant="outline"
         size="sm"
@@ -735,7 +740,14 @@ export default function AdminMasterTasksPage() {
   const [showMobileFilters, setShowMobileFilters] = useState(false)
   const [deletingTaskId, setDeletingTaskId] = useState<string | null>(null)
   const [deleteConfirmModal, setDeleteConfirmModal] = useState<{ isOpen: boolean; task: any | null }>({ isOpen: false, task: null })
-  
+
+  // Bulk action state
+  const [selectedTasks, setSelectedTasks] = useState<Set<string>>(new Set())
+  const [bulkActionModal, setBulkActionModal] = useState<{ isOpen: boolean; action: 'delete' | 'status' | null }>({ isOpen: false, action: null })
+  const [bulkStatusValue, setBulkStatusValue] = useState<PublishStatus>(PublishStatus.ACTIVE)
+  const [bulkDeleteConfirmModal, setBulkDeleteConfirmModal] = useState(false)
+  const [bulkActionLoading, setBulkActionLoading] = useState(false)
+
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1)
   const tasksPerPage = 15
@@ -822,7 +834,7 @@ export default function AdminMasterTasksPage() {
     }
   }
 
-  const handleStatusChange = async (taskId: string, newStatus: 'draft' | 'active' | 'inactive') => {
+  const handleStatusChange = async (taskId: string, newStatus: PublishStatus) => {
     try {
       console.log('Updating task status:', { taskId, newStatus })
 
@@ -935,6 +947,98 @@ export default function AdminMasterTasksPage() {
     setEditingTask(null)
 
     console.log('Edit dialog cancelled')
+  }
+
+  // Bulk action functions
+  const handleSelectTask = (taskId: string, checked: boolean) => {
+    const newSelected = new Set(selectedTasks)
+    if (checked) {
+      newSelected.add(taskId)
+    } else {
+      newSelected.delete(taskId)
+    }
+    setSelectedTasks(newSelected)
+  }
+
+  const handleSelectAll = (checked: boolean) => {
+    if (checked) {
+      setSelectedTasks(new Set(paginatedTasks.map(task => task.id)))
+    } else {
+      setSelectedTasks(new Set())
+    }
+  }
+
+  const handleBulkAction = (action: 'delete' | 'status') => {
+    if (selectedTasks.size === 0) {
+      showToast('error', 'No Selection', 'Please select tasks to perform bulk action')
+      return
+    }
+
+    if (action === 'delete') {
+      setBulkDeleteConfirmModal(true)
+    } else {
+      setBulkActionModal({ isOpen: true, action })
+    }
+  }
+
+  const confirmBulkDelete = async () => {
+    setBulkDeleteConfirmModal(false)
+    setBulkActionLoading(true)
+
+    try {
+      const selectedTaskIds = Array.from(selectedTasks)
+      const selectedTaskTitles = tasks.filter(t => selectedTasks.has(t.id)).map(t => t.title)
+
+      // Delete all selected tasks
+      await Promise.all(selectedTaskIds.map(id => masterTasksApi.delete(id)))
+
+      // Remove from UI
+      setTasks(tasks.filter(t => !selectedTasks.has(t.id)))
+      setSelectedTasks(new Set())
+
+      showToast('success', 'Bulk Delete Complete', `Successfully deleted ${selectedTaskIds.length} task(s)`)
+    } catch (error) {
+      console.error('Error in bulk delete:', error)
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+      showToast('error', 'Bulk Delete Failed', `Failed to delete tasks: ${errorMessage}`)
+      // Reload data to ensure consistency
+      await loadData()
+    } finally {
+      setBulkActionLoading(false)
+    }
+  }
+
+  const confirmBulkStatusChange = async () => {
+    setBulkActionModal({ isOpen: false, action: null })
+    setBulkActionLoading(true)
+
+    try {
+      const selectedTaskIds = Array.from(selectedTasks)
+
+      // Update status for all selected tasks
+      await Promise.all(selectedTaskIds.map(id =>
+        masterTasksApi.update(id, { publish_status: bulkStatusValue })
+      ))
+
+      // Update UI
+      setTasks(tasks.map(task =>
+        selectedTasks.has(task.id)
+          ? { ...task, publish_status: bulkStatusValue }
+          : task
+      ))
+      setSelectedTasks(new Set())
+
+      showToast('success', 'Bulk Status Update Complete',
+        `Successfully updated ${selectedTaskIds.length} task(s) to ${bulkStatusValue}`)
+    } catch (error) {
+      console.error('Error in bulk status update:', error)
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+      showToast('error', 'Bulk Status Update Failed', `Failed to update task statuses: ${errorMessage}`)
+      // Reload data to ensure consistency
+      await loadData()
+    } finally {
+      setBulkActionLoading(false)
+    }
   }
 
   // Removed instance generation handlers and UI per requirement
@@ -1313,9 +1417,9 @@ export default function AdminMasterTasksPage() {
 
         // Convert position name to the same format used in responsibility values
         const formattedPositionName = nameToResponsibilityValue(position.name)
-        
 
-        
+
+
         // Check if the responsibility matches the formatted position name
         return r === formattedPositionName
       }))
@@ -1540,9 +1644,9 @@ export default function AdminMasterTasksPage() {
 
         {/* Tasks Table */}
         <Card className="card-surface w-full gap-0">
-          <CardHeader>
+          <CardHeader className="flex flex-col lg:flex-row lg:items-center lg:justify-between space-y-4 lg:space-y-0">
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between space-y-2 sm:space-y-0">
-              <CardTitle className="text-lg lg:text-xl">
+              <CardTitle className="text-lg lg:text-xl mb-1">
                 Master Tasks ({Math.min(currentPage * 15, tasks.length)} of {tasks.length})
                 {totalPages > 1 && (
                   <span className="text-sm font-normal text-gray-600 ml-2">
@@ -1551,6 +1655,38 @@ export default function AdminMasterTasksPage() {
                 )}
               </CardTitle>
             </div>
+
+            {/* Bulk Actions */}
+            {selectedTasks.size > 0 && (
+              <div className="flex space-x-3">
+                <span className="text-sm font-medium text-gray-700 mt-1">
+                  {selectedTasks.size} task{selectedTasks.size !== 1 ? 's' : ''} selected
+                </span>
+                <div className="flex space-x-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handleBulkAction('status')}
+                    disabled={bulkActionLoading}
+                    className="flex items-center space-x-1"
+                  >
+                    <Settings className="w-4 h-4" />
+                    <span>Change Status</span>
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handleBulkAction('delete')}
+                    disabled={bulkActionLoading}
+                    className="flex items-center space-x-1 text-red-600 hover:text-red-700 border-red-200 hover:border-red-300"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                    <span>Delete Selected</span>
+                  </Button>
+                </div>
+              </div>
+            )}
+
           </CardHeader>
           <CardContent className="w-full p-0 sm:p-6">
             {loading ? (
@@ -1565,10 +1701,18 @@ export default function AdminMasterTasksPage() {
                   <Table className="table-fixed w-full">
                     <TableHeader>
                       <TableRow>
-                        <TableHead className="w-[25%] py-3 bg-gray-50">Title & Description</TableHead>
-                        <TableHead className="w-[15%] py-3 bg-gray-50">Responsibilities</TableHead>
-                        <TableHead className="w-[15%] py-3 bg-gray-50">Categories</TableHead>
-                        <TableHead className="w-[15%] py-3 bg-gray-50">Frequencies & Timing</TableHead>
+                        <TableHead className="w-[5%] py-3 bg-gray-50 text-center">
+                          <Checkbox
+                            checked={selectedTasks.size === paginatedTasks.length && paginatedTasks.length > 0}
+                            onCheckedChange={handleSelectAll}
+                            aria-label="Select all tasks"
+                            className="data-[state=checked]:bg-blue-500 data-[state=checked]:text-white data-[state=checked]:border-blue-500"
+                          />
+                        </TableHead>
+                        <TableHead className="w-[23%] py-3 bg-gray-50">Title & Description</TableHead>
+                        <TableHead className="w-[14%] py-3 bg-gray-50">Responsibilities</TableHead>
+                        <TableHead className="w-[14%] py-3 bg-gray-50">Categories</TableHead>
+                        <TableHead className="w-[14%] py-3 bg-gray-50">Frequencies & Timing</TableHead>
                         <TableHead className="w-[10%] py-3 bg-gray-50 text-center">Status</TableHead>
                         <TableHead className="w-[10%] py-3 bg-gray-50 text-center">Due Time</TableHead>
                         <TableHead className="w-[10%] py-3 bg-gray-50 text-center">Actions</TableHead>
@@ -1577,6 +1721,14 @@ export default function AdminMasterTasksPage() {
                     <TableBody>
                       {paginatedTasks.map((task) => (
                         <TableRow key={task.id} className="hover:bg-gray-50">
+                          <TableCell className="py-3 text-center">
+                            <Checkbox
+                              checked={selectedTasks.has(task.id)}
+                              onCheckedChange={(checked) => handleSelectTask(task.id, checked as boolean)}
+                              aria-label={`Select task ${task.title}`}
+                              className="data-[state=checked]:bg-blue-500 data-[state=checked]:text-white data-[state=checked]:border-blue-500"
+                            />
+                          </TableCell>
                           <TableCell className="py-3">
                             <div className="max-w-full">
                               <div className="font-medium truncate">{task.title}</div>
@@ -1624,7 +1776,7 @@ export default function AdminMasterTasksPage() {
                             <div className="flex justify-center">
                               <Select
                                 value={task.publish_status}
-                                onValueChange={(value: 'draft' | 'active' | 'inactive') =>
+                                onValueChange={(value: PublishStatus) =>
                                   handleStatusChange(task.id, value)
                                 }
                               >
@@ -1700,12 +1852,20 @@ export default function AdminMasterTasksPage() {
                     <Card key={task.id} className="border border-gray-200 w-full">
                       <CardContent className="mobile-card p-4">
                         <div className="space-y-3 w-full">
-                          {/* Title and Description */}
-                          <div>
-                            <h3 className="font-medium text-base">{task.title}</h3>
-                            {task.description && (
-                              <p className="text-sm text-gray-600 mt-1">{task.description}</p>
-                            )}
+                          {/* Selection and Title */}
+                          <div className="flex items-start space-x-3">
+                            <Checkbox
+                              checked={selectedTasks.has(task.id)}
+                              onCheckedChange={(checked) => handleSelectTask(task.id, checked as boolean)}
+                              aria-label={`Select task ${task.title}`}
+                              className="mt-1 data-[state=checked]:bg-blue-500 data-[state=checked]:text-white data-[state=checked]:border-blue-500"
+                            />
+                            <div className="flex-1">
+                              <h3 className="font-medium text-base">{task.title}</h3>
+                              {task.description && (
+                                <p className="text-sm text-gray-600 mt-1">{task.description}</p>
+                              )}
+                            </div>
                           </div>
                           {/* Details Grid */}
                           <div className="space-y-3 text-sm">
@@ -1761,7 +1921,7 @@ export default function AdminMasterTasksPage() {
                                 <span className="text-sm text-gray-500">Status:</span>
                                 <Select
                                   value={task.publish_status}
-                                  onValueChange={(value: 'draft' | 'active' | 'inactive') =>
+                                  onValueChange={(value: PublishStatus) =>
                                     handleStatusChange(task.id, value)
                                   }
                                 >
@@ -1820,7 +1980,7 @@ export default function AdminMasterTasksPage() {
                     </Card>
                   ))}
                 </div>
-                
+
                 {/* Pagination */}
                 {filteredTasks.length > 0 && (
                   <Pagination
@@ -1829,7 +1989,7 @@ export default function AdminMasterTasksPage() {
                     onPageChange={setCurrentPage}
                   />
                 )}
-                
+
                 {filteredTasks.length === 0 && (
                   <div className="text-center py-8">
                     <p className="text-gray-600">No tasks found matching your filters.</p>
@@ -1849,7 +2009,7 @@ export default function AdminMasterTasksPage() {
             </DialogHeader>
             <div className="flex-1 overflow-y-auto px-1">
               <TaskForm
-                task={editingTask}
+                task={editingTask || undefined}
                 onSubmit={handleSaveTask}
                 onCancel={handleCancelEdit}
               />
@@ -1892,6 +2052,105 @@ export default function AdminMasterTasksPage() {
                 >
                   <Trash2 className="w-4 h-4 mr-2" />
                   Delete Task
+                </Button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* Bulk Status Change Modal */}
+        <Dialog open={bulkActionModal.isOpen && bulkActionModal.action === 'status'} onOpenChange={(open) => !open && setBulkActionModal({ isOpen: false, action: null })}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle className="flex items-center">
+                <Settings className="w-5 h-5 mr-2" />
+                Bulk Status Change
+              </DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4">
+              <p className="text-gray-700">
+                Change status for <strong>{selectedTasks.size}</strong> selected task{selectedTasks.size !== 1 ? 's' : ''}?
+              </p>
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-gray-700">New Status:</label>
+                <Select value={bulkStatusValue} onValueChange={(value: PublishStatus) => setBulkStatusValue(value)}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={PublishStatus.DRAFT}>Draft</SelectItem>
+                    <SelectItem value={PublishStatus.ACTIVE}>Active</SelectItem>
+                    <SelectItem value={PublishStatus.INACTIVE}>Inactive</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="flex justify-end space-x-2">
+                <Button
+                  variant="outline"
+                  onClick={() => setBulkActionModal({ isOpen: false, action: null })}
+                  disabled={bulkActionLoading}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  onClick={confirmBulkStatusChange}
+                  disabled={bulkActionLoading}
+                  className="bg-blue-600 hover:bg-blue-700"
+                >
+                  {bulkActionLoading ? (
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                  ) : (
+                    <Check className="w-4 h-4 mr-2" />
+                  )}
+                  Update Status
+                </Button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* Bulk Delete Confirmation Modal */}
+        <Dialog open={bulkDeleteConfirmModal} onOpenChange={setBulkDeleteConfirmModal}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle className="text-red-600 flex items-center">
+                <Trash2 className="w-5 h-5 mr-2" />
+                Bulk Delete Tasks
+              </DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4">
+              <p className="text-gray-700">
+                Are you sure you want to delete <strong>{selectedTasks.size}</strong> selected task{selectedTasks.size !== 1 ? 's' : ''}?
+              </p>
+              <div className="bg-red-50 border border-red-200 rounded-lg p-3">
+                <p className="text-red-800 text-sm font-medium mb-2">This will permanently delete:</p>
+                <ul className="text-red-700 text-sm space-y-1">
+                  <li>• {selectedTasks.size} master task{selectedTasks.size !== 1 ? 's' : ''}</li>
+                  <li>• All associated task instances</li>
+                  <li>• All completion history</li>
+                </ul>
+                <p className="text-red-800 text-sm font-medium mt-2">This action cannot be undone.</p>
+              </div>
+              <div className="flex justify-end space-x-2">
+                <Button
+                  variant="outline"
+                  onClick={() => setBulkDeleteConfirmModal(false)}
+                  disabled={bulkActionLoading}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  variant="destructive"
+                  onClick={confirmBulkDelete}
+                  disabled={bulkActionLoading}
+                  className="bg-red-600 hover:bg-red-700"
+                >
+                  {bulkActionLoading ? (
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                  ) : (
+                    <Trash2 className="w-4 h-4 mr-2" />
+                  )}
+                  Delete Tasks
                 </Button>
               </div>
             </div>
