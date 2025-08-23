@@ -11,7 +11,8 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Check, X, Eye, LogOut, Settings, ChevronRight } from 'lucide-react'
+import { Input } from '@/components/ui/input'
+import { Check, X, Eye, LogOut, Settings, ChevronRight, Search } from 'lucide-react'
 import Link from 'next/link'
 import { toastError, toastSuccess } from '@/hooks/use-toast'
 import { toKebabCase } from '@/lib/responsibility-mapper'
@@ -38,7 +39,7 @@ interface ChecklistTask {
     due_time?: string
     responsibility: string[]
     categories: string[]
-    frequency_rules: Record<string, any>
+    frequencies: string[] // Using frequencies from database
   }
 }
 
@@ -60,6 +61,120 @@ const getCategoryConfig = (category: string) => {
     label: category.replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase()),
     color: 'bg-gray-100 text-gray-800 border-gray-200'
   }
+}
+
+// Responsibility badge colors - bright and distinct colors for better visibility
+const RESPONSIBILITY_COLORS = [
+  'bg-emerald-100 text-emerald-800 border-emerald-200',
+  'bg-blue-100 text-blue-800 border-blue-200',
+  'bg-purple-100 text-purple-800 border-purple-200',
+  'bg-pink-100 text-pink-800 border-pink-200',
+  'bg-orange-100 text-orange-800 border-orange-200',
+  'bg-teal-100 text-teal-800 border-teal-200',
+  'bg-indigo-100 text-indigo-800 border-indigo-200',
+  'bg-rose-100 text-rose-800 border-rose-200',
+  'bg-cyan-100 text-cyan-800 border-cyan-200',
+  'bg-amber-100 text-amber-800 border-amber-200',
+  'bg-lime-100 text-lime-800 border-lime-200',
+  'bg-violet-100 text-violet-800 border-violet-200',
+  'bg-fuchsia-100 text-fuchsia-800 border-fuchsia-200',
+  'bg-sky-100 text-sky-800 border-sky-200',
+  'bg-red-100 text-red-800 border-red-200'
+]
+
+// Timing badge colors - bright and distinct colors for different timing values
+const TIMING_COLORS = {
+  'opening': 'bg-emerald-100 text-emerald-800 border-emerald-200',
+  'closing': 'bg-rose-100 text-rose-800 border-rose-200',
+  'anytime_during_day': 'bg-blue-100 text-blue-800 border-blue-200',
+  'specific_time': 'bg-purple-100 text-purple-800 border-purple-200',
+  'morning': 'bg-yellow-100 text-yellow-800 border-yellow-200',
+  'afternoon': 'bg-orange-100 text-orange-800 border-orange-200',
+  'evening': 'bg-indigo-100 text-indigo-800 border-indigo-200',
+  'before_opening': 'bg-teal-100 text-teal-800 border-teal-200',
+  'after_closing': 'bg-pink-100 text-pink-800 border-pink-200',
+  'during_business_hours': 'bg-cyan-100 text-cyan-800 border-cyan-200',
+  'end_of_day': 'bg-amber-100 text-amber-800 border-amber-200',
+  'start_of_day': 'bg-lime-100 text-lime-800 border-lime-200',
+  'lunch_time': 'bg-violet-100 text-violet-800 border-violet-200'
+}
+
+const getResponsibilityColor = (responsibility: string) => {
+  // Create a consistent hash-based color assignment for each responsibility
+  let hash = 0
+  for (let i = 0; i < responsibility.length; i++) {
+    const char = responsibility.charCodeAt(i)
+    hash = ((hash << 5) - hash) + char
+    hash = hash & hash // Convert to 32-bit integer
+  }
+  const index = Math.abs(hash) % RESPONSIBILITY_COLORS.length
+  return RESPONSIBILITY_COLORS[index]
+}
+
+const getTimingColor = (timing: string) => {
+  return TIMING_COLORS[timing as keyof typeof TIMING_COLORS] || 'bg-gray-100 text-gray-800 border-gray-200'
+}
+
+const formatResponsibility = (responsibility: string) => {
+  return responsibility
+    .split('-')
+    .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(' ')
+}
+
+const renderBadgesWithTruncation = (
+  items: string[],
+  maxVisible: number = 2,
+  type: 'responsibility' | 'category' = 'responsibility',
+  colorFn?: (value: string) => string
+) => {
+  if (items.length <= maxVisible) {
+    return items.map((item, index) => {
+      if (type === 'responsibility') {
+        const colorClass = colorFn ? colorFn(item) : getResponsibilityColor(item)
+        return (
+          <Badge key={index} className={`text-xs ${colorClass}`}>
+            {formatResponsibility(item)}
+          </Badge>
+        )
+      } else {
+        const config = getCategoryConfig(item)
+        return (
+          <Badge key={index} className={`text-xs ${config.color}`}>
+            {config.label}
+          </Badge>
+        )
+      }
+    })
+  }
+
+  const visibleItems = items.slice(0, maxVisible)
+  const hiddenCount = items.length - maxVisible
+
+  return (
+    <>
+      {visibleItems.map((item, index) => {
+        if (type === 'responsibility') {
+          const colorClass = colorFn ? colorFn(item) : getResponsibilityColor(item)
+          return (
+            <Badge key={index} className={`text-xs ${colorClass}`}>
+              {formatResponsibility(item)}
+            </Badge>
+          )
+        } else {
+          const config = getCategoryConfig(item)
+          return (
+            <Badge key={index} className={`text-xs ${config.color}`}>
+              {config.label}
+            </Badge>
+          )
+        }
+      })}
+      <Badge variant="outline" className="text-xs bg-gray-50 text-gray-600">
+        +{hiddenCount}
+      </Badge>
+    </>
+  )
 }
 
 export default function RoleChecklistPage() {
@@ -103,11 +218,20 @@ export default function RoleChecklistPage() {
   }
 
   const [currentDate, setCurrentDate] = useState(() => {
-    return searchParams.get("date") || new Date().toISOString().split("T")[0]
+    // Use URL date if present, otherwise default to local today (avoid UTC off-by-one)
+    const urlDate = searchParams.get("date")
+    if (urlDate) return urlDate
+    const now = new Date()
+    const y = now.getFullYear()
+    const m = String(now.getMonth() + 1).padStart(2, '0')
+    const d = String(now.getDate()).padStart(2, '0')
+    return `${y}-${m}-${d}`
   })
 
   const [selectedCategory, setSelectedCategory] = useState("all")
   const [selectedStatus, setSelectedStatus] = useState("all")
+  const [selectedResponsibility, setSelectedResponsibility] = useState("all")
+  const [searchTerm, setSearchTerm] = useState("")
   const [refreshKey, setRefreshKey] = useState(0)
   const [tasks, setTasks] = useState<ChecklistTask[]>([])
   const [loading, setLoading] = useState(true)
@@ -129,7 +253,18 @@ export default function RoleChecklistPage() {
     }
   }, [user, isLoading, router])
 
-  // Load tasks when date, refresh key, or role changes
+  // Get unique responsibilities from tasks for admin filter
+  const uniqueResponsibilities = useMemo(() => {
+    if (!isAdmin) return []
+    
+    const responsibilities = new Set<string>()
+    tasks.forEach(task => {
+      ;(task.master_task.responsibility || []).forEach(resp => responsibilities.add(resp))
+    })
+    return Array.from(responsibilities).sort()
+  }, [tasks, isAdmin])
+
+  // Load tasks when date, refresh key, role, or responsibility changes
   useEffect(() => {
     const loadTasks = async () => {
       if (isLoading || !user || !role) {
@@ -147,9 +282,21 @@ export default function RoleChecklistPage() {
         // Normalize role to ensure it's in the kebab-case format
         const normalizedRole = toKebabCase(role);
         
-        console.log('Fetching tasks for role:', normalizedRole, 'and date:', currentDate)
+        // Build query parameters
+        const params = new URLSearchParams({
+          role: normalizedRole,
+          date: currentDate
+        })
         
-        const data = await authenticatedGet(`/api/checklist?role=${normalizedRole}&date=${currentDate}`)
+        // Add admin mode for admins (but don't filter by responsibility on server-side)
+        if (isAdmin) {
+          params.append('admin_mode', 'true')
+          // Note: We'll filter by responsibility on the client-side to keep all responsibilities available in the dropdown
+        }
+        
+        console.log('Fetching tasks with params:', params.toString())
+        
+        const data = await authenticatedGet(`/api/checklist?${params.toString()}`)
         
         console.log('Raw API response:', data)
         console.log('Response type:', typeof data)
@@ -213,7 +360,7 @@ export default function RoleChecklistPage() {
     }
 
     loadTasks()
-  }, [currentDate, refreshKey, isLoading, user, role])
+  }, [currentDate, refreshKey, isLoading, user, role, isAdmin])
 
   useEffect(() => {
     const dateParam = searchParams.get("date")
@@ -335,6 +482,18 @@ export default function RoleChecklistPage() {
   // Apply filters to tasks
   const filteredTasks = useMemo(() => {
     return tasks.filter((task) => {
+      // Search filter - search by description only
+      if (searchTerm && !task.master_task.description?.toLowerCase().includes(searchTerm.toLowerCase())) {
+        return false
+      }
+
+      // Responsibility filter (for admin mode)
+      if (isAdmin && selectedResponsibility !== "all") {
+        if (!task.master_task.responsibility.includes(selectedResponsibility)) {
+          return false
+        }
+      }
+
       // Category filter
       if (selectedCategory !== "all" && !task.master_task.categories.includes(selectedCategory)) {
         return false
@@ -363,7 +522,7 @@ export default function RoleChecklistPage() {
 
       return true
     })
-  }, [tasks, selectedCategory, selectedStatus, currentDate])
+  }, [tasks, searchTerm, selectedResponsibility, selectedCategory, selectedStatus, currentDate, isAdmin])
 
   // Get unique categories for filter (use full catalog when empty)
   const uniqueCategories = useMemo(() => {
@@ -470,7 +629,7 @@ export default function RoleChecklistPage() {
           <div className="flex items-center justify-between mb-2">
             <div className="flex items-center space-x-4">
               <h1 className="text-3xl font-bold text-[var(--color-text-primary)]">
-                {role.charAt(0).toUpperCase() + role.slice(1)} Checklist —{" "}
+                {isAdmin ? "Daily Checklist Overview" : `${role.charAt(0).toUpperCase() + role.slice(1)} Checklist`} —{" "}
                 {new Date(currentDate).toLocaleDateString("en-AU", {
                   weekday: "long",
                   year: "numeric",
@@ -495,7 +654,7 @@ export default function RoleChecklistPage() {
             )}
           </div>
           <p className="text-[var(--color-text-secondary)]">
-            {filteredTasks.length} tasks • {filteredTasks.filter((t) => t.status === "done").length} completed
+            {filteredTasks.length} tasks • {filteredTasks.filter((t) => t.status === "completed").length} completed
           </p>
         </div>
 
@@ -506,42 +665,72 @@ export default function RoleChecklistPage() {
 
         {/* Filters */}
         <div className="mb-6">
-          <div className="flex flex-wrap gap-4">
-            {/* Category Filter */}
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Category</label>
-              <Select value={selectedCategory} onValueChange={setSelectedCategory}>
-                <SelectTrigger className="w-48">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Categories</SelectItem>
-                  {uniqueCategories.map(category => {
-                    const config = getCategoryConfig(category)
-                    return (
-                      <SelectItem key={category} value={category}>
-                        {config.label}
-                      </SelectItem>
-                    )
-                  })}
-                </SelectContent>
-              </Select>
-            </div>
+          <div className="bg-white rounded-lg border border-[var(--color-border)] p-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3">
+              {/* Search Field - Takes 2 columns */}
+              <div className="relative lg:col-span-2">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+                <Input
+                  placeholder="Search tasks (description)..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="pl-10"
+                />
+              </div>
 
-            {/* Status Filter */}
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Status</label>
-              <Select value={selectedStatus} onValueChange={setSelectedStatus}>
-                <SelectTrigger className="w-48">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Statuses</SelectItem>
-                  <SelectItem value="due_today">Due Today</SelectItem>
-                  <SelectItem value="overdue">Overdue</SelectItem>
-                  <SelectItem value="completed">Completed</SelectItem>
-                </SelectContent>
-              </Select>
+              {/* Responsibility Filter - Only for Admins */}
+              {isAdmin && (
+                <div className="flex justify-start w-full">
+                  <Select value={selectedResponsibility} onValueChange={setSelectedResponsibility}>
+                    <SelectTrigger className="w-full">
+                      <SelectValue placeholder="All Responsibilities" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Responsibilities</SelectItem>
+                      {uniqueResponsibilities.map(responsibility => (
+                        <SelectItem key={responsibility} value={responsibility}>
+                          {formatResponsibility(responsibility)}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+
+              {/* Category Filter */}
+              <div className="flex justify-start w-full">
+                <Select value={selectedCategory} onValueChange={setSelectedCategory}>
+                  <SelectTrigger className="w-full">
+                    <SelectValue placeholder="All Categories" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Categories</SelectItem>
+                    {uniqueCategories.map(category => {
+                      const config = getCategoryConfig(category)
+                      return (
+                        <SelectItem key={category} value={category}>
+                          {config.label}
+                        </SelectItem>
+                      )
+                    })}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Status Filter */}
+              <div className="flex justify-start w-full">
+                <Select value={selectedStatus} onValueChange={setSelectedStatus}>
+                  <SelectTrigger className="w-full">
+                    <SelectValue placeholder="All Statuses" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Statuses</SelectItem>
+                    <SelectItem value="due_today">Due Today</SelectItem>
+                    <SelectItem value="overdue">Overdue</SelectItem>
+                    <SelectItem value="completed">Completed</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
           </div>
         </div>
@@ -560,7 +749,8 @@ export default function RoleChecklistPage() {
                   <Table>
                     <TableHeader>
                       <TableRow>
-                        <TableHead className="min-w-[25%] px-4 sm:px-6">Task Title</TableHead>
+                        <TableHead className={isAdmin ? "min-w-[20%] px-4 sm:px-6" : "min-w-[25%] px-4 sm:px-6"}>Task Title</TableHead>
+                        {isAdmin && <TableHead className="min-w-[15%] px-4">Responsibility</TableHead>}
                         <TableHead className="min-w-[15%] px-4">Category</TableHead>
                         <TableHead className="min-w-[13.5%%] px-4">Timing</TableHead>
                         <TableHead className="min-w-[13%] px-4">Due Time</TableHead>
@@ -581,20 +771,20 @@ export default function RoleChecklistPage() {
                               )}
                             </div>
                           </TableCell>
+                          {isAdmin && (
+                            <TableCell className="px-4">
+                              <div className="flex flex-wrap gap-1">
+                                {renderBadgesWithTruncation(task.master_task.responsibility, 2, 'responsibility')}
+                              </div>
+                            </TableCell>
+                          )}
                           <TableCell className="px-4">
                             <div className="flex flex-wrap gap-1">
-                              {task.master_task.categories.map((category, index) => {
-                                const config = getCategoryConfig(category)
-                                return (
-                                  <Badge key={index} className={`text-xs ${config.color}`}>
-                                    {config.label}
-                                  </Badge>
-                                )
-                              })}
+                              {renderBadgesWithTruncation(task.master_task.categories, 2, 'category')}
                             </div>
                           </TableCell>
                           <TableCell className="px-4">
-                            <Badge variant="secondary" className="capitalize">
+                            <Badge className={`capitalize ${getTimingColor(task.master_task.timing)}`}>
                               {task.master_task.timing.replace(/_/g, ' ')}
                             </Badge>
                           </TableCell>
@@ -676,23 +866,24 @@ export default function RoleChecklistPage() {
 
                           {/* Details Grid */}
                           <div className="space-y-3 text-sm">
+                            {isAdmin && (
+                              <div>
+                                <span className="text-gray-500">Responsibility:</span>
+                                <div className="flex flex-wrap gap-1 mt-1">
+                                  {renderBadgesWithTruncation(task.master_task.responsibility, 3, 'responsibility')}
+                                </div>
+                              </div>
+                            )}
                             <div>
                               <span className="text-gray-500">Categories:</span>
                               <div className="flex flex-wrap gap-1 mt-1">
-                                {task.master_task.categories.map((category, index) => {
-                                  const config = getCategoryConfig(category)
-                                  return (
-                                    <Badge key={index} className={`text-xs ${config.color}`}>
-                                      {config.label}
-                                    </Badge>
-                                  )
-                                })}
+                                {renderBadgesWithTruncation(task.master_task.categories, 3, 'category')}
                               </div>
                             </div>
                             <div>
                               <span className="text-gray-500">Timing:</span>
                               <div className="mt-1">
-                                <Badge variant="secondary" className="capitalize text-xs">
+                                <Badge className={`capitalize text-xs ${getTimingColor(task.master_task.timing)}`}>
                                   {task.master_task.timing.replace(/_/g, ' ')}
                                 </Badge>
                               </div>
@@ -775,8 +966,8 @@ export default function RoleChecklistPage() {
           </CardContent>
         </Card>
 
-        {/* Finish Button - Auto-logout when all tasks completed */}
-        {allTasksCompleted && (
+        {/* Finish Button - Auto-logout when all tasks completed (only for non-admin users) */}
+        {!isAdmin && allTasksCompleted && (
           <div className="text-center mb-6">
             <Card className="card-surface inline-block">
               <CardContent className="p-6">

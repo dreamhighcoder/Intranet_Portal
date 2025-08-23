@@ -103,6 +103,20 @@ export function calculateTaskStatus(task: TaskInstance): TaskStatus {
   return "not_due"
 }
 
+// Format a Date to local YYYY-MM-DD (avoids UTC offset issues)
+export function formatLocalDate(date: Date): string {
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
+// Parse a YYYY-MM-DD string into a local Date object (no timezone shift)
+export function parseLocalDate(dateString: string): Date {
+  const [y, m, d] = dateString.split('-').map(Number)
+  return new Date(y, (m || 1) - 1, d || 1)
+}
+
 // Format date for display
 export function formatDate(dateString: string): string {
   const date = new Date(dateString)
@@ -114,7 +128,7 @@ export function formatDate(dateString: string): string {
   })
 }
 
-// Get date navigation (previous/next day)
+// Get date navigation (previous/next day) using local time (avoids UTC issues)
 export function getDateNavigation(currentDate: string) {
   const date = new Date(currentDate)
   const prevDate = new Date(date)
@@ -123,9 +137,9 @@ export function getDateNavigation(currentDate: string) {
   nextDate.setDate(date.getDate() + 1)
 
   return {
-    previous: prevDate.toISOString().split("T")[0],
-    next: nextDate.toISOString().split("T")[0],
-    today: new Date().toISOString().split("T")[0],
+    previous: formatLocalDate(prevDate),
+    next: formatLocalDate(nextDate),
+    today: formatLocalDate(new Date()),
   }
 }
 

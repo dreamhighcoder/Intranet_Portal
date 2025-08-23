@@ -1119,7 +1119,6 @@ export default function AdminMasterTasksPage() {
   // Filter tasks based on search and filters
   const filteredTasks = tasks.filter(task => {
     const matchesSearch = !searchTerm ||
-      task.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
       task.description?.toLowerCase().includes(searchTerm.toLowerCase())
 
     // Check if position matches either in responsibility array or legacy position_id
@@ -1273,7 +1272,7 @@ export default function AdminMasterTasksPage() {
                 <div className="relative lg:col-span-2">
                   <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
                   <Input
-                    placeholder="Search tasks..."
+                    placeholder="Search tasks (description)..."
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
                     className="pl-10"

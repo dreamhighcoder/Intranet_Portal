@@ -92,10 +92,7 @@ export default function MasterChecklistPage() {
     if (filters.search) {
       const searchLower = filters.search.toLowerCase()
       filtered = filtered.filter(task => 
-        task.title?.toLowerCase().includes(searchLower) ||
-        task.description?.toLowerCase().includes(searchLower) ||
-        task.categories?.some(cat => cat.toLowerCase().includes(searchLower)) ||
-        task.responsibility?.some(resp => resp.toLowerCase().includes(searchLower))
+        task.description?.toLowerCase().includes(searchLower)
       )
     }
 
@@ -321,7 +318,7 @@ export default function MasterChecklistPage() {
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                 <Input
-                  placeholder="Search tasks..."
+                  placeholder="Search tasks (description)..."
                   value={filters.search}
                   onChange={(e) => setFilters(prev => ({ ...prev, search: e.target.value }))}
                   className="pl-10"

@@ -20,6 +20,8 @@ export async function GET(request: NextRequest) {
     const searchParams = request.nextUrl.searchParams
     const role = searchParams.get('role')
     const date = searchParams.get('date')
+    const adminMode = searchParams.get('admin_mode') === 'true'
+    const responsibilityFilter = searchParams.get('responsibility')
     
     // Validate query parameters using Zod schema
     const validationResult = ChecklistQuerySchema.safeParse({ role, date })
@@ -33,27 +35,13 @@ export async function GET(request: NextRequest) {
     
     const { role: validatedRole, date: validatedDate } = validationResult.data
     
+    // Check if user is admin and admin mode is requested
+    const isAdminRequest = adminMode && user.role === 'admin'
+    console.log('Admin mode requested:', adminMode, 'User role:', user.role, 'Is admin request:', isAdminRequest)
+    
     // Normalize role to kebab-case format for consistent handling
     const normalizedRole = toKebabCase(validatedRole)
     console.log('Normalized role:', normalizedRole)
-
-    // Virtual model: query master_tasks for this role and date
-    const { getSearchOptions, filterTasksByResponsibility } = await import('@/lib/responsibility-mapper')
-
-    const searchRoles = getSearchOptions(normalizedRole)
-    console.log('Search roles:', searchRoles)
-
-    // First, let's check if there are any master tasks at all
-    const { data: allTasks, error: allTasksError } = await supabaseAdmin
-      .from('master_tasks')
-      .select('id, title, responsibility, categories, frequencies')
-      .limit(10)
-    
-    console.log('All tasks (sample):', allTasks || 'No tasks found')
-    
-    if (allTasksError) {
-      console.error('Error fetching all tasks:', allTasksError)
-    }
 
     // Base query to fetch active tasks visible by publish_delay
     let taskQuery = supabaseAdmin
@@ -66,38 +54,48 @@ export async function GET(request: NextRequest) {
         due_time,
         publish_status,
         publish_delay,
+        frequencies,
         responsibility,
         categories,
-        frequencies,
         created_at
       `)
       .eq('publish_status', 'active')
       .or(`publish_delay.is.null,publish_delay.lte.${validatedDate}`)
-      
-    // Log the query we're about to execute
-    console.log('Executing query with searchRoles:', searchRoles)
 
     const { data: masterTasks, error: tasksError } = await taskQuery
     console.log('Master tasks found:', masterTasks?.length || 0)
 
     if (tasksError) {
-      console.error('Error fetching master tasks for role:', tasksError)
+      console.error('Error fetching master tasks:', tasksError)
       return NextResponse.json({ error: 'Failed to fetch tasks' }, { status: 500 })
     }
 
-    // Post-filter based on shared-inc/exc rules
-    console.log('Master tasks before filtering:', masterTasks?.map(t => ({
-      id: t.id,
-      title: t.title,
-      responsibility: t.responsibility
-    })) || 'No tasks found')
-    
-    const roleFiltered = filterTasksByResponsibility(
-      (masterTasks || []).map((t: any) => ({ ...t, responsibility: t.responsibility || [] })),
-      normalizedRole
-    )
-    
-    console.log('Tasks after responsibility filtering:', roleFiltered.length)
+    let roleFiltered: any[] = []
+
+    if (isAdminRequest) {
+      // Admin mode: show all tasks (filtering will be done on client-side)
+      console.log('Admin mode: fetching all tasks')
+      roleFiltered = masterTasks || []
+    } else {
+      // Regular mode: filter by role
+      const { getSearchOptions, filterTasksByResponsibility } = await import('@/lib/responsibility-mapper')
+      const searchRoles = getSearchOptions(normalizedRole)
+      console.log('Search roles:', searchRoles)
+
+      // Post-filter based on shared-inc/exc rules
+      console.log('Master tasks before filtering:', masterTasks?.map(t => ({
+        id: t.id,
+        title: t.title,
+        responsibility: t.responsibility
+      })) || 'No tasks found')
+      
+      roleFiltered = filterTasksByResponsibility(
+        (masterTasks || []).map((t: any) => ({ ...t, responsibility: t.responsibility || [] })),
+        normalizedRole
+      )
+      
+      console.log('Tasks after responsibility filtering:', roleFiltered.length)
+    }
 
     // Create holiday helper and recurrence engine for filtering
     const { data: holidays, error: holidaysError } = await supabaseAdmin
@@ -117,19 +115,33 @@ export async function GET(request: NextRequest) {
     
     const filteredTasks = roleFiltered.filter(task => {
       try {
+        // Convert frequencies array to frequency_rules format expected by recurrence engine
+        const frequencies = task.frequencies || ['every_day']
+        let frequency_rules = { type: 'daily' }
+        
+        if (frequencies.includes('every_day')) {
+          frequency_rules = { type: 'daily' }
+        } else if (frequencies.includes('once_weekly')) {
+          frequency_rules = { type: 'weekly' }
+        } else if (frequencies.includes('once_monthly')) {
+          frequency_rules = { type: 'monthly' }
+        } else if (frequencies.some(f => ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'].includes(f))) {
+          frequency_rules = { type: 'weekly', days: frequencies.filter(f => ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'].includes(f)) }
+        }
+        
         const taskForRecurrence = {
           id: task.id,
-          frequency_rules: task.frequencies || { type: 'daily' }, // Use actual frequencies or default
+          frequency_rules,
           start_date: task.created_at?.split('T')[0],
-          end_date: null // Field doesn't exist in current schema
+          end_date: null
         }
         
         console.log('Checking recurrence for task:', {
           id: task.id,
           title: task.title,
-          frequency_rules: task.frequencies || { type: 'daily' },
-          start_date: task.created_at?.split('T')[0],
-          end_date: null
+          frequencies: task.frequencies,
+          frequency_rules,
+          start_date: task.created_at?.split('T')[0]
         })
         
         const isDue = recurrenceEngine.isDueOnDate(taskForRecurrence, new Date(validatedDate))
@@ -138,7 +150,7 @@ export async function GET(request: NextRequest) {
         return isDue
       } catch (error) {
         console.error('Error checking task recurrence:', error)
-        return false
+        return true // Default to showing the task if there's an error
       }
     })
     
@@ -191,7 +203,7 @@ export async function GET(request: NextRequest) {
         id: `${task.id}:${validatedDate}`, // virtual instance id
         master_task_id: task.id,
         date: validatedDate,
-        role: normalizedRole,
+        role: isAdminRequest ? 'admin' : normalizedRole,
         status,
         completed_by: existingInstance?.completed_by,
         completed_at: existingInstance?.completed_at,
@@ -207,7 +219,7 @@ export async function GET(request: NextRequest) {
           due_time: task.due_time,
           responsibility: task.responsibility || [],
           categories: task.categories || ['general'],
-          frequencies: task.frequencies || { type: 'daily' }
+          frequencies: task.frequencies || ['every_day'] // Using frequencies from database
         }
       }
     })
@@ -218,6 +230,8 @@ export async function GET(request: NextRequest) {
       meta: {
         role: validatedRole,
         date: validatedDate,
+        admin_mode: isAdminRequest,
+        responsibility_filter: responsibilityFilter || null,
         total_tasks: checklistData.length,
         completed_tasks: checklistData.filter(t => t.status === 'completed').length,
         pending_tasks: checklistData.filter(t => t.status === 'pending').length
