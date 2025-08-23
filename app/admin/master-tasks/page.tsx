@@ -73,6 +73,17 @@ const frequencyLabels = {
 // Dynamic responsibility options - loaded from database
 let RESPONSIBILITY_OPTIONS: { value: string; label: string }[] = []
 
+// Helper function to convert position name to responsibility value
+// This must match the nameToResponsibilityValue function in position-utils.ts
+const nameToResponsibilityValue = (positionName: string): string => {
+  return positionName
+    .toLowerCase()
+    .trim()
+    .replace(/[()/]/g, ' ') // normalize punctuation
+    .replace(/[^a-z0-9]+/g, '-') // non-alphanum to dash
+    .replace(/^-+|-+$/g, '') // trim dashes
+}
+
 // Define category options for proper display names
 const CATEGORY_OPTIONS = [
   { value: 'stock-control', label: 'Stock Control' },
@@ -521,8 +532,8 @@ const TaskDetailsModal = ({ task, positions }: { task: MasterTask, positions: Po
                   {task.timing ? (
                     <Badge variant="outline" className={`
                       ${task.timing === 'opening' ? 'bg-blue-100 text-blue-800 border-blue-200' :
-                        task.timing === 'anytime' ? 'bg-purple-100 text-purple-800 border-purple-200' :
-                          task.timing === 'before_order_cutoff' ? 'bg-amber-100 text-amber-800 border-amber-200' :
+                        task.timing === 'anytime_during_day' ? 'bg-purple-100 text-purple-800 border-purple-200' :
+                          task.timing === 'before_order_cut_off' ? 'bg-amber-100 text-amber-800 border-amber-200' :
                             task.timing === 'closing' ? 'bg-indigo-100 text-indigo-800 border-indigo-200' :
                               'bg-gray-100 text-gray-800 border-gray-200'}
                     `}>
@@ -557,37 +568,7 @@ const TaskDetailsModal = ({ task, positions }: { task: MasterTask, positions: Po
             </div>
 
             {/* Advanced Scheduling */}
-            {(task.weekdays && task.weekdays.length > 0) && (
-              <div className="p-3 bg-gray-50 rounded-md">
-                <label className="text-sm font-medium text-gray-600">Specific Weekdays</label>
-                <div className="mt-1 flex flex-wrap gap-1">
-                  {task.weekdays.map((day, index) => {
-                    const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
-                    return (
-                      <Badge key={index} variant="outline" className="text-xs">
-                        {dayNames[day] || day}
-                      </Badge>
-                    )
-                  })}
-                </div>
-              </div>
-            )}
 
-            {(task.months && task.months.length > 0) && (
-              <div className="p-3 bg-gray-50 rounded-md mt-3">
-                <label className="text-sm font-medium text-gray-600">Specific Months</label>
-                <div className="mt-1 flex flex-wrap gap-1">
-                  {task.months.map((month, index) => {
-                    const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
-                    return (
-                      <Badge key={index} variant="outline" className="text-xs">
-                        {monthNames[month - 1] || month}
-                      </Badge>
-                    )
-                  })}
-                </div>
-              </div>
-            )}
           </CardContent>
         </Card>
 
@@ -624,7 +605,7 @@ const TaskDetailsModal = ({ task, positions }: { task: MasterTask, positions: Po
         </Card>
 
         {/* Date Settings */}
-        {(task.due_date || task.start_date || task.end_date || task.publish_delay || task.publish_delay_date) && (
+        {(task.due_date || task.start_date || task.end_date || task.publish_delay) && (
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center space-x-2">
@@ -658,12 +639,7 @@ const TaskDetailsModal = ({ task, positions }: { task: MasterTask, positions: Po
                     <p className="text-sm mt-1">{new Date(task.end_date).toLocaleDateString()}</p>
                   </div>
                 )}
-                {task.publish_delay_date && (
-                  <div className="flex items-center justify-between p-4 bg-gray-50 rounded-md border border-gray-100 shadow-sm">
-                    <label className="text-sm font-medium text-gray-600">Publish Delay Date</label>
-                    <p className="text-sm mt-1">{new Date(task.publish_delay_date).toLocaleDateString()}</p>
-                  </div>
-                )}
+
               </div>
             </CardContent>
           </Card>
@@ -794,7 +770,7 @@ export default function AdminMasterTasksPage() {
       const responsibilityOptions = positionsData
         .filter((position: any) => position.name !== 'Administrator')
         .map((position: any) => ({
-          value: position.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, ''),
+          value: nameToResponsibilityValue(position.name),
           label: position.name
         }))
 
@@ -816,19 +792,7 @@ export default function AdminMasterTasksPage() {
           position: tasksData[0].position
         })
 
-        // Log all tasks to see the pattern
-        console.log('All tasks responsibility/categories data:')
-        tasksData.forEach((task, index) => {
-          console.log(`Task ${index + 1}:`, {
-            title: task.title,
-            responsibility: task.responsibility,
-            categories: task.categories,
-            hasResponsibilityArray: Array.isArray(task.responsibility),
-            hasCategoriesArray: Array.isArray(task.categories),
-            responsibilityLength: task.responsibility?.length || 0,
-            categoriesLength: task.categories?.length || 0
-          })
-        })
+
       }
 
       setTasks(tasksData)
@@ -999,7 +963,7 @@ export default function AdminMasterTasksPage() {
         'Start Date': (task as any).start_date || '',
         'End Date': (task as any).end_date || '',
         'Publish Status': task.publish_status || 'draft',
-        'Publish Delay': (task as any).publish_delay || (task as any).publish_delay_date || '',
+        'Publish Delay': (task as any).publish_delay || '',
         Weekdays: Array.isArray((task as any).weekdays) ? (task as any).weekdays.join(',') : '',
         Months: Array.isArray((task as any).months) ? (task as any).months.join(',') : '',
         'Sticky Once Off': task.sticky_once_off ? 'TRUE' : 'FALSE',
@@ -1335,19 +1299,25 @@ export default function AdminMasterTasksPage() {
   // Filter tasks based on search and filters
   const filteredTasks = tasks.filter(task => {
     const matchesSearch = !searchTerm ||
+      task.title?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       task.description?.toLowerCase().includes(searchTerm.toLowerCase())
 
-    // Check if position matches either in responsibility array or legacy position_id
+    // Check if position matches - since we're filtering by position but tasks have responsibility arrays,
+    // we need to match the selected position name with the responsibility values
     const matchesPosition = filterPosition === 'all' ||
-      (task.positions?.id || task.position?.id) === filterPosition ||
-      (task.responsibility && task.responsibility.some(r => {
-        // If filtering by a position ID, check if any responsibility matches that position
+      (task.responsibility && Array.isArray(task.responsibility) && task.responsibility.some(r => {
+        // If filtering by a position ID, get the position name and convert it to the same format
+        // used when creating responsibility values (lowercase with dashes)
         const position = positions.find(p => p.id === filterPosition)
         if (!position) return false
 
-        // Convert position name to responsibility format for comparison
-        const positionAsResponsibility = position.name.toLowerCase().replace(/\s+/g, '-')
-        return r.includes(positionAsResponsibility)
+        // Convert position name to the same format used in responsibility values
+        const formattedPositionName = nameToResponsibilityValue(position.name)
+        
+
+        
+        // Check if the responsibility matches the formatted position name
+        return r === formattedPositionName
       }))
 
     const matchesStatus = filterStatus === 'all' || task.publish_status === filterStatus
@@ -1530,7 +1500,7 @@ export default function AdminMasterTasksPage() {
                       <SelectItem value="all">All Categories</SelectItem>
                       {categories?.map(category => category && (
                         <SelectItem key={category} value={category}>
-                          {category}
+                          {getCategoryDisplayName(category)}
                         </SelectItem>
                       ))}
                     </SelectContent>

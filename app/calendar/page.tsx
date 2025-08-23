@@ -390,7 +390,6 @@ export default function CalendarPage() {
   return (
     <div className="min-h-screen bg-[var(--color-background)]">
       <Navigation />
-
       <main className="max-w-content-lg mx-auto px-4 sm:px-6 lg:px-18 py-6 sm:py-8">
         <div className="pharmacy-gradient rounded-lg p-4 sm:p-6 text-white mb-6">
           <h1 className="text-2xl sm:text-3xl font-bold mb-2">Task Calendar</h1>
