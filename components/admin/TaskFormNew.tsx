@@ -23,7 +23,7 @@ import type { MasterChecklistTask, CreateMasterTaskRequest, UpdateMasterTaskRequ
 // Zod schema for form validation matching specifications
 const taskFormSchema = z.object({
   title: z.string().max(200, 'Title must be less than 200 characters').optional(),
-  description: z.string().min(1, 'Description is required').max(200, 'Description must be less than 200 characters'),
+  description: z.string().min(1, 'Description is required').max(500, 'Description must be less than 500 characters'),
   responsibility: z.array(z.string()).min(1, 'At least one responsibility is required'),
   categories: z.array(z.string()).min(1, 'At least one category is required'),
   timing: z.enum(['opening', 'anytime_during_day', 'before_order_cut_off', 'closing']),

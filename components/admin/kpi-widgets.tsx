@@ -58,7 +58,7 @@ export function KPIWidgets() {
           })
         } else {
           // If no data or no summary, show zeros but don't show error
-          console.log('KPIWidgets: No dashboard data available, using zeros')
+          console.log('KPIWidgets: No dashboard data available (likely authentication issue), using zeros')
           setStats({
             onTimeCompletionRate: 0,
             avgTimeToCompleteHours: 0,
@@ -67,7 +67,7 @@ export function KPIWidgets() {
           })
         }
       } catch (error) {
-        console.error('KPIWidgets: Error fetching dashboard stats:', error)
+        console.warn('KPIWidgets: Error fetching dashboard stats:', error)
         // Set fallback stats if request fails completely
         setStats({
           onTimeCompletionRate: 0,

@@ -91,15 +91,6 @@ export async function authenticatedGet<T = any>(url: string, retryCount = 0): Pr
         errorBody = 'Unable to read error response'
       }
       
-      console.error(`Failed to fetch ${url}:`, {
-        status: response.status,
-        statusText: response.statusText,
-        errorBody: errorBody || 'Empty response',
-        attempt: retryCount + 1,
-        url: url,
-        headers: Object.fromEntries(response.headers.entries())
-      })
-      
       // If it's an authentication error, provide more context and potentially retry
       if (response.status === 401) {
         console.warn('Authentication failed for:', url)
@@ -113,15 +104,24 @@ export async function authenticatedGet<T = any>(url: string, retryCount = 0): Pr
           await new Promise(resolve => setTimeout(resolve, 500)) // Wait 500ms before retry
           return authenticatedGet<T>(url, retryCount + 1)
         }
+      } else {
+        // Log non-authentication errors as warnings to avoid Next.js error interception
+        console.warn(`Failed to fetch ${url}:`, {
+          status: response.status,
+          statusText: response.statusText,
+          errorBody: errorBody || 'Empty response',
+          attempt: retryCount + 1,
+          url: url
+        })
       }
       
       return null
     }
   } catch (error) {
-    console.error(`Error fetching ${url}:`, {
-      error: error,
-      message: error instanceof Error ? error.message : String(error),
-      stack: error instanceof Error ? error.stack : undefined,
+    // Log all errors as warnings to avoid Next.js error interception
+    const errorMessage = error instanceof Error ? error.message : String(error)
+    console.warn(`Error fetching ${url}:`, {
+      error: errorMessage,
       url: url,
       retryCount: retryCount
     })

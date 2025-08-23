@@ -47,7 +47,7 @@ export function DashboardStats() {
           })
         }
       } catch (error) {
-        console.error('DashboardStats: Error fetching dashboard stats:', error)
+        console.warn('DashboardStats: Error fetching dashboard stats:', error)
         // Set fallback stats if request fails
         setStats({
           newSince9am: 0,

@@ -61,7 +61,7 @@ export default function AdminDashboard() {
         positions: positionsData?.length || 0
       })
     } catch (error) {
-      console.error('AdminDashboard: Error loading diagnostics:', error)
+      console.warn('AdminDashboard: Error loading diagnostics:', error)
     }
   }
 
