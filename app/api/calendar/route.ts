@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/auth-middleware'
-import { toKebabCase, getSearchOptions, filterTasksByResponsibility } from '@/lib/responsibility-mapper'
+import { toKebabCase, filterTasksByResponsibility } from '@/lib/responsibility-mapper'
 import { createRecurrenceEngine } from '@/lib/recurrence-engine'
 import { createHolidayHelper } from '@/lib/public-holidays'
 import { createClient } from '@supabase/supabase-js'
@@ -75,6 +75,28 @@ function convertFrequenciesToRules(frequencies: string[]): any {
   return { type: 'daily', every_n_days: 1, business_days_only: false }
 }
 
+// Build a comprehensive set of responsibility variants to match DB values
+function buildResponsibilityVariants(name?: string | null, displayName?: string | null): string[] {
+  const set = new Set<string>()
+  const add = (v?: string | null) => {
+    if (!v) return
+    const raw = v.trim()
+    if (!raw) return
+    set.add(raw)
+    const lower = raw.toLowerCase()
+    set.add(lower)
+    const kebab = toKebabCase(raw)
+    set.add(kebab)
+    // underscore variant for legacy values
+    set.add(kebab.replace(/-/g, '_'))
+    // space variant
+    set.add(kebab.replace(/-/g, ' '))
+  }
+  add(name)
+  add(displayName)
+  return Array.from(set)
+}
+
 export async function GET(request: NextRequest) {
   try {
     const user = await requireAuth(request)
@@ -114,8 +136,8 @@ export async function GET(request: NextRequest) {
     const startDateStr = startDate.toISOString().split('T')[0]
     const endDateStr = endDate.toISOString().split('T')[0]
 
-    // Determine responsibility filter
-    let responsibility: string | null = null
+    // Determine responsibility filter variants
+    let responsibilityVariants: string[] | null = null
     if (positionId) {
       // Fetch position to map to responsibility
       const { data: position } = await supabaseAdmin
@@ -124,7 +146,7 @@ export async function GET(request: NextRequest) {
         .eq('id', positionId)
         .maybeSingle()
       if (position) {
-        responsibility = toKebabCase(position.display_name || position.name)
+        responsibilityVariants = buildResponsibilityVariants(position.name, position.display_name)
       }
     } else if (user.role !== 'admin' && user.position_id) {
       // Fetch user's position to map to responsibility
@@ -134,7 +156,15 @@ export async function GET(request: NextRequest) {
         .eq('id', user.position_id)
         .maybeSingle()
       if (position) {
-        responsibility = toKebabCase(position.display_name || position.name)
+        responsibilityVariants = buildResponsibilityVariants(position.name, position.display_name)
+      }
+    }
+
+    // Fallback: if position lookup failed for non-admins, use user's display_name header
+    if (user.role !== 'admin' && (!responsibilityVariants || responsibilityVariants.length === 0)) {
+      const dn = user.display_name || ''
+      if (dn.trim()) {
+        responsibilityVariants = buildResponsibilityVariants(dn, dn)
       }
     }
 
@@ -170,9 +200,9 @@ export async function GET(request: NextRequest) {
     // Publish delay condition across range: visible if publish_delay is null or <= end of range
     taskQuery = taskQuery.or(`publish_delay.is.null,publish_delay.lte.${endDateStr}`)
 
-    if (responsibility) {
-      const searchRoles = getSearchOptions(responsibility)
-      taskQuery = taskQuery.overlaps('responsibility', searchRoles)
+    // Non-admins must be restricted to their responsibility only
+    if (user.role !== 'admin' && responsibilityVariants && responsibilityVariants.length > 0) {
+      taskQuery = taskQuery.overlaps('responsibility', responsibilityVariants)
     }
 
     const { data: masterTasks, error: tasksError } = await taskQuery
@@ -181,8 +211,13 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Failed to fetch calendar data' }, { status: 500 })
     }
 
-    const roleFiltered = responsibility 
-      ? filterTasksByResponsibility((masterTasks || []).map(t => ({ ...t, responsibility: t.responsibility || [] })), responsibility)
+    // Final in-memory safety filter to ensure non-admins never see others' tasks
+    const roleFiltered = (user.role !== 'admin' && responsibilityVariants && responsibilityVariants.length > 0)
+      ? (masterTasks || []).filter(t => {
+          const resp: string[] = (t as any).responsibility || []
+          // Match any variant including raw, lowercase, kebab, underscore, and space-separated
+          return responsibilityVariants!.some(v => resp.includes(v))
+        })
       : (masterTasks || [])
 
     // Build calendar map

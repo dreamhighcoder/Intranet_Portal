@@ -82,6 +82,15 @@ export default function CalendarPage() {
   const [loading, setLoading] = useState(true)
   const [currentDate, setCurrentDate] = useState(new Date())
   const [selectedPosition, setSelectedPosition] = useState<string>("all")
+  
+  // Ensure non-admins are locked to their own position
+  useEffect(() => {
+    if (!authLoading && user && !isAdmin) {
+      if (user.id && selectedPosition !== user.id) {
+        setSelectedPosition(user.id)
+      }
+    }
+  }, [authLoading, user, isAdmin])
   const [view, setView] = useState<"month" | "week">("month")
 
   useEffect(() => {
