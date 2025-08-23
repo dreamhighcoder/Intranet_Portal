@@ -10,8 +10,9 @@ import { Label } from "@/components/ui/label"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { Alert, AlertDescription } from "@/components/ui/alert"
+import { ConfirmDeleteDialog } from "@/components/confirm-delete-dialog"
 
-import { publicHolidaysApi } from "@/lib/api-client"
+import { publicHolidaysApi, authenticatedPost } from "@/lib/api-client"
 import { Plus, Trash2, Edit, Download, Upload, Calendar, RefreshCw } from "lucide-react"
 import { toastError, toastSuccess } from "@/hooks/use-toast"
 
@@ -132,6 +133,11 @@ export default function AdminPublicHolidaysPage() {
     source: 'manual'
   })
   
+  // Delete confirmation dialog state
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
+  const [holidayToDelete, setHolidayToDelete] = useState<PublicHoliday | null>(null)
+  const [isDeleting, setIsDeleting] = useState(false)
+  
   const [alert, setAlert] = useState<{ type: 'success' | 'error'; message: string } | null>(null)
 
   useEffect(() => {
@@ -179,17 +185,31 @@ export default function AdminPublicHolidaysPage() {
 
     try {
       if (editingHoliday) {
-        // Update existing holiday
-        await publicHolidaysApi.update(editingHoliday.date, newHoliday)
-        setHolidays(holidays.map(h => 
-          h.date === editingHoliday.date ? { ...h, ...newHoliday } : h
-        ))
-        toastSuccess('Holiday Updated', 'Holiday updated successfully')
+        // Update existing holiday - pass original region for precise identification
+        console.log('Updating holiday:', { editingHoliday, newHoliday })
+        const updatedHoliday = await publicHolidaysApi.update(
+          editingHoliday.date, 
+          newHoliday, 
+          editingHoliday.region
+        )
+        if (updatedHoliday) {
+          // Reload holidays to ensure consistency with database
+          await loadHolidays()
+          toastSuccess('Holiday Updated', 'Holiday updated successfully')
+        } else {
+          toastError('Update Failed', 'Failed to update holiday')
+          return
+        }
       } else {
         // Create new holiday
-        await publicHolidaysApi.create(newHoliday)
-        await loadHolidays() // Reload to get the full data
-        toastSuccess('Holiday Added', 'Holiday added successfully')
+        const createdHoliday = await publicHolidaysApi.create(newHoliday)
+        if (createdHoliday) {
+          await loadHolidays() // Reload to get the full data
+          toastSuccess('Holiday Added', 'Holiday added successfully')
+        } else {
+          toastError('Create Failed', 'Failed to create holiday')
+          return
+        }
       }
 
       setIsDialogOpen(false)
@@ -201,18 +221,45 @@ export default function AdminPublicHolidaysPage() {
     }
   }
 
-  const handleDeleteHoliday = async (date: string) => {
-    if (!confirm('Are you sure you want to delete this holiday? This may affect task scheduling.')) {
-      return
-    }
+  const handleDeleteHoliday = (holiday: PublicHoliday) => {
+    setHolidayToDelete(holiday)
+    setDeleteConfirmOpen(true)
+  }
 
+  const confirmDeleteHoliday = async () => {
+    if (!holidayToDelete) return
+
+    setIsDeleting(true)
     try {
-      await publicHolidaysApi.delete(date)
-      setHolidays(holidays.filter(h => h.date !== date))
-      toastSuccess('Holiday Deleted', 'Holiday deleted successfully')
+      console.log('Deleting holiday:', holidayToDelete)
+      
+      // Use the API client which handles authentication properly
+      const success = await publicHolidaysApi.delete(holidayToDelete.date, holidayToDelete.region)
+      
+      if (success) {
+        // Filter out the deleted holiday using both date and region for precision
+        setHolidays(holidays.filter(h => 
+          !(h.date === holidayToDelete.date && h.region === holidayToDelete.region)
+        ))
+        toastSuccess('Holiday Deleted', 'Holiday deleted successfully')
+      } else {
+        console.error('Delete failed: API returned false')
+        toastError('Delete Failed', 'Failed to delete holiday - please check console for details')
+      }
     } catch (error) {
       console.error('Error deleting holiday:', error)
-      toastError('Delete Failed', 'Failed to delete holiday')
+      const errorMessage = error.message || 'Unknown error'
+      
+      // Check if it's the audit constraint error and show helpful message
+      if (errorMessage.includes('audit_log_action_check') || errorMessage.includes('Fix Audit')) {
+        toastError('Database Fix Required', 'Please visit Admin > Fix Audit to resolve this issue')
+      } else {
+        toastError('Delete Failed', `Error: ${errorMessage}`)
+      }
+    } finally {
+      setIsDeleting(false)
+      setDeleteConfirmOpen(false)
+      setHolidayToDelete(null)
     }
   }
 
@@ -229,23 +276,21 @@ export default function AdminPublicHolidaysPage() {
 
   const handleImportHolidays = async () => {
     try {
-      const response = await fetch('/api/public-holidays/import', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ year: new Date().getFullYear(), region: 'NSW' })
+      const result = await authenticatedPost('/api/public-holidays/import', {
+        year: new Date().getFullYear(),
+        region: 'NSW'
       })
       
-      const result = await response.json()
-      
-      if (result.success) {
+      if (result && result.success) {
         await loadHolidays()
         toastSuccess('Import Successful', `Imported ${result.imported} holidays`)
       } else {
-        toastError('Import Failed', result.message || 'Failed to import holidays')
+        toastError('Import Failed', result?.message || 'Failed to import holidays')
       }
     } catch (error) {
       console.error('Error importing holidays:', error)
-      toastError('Import Failed', 'Failed to import holidays')
+      const errorMessage = error instanceof Error ? error.message : 'Failed to import holidays'
+      toastError('Import Failed', errorMessage)
     }
   }
 
@@ -355,21 +400,20 @@ export default function AdminPublicHolidaysPage() {
 
         {/* Stats */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-          <Card className="card-surface py-6">
-            <CardContent className="px-8 py-4">
+          <Card className="card-surface py-5 h-22">
+            <CardContent className="px-8">
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm text-gray-600">Total Holidays</p>
                   <p className="text-2xl font-bold">{holidays.length}</p>
                 </div>
-                <Calendar className="w-8 h-8 text-blue-600" />
+                <Calendar className="w-8 h-8 text-blue-600 mb-2" />
               </div>
             </CardContent>
           </Card>
           
-          <Card className="card-surface">
-            
-            <CardContent className="px-8 py-4">
+          <Card className="card-surface py-5 h-22">
+            <CardContent className="px-8">
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm text-gray-600">This Year</p>
@@ -377,13 +421,13 @@ export default function AdminPublicHolidaysPage() {
                     {holidaysByYear[new Date().getFullYear()]?.length || 0}
                   </p>
                 </div>
-                <Calendar className="w-8 h-8 text-green-600" />
+                <Calendar className="w-8 h-8 text-green-600 mb-2" />
               </div>
             </CardContent>
           </Card>
           
-          <Card className="card-surface">
-            <CardContent className="px-8 py-4">
+          <Card className="card-surface py-5 h-22">
+            <CardContent className="px-8">
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm text-gray-600">Next Year</p>
@@ -391,7 +435,7 @@ export default function AdminPublicHolidaysPage() {
                     {holidaysByYear[new Date().getFullYear() + 1]?.length || 0}
                   </p>
                 </div>
-                <Calendar className="w-8 h-8 text-orange-600" />
+                <Calendar className="w-8 h-8 text-orange-600 mb-2" />
               </div>
             </CardContent>
           </Card>
@@ -491,7 +535,7 @@ export default function AdminPublicHolidaysPage() {
                               <Button
                                 size="sm"
                                 variant="outline"
-                                onClick={() => handleDeleteHoliday(holiday.date)}
+                                onClick={() => handleDeleteHoliday(holiday)}
                                 className="text-red-600 hover:text-red-700"
                               >
                                 <Trash2 className="w-3 h-3" />
@@ -534,9 +578,9 @@ export default function AdminPublicHolidaysPage() {
                 {editingHoliday ? 'Edit Holiday' : 'Add Public Holiday'}
               </DialogTitle>
             </DialogHeader>
-            <div className="space-y-4 p-4">
+            <div className="space-y-4">
               <div>
-                <Label htmlFor="date">Date</Label>
+                <Label htmlFor="date" className="p-1">Date</Label>
                 <Input
                   id="date"
                   type="date"
@@ -547,7 +591,7 @@ export default function AdminPublicHolidaysPage() {
               </div>
               
               <div>
-                <Label htmlFor="name">Holiday Name</Label>
+                <Label htmlFor="name" className="p-1">Holiday Name</Label>
                 <Input
                   id="name"
                   value={newHoliday.name}
@@ -557,8 +601,8 @@ export default function AdminPublicHolidaysPage() {
                 />
               </div>
               
-              <div>
-                <Label htmlFor="region">Region</Label>
+              <div className="mb-6">
+                <Label htmlFor="region" className="p-1">Region</Label>
                 <Input
                   id="region"
                   value={newHoliday.region}
@@ -571,13 +615,27 @@ export default function AdminPublicHolidaysPage() {
                 <Button variant="outline" onClick={() => setIsDialogOpen(false)}>
                   Cancel
                 </Button>
-                <Button onClick={handleSaveHoliday}>
+                <Button onClick={handleSaveHoliday} className="text-white">
                   {editingHoliday ? 'Update' : 'Add'} Holiday
                 </Button>
               </div>
             </div>
           </DialogContent>
         </Dialog>
+
+        {/* Delete Confirmation Dialog */}
+        <ConfirmDeleteDialog
+          isOpen={deleteConfirmOpen}
+          onClose={() => {
+            setDeleteConfirmOpen(false)
+            setHolidayToDelete(null)
+          }}
+          onConfirm={confirmDeleteHoliday}
+          title="Delete Public Holiday"
+          description="Are you sure you want to delete this public holiday? This action cannot be undone and may affect task scheduling."
+          itemName={holidayToDelete ? `${holidayToDelete.name} (${new Date(holidayToDelete.date).toLocaleDateString('en-AU')})` : ''}
+          isLoading={isDeleting}
+        />
       </main>
     </div>
   )

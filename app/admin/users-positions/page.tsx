@@ -425,11 +425,10 @@ export default function UsersPositionsPage() {
   return (
     <div className="min-h-screen bg-[var(--color-background)]">
       <Navigation />
-
       <main className="max-w-content-lg mx-auto px-4 sm:px-6 lg:px-18 py-6 sm:py-8">
-        <div className="mb-6">
-          <h1 className="text-3xl font-bold text-[var(--color-text-primary)] mb-2">Users & Positions</h1>
-          <p className="text-[var(--color-text-secondary)]">
+        <div className="pharmacy-gradient rounded-lg p-4 sm:p-6 text-white mb-6">
+          <h1 className="text-2xl sm:text-3xl font-bold mb-2">Positions & Users</h1>
+          <p className="text-white/90 text-sm sm:text-base">
             Manage staff positions and user accounts for the pharmacy system
           </p>
         </div>
@@ -485,13 +484,13 @@ export default function UsersPositionsPage() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Name</TableHead>
-                    <TableHead>Description</TableHead>
-                    <TableHead>Type</TableHead>
-                    <TableHead>Password</TableHead>
-                    <TableHead>Created</TableHead>
-                    <TableHead>Updated</TableHead>
-                    <TableHead>Actions</TableHead>
+                    <TableHead className="w-[15%] py-3 bg-gray-50">Name</TableHead>
+                    <TableHead className="w-[30%] py-3 bg-gray-50">Description</TableHead>
+                    <TableHead className="w-[10%] py-3 bg-gray-50">Type</TableHead>
+                    <TableHead className="w-[10%] py-3 bg-gray-50">Password</TableHead>
+                    <TableHead className="w-[15%] py-3 bg-gray-50">Created</TableHead>
+                    <TableHead className="w-[15%] py-3 bg-gray-50">Updated</TableHead>
+                    <TableHead className="w-[10%] py-3 bg-gray-50 text-center">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -552,8 +551,8 @@ export default function UsersPositionsPage() {
                           )}
                         </div>
                       </TableCell>
-                      <TableCell>{formatDateTime(position.created_at)}</TableCell>
-                      <TableCell>{formatDateTime(position.updated_at)}</TableCell>
+                      <TableCell className="justify-center">{formatDateTime(position.created_at)}</TableCell>
+                      <TableCell className="justify-center">{formatDateTime(position.updated_at)}</TableCell>
                       <TableCell>
                         <div className="flex items-center space-x-2">
                           <Button 
@@ -619,12 +618,12 @@ export default function UsersPositionsPage() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Name</TableHead>
-                    <TableHead>Email</TableHead>
-                    <TableHead>Position</TableHead>
-                    <TableHead>Role</TableHead>
-                    <TableHead>Last Login</TableHead>
-                    <TableHead>Actions</TableHead>
+                    <TableHead className="w-[20%] py-3 bg-gray-50">Name</TableHead>
+                    <TableHead className="w-[20%] py-3 bg-gray-50">Email</TableHead>
+                    <TableHead className="w-[20%] py-3 bg-gray-50">Position</TableHead>
+                    <TableHead className="w-[10%] py-3 bg-gray-50">Role</TableHead>
+                    <TableHead className="w-[20%] py-3 bg-gray-50">Last Login</TableHead>
+                    <TableHead className="w-[10%] py-3 bg-gray-50">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>

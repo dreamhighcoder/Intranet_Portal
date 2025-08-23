@@ -309,17 +309,78 @@ export const publicHolidaysApi = {
     return await authenticatedPost('/api/public-holidays', data)
   },
 
-  async update(date: string, data: { date: string; name: string; region?: string; source?: string }) {
+  async update(date: string, data: { date: string; name: string; region?: string; source?: string }, originalRegion?: string) {
     return await authenticatedFetch('/api/public-holidays', {
       method: 'PATCH',
-      body: JSON.stringify({ ...data, date }),
+      body: JSON.stringify({ ...data, date, originalRegion }),
     }).then(response => response.ok ? response.json() : null)
   },
 
-  async delete(date: string) {
-    return await authenticatedFetch('/api/public-holidays', {
-      method: 'DELETE',
-      body: JSON.stringify({ date }),
-    }).then(response => response.ok)
+  async delete(date: string, region?: string) {
+    try {
+      console.log('Public holidays API - Attempting to delete:', { date, region })
+      
+      const response = await authenticatedFetch('/api/public-holidays', {
+        method: 'DELETE',
+        body: JSON.stringify({ date, region }),
+      })
+      
+      console.log('Public holidays API - Delete response status:', response.status)
+      
+      if (response.ok) {
+        console.log('Public holidays API - Delete successful')
+        return true
+      } else {
+        // Try to get error details from response
+        let errorData = null
+        let errorText = ''
+        
+        try {
+          errorText = await response.text()
+          console.log('Public holidays API - Error response text:', errorText)
+          
+          if (errorText) {
+            try {
+              errorData = JSON.parse(errorText)
+              console.log('Public holidays API - Parsed error data:', errorData)
+            } catch (parseError) {
+              console.log('Public holidays API - Could not parse error as JSON, using text')
+              errorData = { error: errorText }
+            }
+          }
+        } catch (textError) {
+          console.error('Public holidays API - Could not read error response:', textError)
+          errorData = { error: 'Could not read error response' }
+        }
+        
+        // Create a meaningful error message
+        let errorMessage = `HTTP ${response.status}: ${response.statusText}`
+        
+        if (errorData) {
+          if (errorData.details) {
+            errorMessage = errorData.details
+          } else if (errorData.error) {
+            errorMessage = errorData.error
+          }
+          
+          // Handle specific database constraint errors
+          if (errorMessage.includes('audit_log_action_check') || errorMessage.includes('Fix Audit')) {
+            errorMessage = errorData.details || 'The audit log system needs to be updated to support holiday deletion. Please visit the Admin > Fix Audit page to resolve this issue.'
+          }
+        }
+        
+        console.error('Public holidays API - Final error message:', errorMessage)
+        throw new Error(errorMessage)
+      }
+    } catch (error) {
+      console.error('Public holidays API - Delete operation failed:', error)
+      
+      // Re-throw with more context if it's our custom error
+      if (error instanceof Error) {
+        throw error
+      } else {
+        throw new Error(`Delete failed: ${String(error)}`)
+      }
+    }
   }
 }

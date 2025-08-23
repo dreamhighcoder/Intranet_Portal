@@ -392,15 +392,15 @@ export default function CalendarPage() {
       <Navigation />
 
       <main className="max-w-content-lg mx-auto px-4 sm:px-6 lg:px-18 py-6 sm:py-8">
-        <div className="mb-6">
-          <h1 className="text-3xl font-bold text-[var(--color-text-primary)] mb-2">Task Calendar</h1>
-          <p className="text-[var(--color-text-secondary)]">
+        <div className="pharmacy-gradient rounded-lg p-4 sm:p-6 text-white mb-6">
+          <h1 className="text-2xl sm:text-3xl font-bold mb-2">Task Calendar</h1>
+          <p className="text-white/90 text-sm sm:text-base">
             View and track daily tasks across the pharmacy
           </p>
         </div>
 
         {/* Controls */}
-        <div className="flex flex-col sm:flex-row gap-4 mb-6">
+        <div className="bg-white rounded-lg border border-[var(--color-border)] p-4 flex flex-col sm:flex-row gap-4 mb-6">
           <div className="flex items-center space-x-2">
             <Button
               variant="outline"
@@ -469,25 +469,26 @@ export default function CalendarPage() {
         {/* Summary Stats */}
         {calendarData && (
           <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
-            <Card>
-              <CardContent className="p-4">
-                <div className="flex items-center space-x-2">
+            <Card className="py-5 h-22">
+              <CardContent>
+                <div className="flex items-center space-x-4">
                   <div className="p-2 bg-blue-100 rounded-lg">
-                    <CalendarIcon className="w-4 h-4 text-blue-600" />
+                    <CalendarIcon className="w-8 h-8 text-blue-600" />
                   </div>
                   <div>
                     <p className="text-sm text-gray-600">Total Tasks</p>
                     <p className="text-lg font-semibold">{calendarData.summary.totalTasks}</p>
                   </div>
+                  
                 </div>
               </CardContent>
             </Card>
 
-            <Card>
-              <CardContent className="p-4">
-                <div className="flex items-center space-x-2">
+            <Card className="py-5 h-22">
+              <CardContent>
+                <div className="flex items-center space-x-4">
                   <div className="p-2 bg-green-100 rounded-lg">
-                    <CheckCircle className="w-4 h-4 text-green-600" />
+                    <CheckCircle className="w-8 h-8 text-green-600" />
                   </div>
                   <div>
                     <p className="text-sm text-gray-600">Completed</p>
@@ -497,11 +498,11 @@ export default function CalendarPage() {
               </CardContent>
             </Card>
 
-            <Card>
-              <CardContent className="p-4">
-                <div className="flex items-center space-x-2">
+            <Card className="py-5 h-22">
+              <CardContent>
+                <div className="flex items-center space-x-4">
                   <div className="p-2 bg-yellow-100 rounded-lg">
-                    <Clock className="w-4 h-4 text-yellow-600" />
+                    <Clock className="w-8 h-8 text-yellow-600" />
                   </div>
                   <div>
                     <p className="text-sm text-gray-600">Pending</p>
@@ -511,11 +512,11 @@ export default function CalendarPage() {
               </CardContent>
             </Card>
 
-            <Card>
-              <CardContent className="p-4">
-                <div className="flex items-center space-x-2">
+            <Card className="py-5 h-22">
+              <CardContent>
+                <div className="flex items-center space-x-4">
                   <div className="p-2 bg-red-100 rounded-lg">
-                    <AlertTriangle className="w-4 h-4 text-red-600" />
+                    <AlertTriangle className="w-8 h-8 text-red-600" />
                   </div>
                   <div>
                     <p className="text-sm text-gray-600">Overdue</p>
@@ -525,11 +526,11 @@ export default function CalendarPage() {
               </CardContent>
             </Card>
 
-            <Card>
-              <CardContent className="p-4">
-                <div className="flex items-center space-x-2">
+            <Card className="py-5 h-22">
+              <CardContent>
+                <div className="flex items-center space-x-4">
                   <div className="p-2 bg-purple-100 rounded-lg">
-                    <Users className="w-4 h-4 text-purple-600" />
+                    <Users className="w-8 h-8 text-purple-600" />
                   </div>
                   <div>
                     <p className="text-sm text-gray-600">Completion Rate</p>

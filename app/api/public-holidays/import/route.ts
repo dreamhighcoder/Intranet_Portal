@@ -15,34 +15,53 @@ const getAustralianHolidays = (year: number) => [
   // Add Easter dates (simplified - in real implementation you'd calculate these)
   ...(year === 2024 ? [
     { date: '2024-03-29', name: 'Good Friday', region: 'National', source: 'data.gov.au' },
+    { date: '2024-03-30', name: 'Easter Saturday', region: 'Most States', source: 'data.gov.au' },
     { date: '2024-04-01', name: 'Easter Monday', region: 'National', source: 'data.gov.au' },
-    { date: '2024-06-10', name: "Queen's Birthday", region: 'Most States', source: 'data.gov.au' },
+    { date: '2024-06-10', name: "King's Birthday", region: 'Most States', source: 'data.gov.au' },
+    { date: '2024-10-07', name: 'Labour Day', region: 'NSW', source: 'data.gov.au' },
   ] : []),
   ...(year === 2025 ? [
     { date: '2025-04-18', name: 'Good Friday', region: 'National', source: 'data.gov.au' },
+    { date: '2025-04-19', name: 'Easter Saturday', region: 'Most States', source: 'data.gov.au' },
     { date: '2025-04-21', name: 'Easter Monday', region: 'National', source: 'data.gov.au' },
-    { date: '2025-06-09', name: "Queen's Birthday", region: 'Most States', source: 'data.gov.au' },
+    { date: '2025-06-09', name: "King's Birthday", region: 'Most States', source: 'data.gov.au' },
+    { date: '2025-10-06', name: 'Labour Day', region: 'NSW', source: 'data.gov.au' },
   ] : [])
 ]
 
 export async function POST(request: NextRequest) {
   try {
+    console.log('Public Holidays Import - Starting import process')
+    
     // Authenticate the user
     const user = await requireAuth(request)
+    console.log('Public Holidays Import - User authenticated:', user.id, user.role)
     
     // Create admin Supabase client for database operations
     const supabase = createClient(supabaseUrl, supabaseServiceKey)
     
     const body = await request.json()
     const { year, region } = body
+    console.log('Public Holidays Import - Request params:', { year, region })
     
     const currentYear = year || new Date().getFullYear()
     const holidays = getAustralianHolidays(currentYear)
+    console.log('Public Holidays Import - Total holidays available:', holidays.length)
     
     // Filter by region if specified
     const filteredHolidays = region 
-      ? holidays.filter(h => h.region === region || h.region === 'National')
+      ? holidays.filter(h => {
+          // For NSW, include National and Most States holidays
+          if (region === 'NSW') {
+            return h.region === 'National' || h.region === 'Most States' || h.region === 'NSW'
+          }
+          // For other regions, include National and exact region match
+          return h.region === 'National' || h.region === region
+        })
       : holidays
+    
+    console.log('Public Holidays Import - Filtered holidays:', filteredHolidays.length)
+    console.log('Public Holidays Import - Holidays to process:', filteredHolidays.map(h => ({ date: h.date, name: h.name, region: h.region })))
     
     let imported = 0
     let skipped = 0
@@ -75,6 +94,8 @@ export async function POST(request: NextRequest) {
         console.error('Error processing holiday:', holiday.date, error)
       }
     }
+    
+    console.log('Public Holidays Import - Import completed:', { imported, skipped })
     
     return NextResponse.json({
       success: true,

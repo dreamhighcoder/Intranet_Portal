@@ -16,7 +16,8 @@
     "update-statuses-prod": "curl -X POST \"$NEXT_PUBLIC_SITE_URL/api/jobs/update-statuses\" -H \"Authorization: Bearer $CRON_API_KEY\"",
     "deploy-recurrence-engine": "tsx scripts/deploy-recurrence-engine.ts",
     "run-migration": "tsx scripts/run-migration.ts",
-    "check-schema": "tsx scripts/check-schema.ts"
+    "check-schema": "tsx scripts/check-schema.ts",
+    "fix-audit-constraint": "node scripts/fix-audit-constraint.js"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",

@@ -442,18 +442,15 @@ export default function ReportsPage() {
       <Navigation />
 
       <main className="max-w-content-lg mx-auto px-4 sm:px-6 lg:px-18 py-6 sm:py-8">
-        <div className="mb-6">
-          <h1 className="text-3xl font-bold text-[var(--color-text-primary)] mb-2">Reports & Analytics</h1>
-          <p className="text-[var(--color-text-secondary)]">
+        <div className="pharmacy-gradient rounded-lg p-4 sm:p-6 text-white mb-6">
+          <h1 className="text-2xl sm:text-3xl font-bold mb-2">Reports & Analytics</h1>
+          <p className="text-white/90 text-sm sm:text-base">
             Comprehensive reporting and analytics for pharmacy task management
           </p>
         </div>
 
         {/* Filters */}
         <Card className="mb-6">
-          <CardHeader>
-            <CardTitle>Report Filters</CardTitle>
-          </CardHeader>
           <CardContent>
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
               {/* Date Range */}

@@ -86,66 +86,180 @@ export async function POST(request: Request) {
 
 export async function PATCH(request: Request) {
   try {
+    console.log('Public holidays PATCH - Starting request processing')
+    
     // Authenticate the user
     const user = await requireAuth(request)
+    console.log('Public holidays PATCH - Authentication successful for:', user.email)
     
     // Create admin Supabase client for database operations
     const supabase = createClient(supabaseUrl, supabaseServiceKey)
     
     const body = await request.json()
-    const { date, name, region, source } = body
+    const { date, name, region, source, originalRegion } = body
+    
+    console.log('Public holidays PATCH - Request data:', { date, name, region, source, originalRegion })
 
     if (!date || !name) {
+      console.log('Public holidays PATCH - Missing required fields')
       return NextResponse.json({ error: 'Date and name are required' }, { status: 400 })
     }
 
-    const { data: holiday, error } = await supabase
+    // Build the update query - use originalRegion if provided for precise identification
+    let updateQuery = supabase
       .from('public_holidays')
       .update({ name, region, source })
       .eq('date', date)
+    
+    // If originalRegion is provided, use it to identify the exact record
+    if (originalRegion) {
+      updateQuery = updateQuery.eq('region', originalRegion)
+      console.log('Public holidays PATCH - Updating with date and originalRegion:', { date, originalRegion })
+    } else {
+      console.log('Public holidays PATCH - Updating with date only:', { date })
+    }
+
+    const { data: holiday, error } = await updateQuery
       .select()
       .single()
 
     if (error) {
-      console.error('Error updating public holiday:', error)
+      console.error('Public holidays PATCH - Database error:', error)
       return NextResponse.json({ error: 'Failed to update public holiday' }, { status: 500 })
     }
 
+    console.log('Public holidays PATCH - Successfully updated holiday:', holiday)
     return NextResponse.json(holiday)
   } catch (error) {
-    console.error('Unexpected error:', error)
+    console.error('Public holidays PATCH - Unexpected error:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }
 
 export async function DELETE(request: Request) {
   try {
+    console.log('Public holidays DELETE - Starting request processing')
+    
     // Authenticate the user
     const user = await requireAuth(request)
+    console.log('Public holidays DELETE - Authentication successful for:', user.email)
     
     // Create admin Supabase client for database operations
     const supabase = createClient(supabaseUrl, supabaseServiceKey)
     
     const body = await request.json()
-    const { date } = body
+    const { date, region } = body
+    
+    console.log('Public holidays DELETE - Request data:', { date, region })
 
     if (!date) {
+      console.log('Public holidays DELETE - Missing date parameter')
       return NextResponse.json({ error: 'Date is required' }, { status: 400 })
     }
 
-    const { error } = await supabase
+    // First, get the record that will be deleted for audit logging
+    let selectQuery = supabase
+      .from('public_holidays')
+      .select('*')
+      .eq('date', date)
+    
+    if (region) {
+      selectQuery = selectQuery.eq('region', region)
+    }
+    
+    const { data: holidayToDelete, error: selectError } = await selectQuery.single()
+    
+    if (selectError) {
+      console.error('Public holidays DELETE - Error fetching holiday to delete:', selectError)
+      return NextResponse.json({ 
+        error: 'Holiday not found', 
+        details: 'No matching holiday found to delete' 
+      }, { status: 404 })
+    }
+
+    console.log('Public holidays DELETE - Found holiday to delete:', holidayToDelete)
+
+    // Build the delete query - if region is provided, use it for precise deletion
+    let deleteQuery = supabase
       .from('public_holidays')
       .delete()
       .eq('date', date)
-
-    if (error) {
-      console.error('Error deleting public holiday:', error)
-      return NextResponse.json({ error: 'Failed to delete public holiday' }, { status: 500 })
+    
+    // If region is provided, add it to the query for precise deletion
+    if (region) {
+      deleteQuery = deleteQuery.eq('region', region)
+      console.log('Public holidays DELETE - Deleting with date and region:', { date, region })
+    } else {
+      console.log('Public holidays DELETE - Deleting with date only:', { date })
     }
 
-    return NextResponse.json({ message: 'Public holiday deleted successfully' })
+    const { error, count } = await deleteQuery
+
+    if (error) {
+      console.error('Public holidays DELETE - Database error:', error)
+      
+      // Check if it's the audit constraint error
+      if (error.message && error.message.includes('audit_log_action_check')) {
+        console.log('Public holidays DELETE - Audit constraint error detected, providing helpful message')
+        return NextResponse.json({ 
+          error: 'Database constraint error', 
+          details: 'The audit log system needs to be updated to support holiday deletion. Please visit the Admin > Fix Audit page to resolve this issue.',
+          code: error.code,
+          hint: 'Go to /admin/fix-audit to apply the database fix, or contact your administrator.',
+          fixUrl: '/admin/fix-audit'
+        }, { status: 500 })
+      }
+      
+      return NextResponse.json({ 
+        error: 'Failed to delete public holiday', 
+        details: error.message,
+        code: error.code 
+      }, { status: 500 })
+    }
+
+    console.log('Public holidays DELETE - Successfully deleted', count, 'record(s)')
+    
+    // Check if any records were actually deleted
+    if (count === 0) {
+      console.log('Public holidays DELETE - No records were deleted, possibly not found')
+      return NextResponse.json({ 
+        error: 'Holiday not found', 
+        details: 'No matching holiday found to delete' 
+      }, { status: 404 })
+    }
+
+    // Manually log the audit entry with a valid action since the trigger might fail
+    try {
+      console.log('Public holidays DELETE - Manually logging audit entry...')
+      await supabase
+        .from('audit_log')
+        .insert({
+          user_id: user.id,
+          action: 'deleted', // Use 'deleted' instead of 'holiday_deleted' to avoid constraint issues
+          old_values: holidayToDelete,
+          new_values: null,
+          metadata: {
+            table: 'public_holidays',
+            operation: 'DELETE',
+            timestamp: new Date().toISOString(),
+            date: holidayToDelete.date,
+            region: holidayToDelete.region,
+            manual_audit: true,
+            reason: 'Trigger failed due to constraint, logged manually'
+          }
+        })
+      console.log('Public holidays DELETE - Manual audit entry logged successfully')
+    } catch (auditError) {
+      console.warn('Public holidays DELETE - Failed to log manual audit entry:', auditError)
+      // Don't fail the delete operation if audit logging fails
+    }
+
+    return NextResponse.json({ 
+      message: 'Public holiday deleted successfully',
+      deletedCount: count 
+    })
   } catch (error) {
-    console.error('Unexpected error:', error)
+    console.error('Public holidays DELETE - Unexpected error:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
     }
 }

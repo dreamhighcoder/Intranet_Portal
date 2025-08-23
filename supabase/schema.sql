@@ -82,7 +82,23 @@ CREATE TABLE IF NOT EXISTS audit_log (
     id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
     task_instance_id UUID REFERENCES task_instances(id),
     user_id UUID REFERENCES auth.users(id),
-    action TEXT CHECK (action IN ('created', 'completed', 'uncompleted', 'status_changed', 'locked', 'unlocked', 'acknowledged', 'resolved')) NOT NULL,
+    action TEXT CHECK (action IN (
+        -- Original task-related actions
+        'created', 'completed', 'uncompleted', 'status_changed', 
+        'locked', 'unlocked', 'acknowledged', 'resolved',
+        -- Additional task actions
+        'updated', 'deleted',
+        -- Holiday-related actions
+        'holiday_created', 'holiday_updated', 'holiday_deleted', 'holiday_sync',
+        -- User-related actions
+        'user_login', 'user_logout', 'user_created', 'user_updated', 'user_deleted',
+        -- Position-related actions
+        'position_created', 'position_updated', 'position_deleted',
+        -- System actions
+        'system_config_changed', 'backup_created', 'maintenance_mode_toggled',
+        -- Generic actions
+        'viewed', 'exported', 'imported', 'bulk_operation'
+    )) NOT NULL,
     old_values JSONB,
     new_values JSONB,
     metadata JSONB,

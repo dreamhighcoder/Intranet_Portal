@@ -1,6 +1,7 @@
 -- Insert Positions (using generated UUIDs)
 -- These are sample positions - can be customized per pharmacy's needs
 INSERT INTO positions (id, name, description) VALUES
+  (gen_random_uuid(), 'Administrator', 'System administrator with full access to manage all aspects of the system'),
   (gen_random_uuid(), 'Pharmacist (Primary)', 'Lead pharmacist responsible for clinical oversight'),
   (gen_random_uuid(), 'Pharmacist (Supporting)', 'Supporting pharmacist for dispensing and clinical duties'),
   (gen_random_uuid(), 'Pharmacy Assistants', 'Front-of-house customer service and basic pharmacy tasks'),

@@ -158,8 +158,6 @@ export default function HomePage() {
     )
   }
 
-
-
   const handleLoginClick = () => {
     setModalType("general")
     setIsLoginModalOpen(true)

@@ -155,7 +155,7 @@ export default function AdminDashboard() {
                   Monitor task completion and manage pharmacy operations
                 </p>
                 {diagnostics && (
-                  <div className="text-xs sm:text-sm text-white/80 mt-2">
+                  <div className="text-xs sm:text-sm text-white/80">
                     Database: {diagnostics.masterTasks} master tasks • {diagnostics.taskInstances} task instances • {diagnostics.positions} positions
                   </div>
                 )}
