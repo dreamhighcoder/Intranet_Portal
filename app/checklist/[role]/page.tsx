@@ -14,7 +14,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Input } from '@/components/ui/input'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
-import { Check, X, Eye, LogOut, Settings, ChevronRight, Search, Clock, Trash2 } from 'lucide-react'
+import { Check, X, Eye, LogOut, Settings, ChevronRight, Search, Clock, Trash2, ChevronUp, ChevronDown } from 'lucide-react'
 import Link from 'next/link'
 import { toastError, toastSuccess } from '@/hooks/use-toast'
 import { toKebabCase } from '@/lib/responsibility-mapper'
@@ -288,6 +288,44 @@ const renderFrequencyWithDetails = (task: ChecklistTask) => {
   )
 }
 
+// Sortable Header Component
+const SortableHeader = ({ 
+  field, 
+  children, 
+  sortField, 
+  sortDirection, 
+  onSort, 
+  className = "" 
+}: { 
+  field: string
+  children: React.ReactNode
+  sortField: string
+  sortDirection: 'asc' | 'desc'
+  onSort: (field: string) => void
+  className?: string
+}) => {
+  const isActive = sortField === field
+  
+  return (
+    <TableHead 
+      className={`cursor-pointer hover:bg-gray-100 transition-colors ${className}`}
+      onClick={() => onSort(field)}
+    >
+      <div className="flex items-center justify-between">
+        <span>{children}</span>
+        <div className="flex flex-col ml-1">
+          <ChevronUp 
+            className={`h-3 w-3 ${isActive && sortDirection === 'asc' ? 'text-blue-600' : 'text-gray-400'}`} 
+          />
+          <ChevronDown 
+            className={`h-3 w-3 -mt-1 ${isActive && sortDirection === 'desc' ? 'text-blue-600' : 'text-gray-400'}`} 
+          />
+        </div>
+      </div>
+    </TableHead>
+  )
+}
+
 // Pagination Component
 const Pagination = ({
   currentPage,
@@ -455,6 +493,20 @@ export default function RoleChecklistPage() {
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1)
   const tasksPerPage = 50
+
+  // Sorting state
+  const [sortField, setSortField] = useState<string>('')
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc')
+
+  // Sorting function
+  const handleSort = (field: string) => {
+    if (sortField === field) {
+      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc')
+    } else {
+      setSortField(field)
+      setSortDirection('asc')
+    }
+  }
 
   // Handle auth redirect
   useEffect(() => {
@@ -761,9 +813,9 @@ export default function RoleChecklistPage() {
     }
   }
 
-  // Apply filters to tasks
-  const filteredTasks = useMemo(() => {
-    return tasks.filter((task) => {
+  // Apply filters and sorting to tasks
+  const filteredAndSortedTasks = useMemo(() => {
+    const filtered = tasks.filter((task) => {
       // Search filter - search by description only
       if (searchTerm && !task.master_task.description?.toLowerCase().includes(searchTerm.toLowerCase())) {
         return false
@@ -801,13 +853,54 @@ export default function RoleChecklistPage() {
       }
       return true
     })
-  }, [tasks, searchTerm, selectedResponsibility, selectedCategory, selectedStatus, currentDate, isAdmin])
+
+    // Apply sorting
+    if (!sortField) return filtered
+
+    return filtered.sort((a, b) => {
+      let aValue: any = ''
+      let bValue: any = ''
+
+      switch (sortField) {
+        case 'title':
+          aValue = a.master_task.description?.toLowerCase() || ''
+          bValue = b.master_task.description?.toLowerCase() || ''
+          break
+        case 'responsibility':
+          aValue = a.master_task.responsibility?.[0] || ''
+          bValue = b.master_task.responsibility?.[0] || ''
+          break
+        case 'category':
+          aValue = a.master_task.categories?.[0] || ''
+          bValue = b.master_task.categories?.[0] || ''
+          break
+        case 'frequency':
+          aValue = a.master_task.frequencies?.[0] || ''
+          bValue = b.master_task.frequencies?.[0] || ''
+          break
+        case 'due_time':
+          aValue = a.master_task.due_time || '17:00'
+          bValue = b.master_task.due_time || '17:00'
+          break
+        case 'status':
+          aValue = a.status || ''
+          bValue = b.status || ''
+          break
+        default:
+          return 0
+      }
+
+      if (aValue < bValue) return sortDirection === 'asc' ? -1 : 1
+      if (aValue > bValue) return sortDirection === 'asc' ? 1 : -1
+      return 0
+    })
+  }, [tasks, searchTerm, selectedResponsibility, selectedCategory, selectedStatus, currentDate, isAdmin, sortField, sortDirection])
 
   // Pagination calculations
-  const totalPages = Math.ceil(filteredTasks.length / tasksPerPage)
+  const totalPages = Math.ceil(filteredAndSortedTasks.length / tasksPerPage)
   const startIndex = (currentPage - 1) * tasksPerPage
   const endIndex = startIndex + tasksPerPage
-  const paginatedTasks = filteredTasks.slice(startIndex, endIndex)
+  const paginatedTasks = filteredAndSortedTasks.slice(startIndex, endIndex)
 
   // Reset to first page when filters change
   useEffect(() => {
@@ -907,7 +1000,7 @@ export default function RoleChecklistPage() {
     )
   }
 
-  const allTasksCompleted = filteredTasks.length > 0 && filteredTasks.every((task) => task.status === "completed")
+  const allTasksCompleted = filteredAndSortedTasks.length > 0 && filteredAndSortedTasks.every((task) => task.status === "completed")
 
   return (
     <div className="min-h-screen bg-[var(--color-background)]">
@@ -931,7 +1024,7 @@ export default function RoleChecklistPage() {
               </div>
 
               <p className="text-white/90">
-                {filteredTasks.length} tasks • {filteredTasks.filter((t) => t.status === "completed").length} completed
+                {filteredAndSortedTasks.length} tasks • {filteredAndSortedTasks.filter((t) => t.status === "completed").length} completed
                 {totalPages > 1 && (
                   <span className="ml-2">
                     • Page {currentPage} of {totalPages}
@@ -1038,7 +1131,7 @@ export default function RoleChecklistPage() {
           <CardHeader>
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between space-y-2 sm:space-y-0">
               <CardTitle className="text-lg lg:text-xl mb-1">
-                Tasks ({Math.min(currentPage * tasksPerPage, tasks.length)} of {tasks.length})
+                Tasks ({Math.min(currentPage * tasksPerPage, filteredAndSortedTasks.length)} of {filteredAndSortedTasks.length})
                 {totalPages > 1 && (
                   <span className="text-sm font-normal text-gray-600 ml-2">
                     - Page {currentPage} of {totalPages}
@@ -1067,7 +1160,7 @@ export default function RoleChecklistPage() {
             </div>
           </CardHeader>
           <CardContent className="p-0">
-            {filteredTasks.length === 0 ? (
+            {filteredAndSortedTasks.length === 0 ? (
               <div className="py-12 text-center">
                 <p className="text-[var(--color-text-secondary)] text-lg">No tasks found for the selected filters.</p>
               </div>
@@ -1086,12 +1179,62 @@ export default function RoleChecklistPage() {
                             className="data-[state=checked]:bg-blue-500 data-[state=checked]:text-white data-[state=checked]:border-blue-500"
                           />
                         </TableHead>
-                        <TableHead className={isAdmin ? "w-[20%] py-3 bg-gray-50" : "w-[35%] py-3"}>Title & Description</TableHead>
-                        {isAdmin && <TableHead className="w-[15%] py-3 bg-gray-50">Responsibility</TableHead>}
-                        <TableHead className="w-[15%] py-3 bg-gray-50">Category</TableHead>
-                        <TableHead className="w-[15%] py-3 bg-gray-50">Frequencies & Timing</TableHead>
-                        <TableHead className="w-[7%] py-3 bg-gray-50">Due Time</TableHead>
-                        <TableHead className="w-[8%] py-3 bg-gray-50">Status</TableHead>
+                        <SortableHeader 
+                          field="title" 
+                          sortField={sortField} 
+                          sortDirection={sortDirection} 
+                          onSort={handleSort}
+                          className={isAdmin ? "w-[20%] py-3 bg-gray-50" : "w-[35%] py-3 bg-gray-50"}
+                        >
+                          Title & Description
+                        </SortableHeader>
+                        {isAdmin && (
+                          <SortableHeader 
+                            field="responsibility" 
+                            sortField={sortField} 
+                            sortDirection={sortDirection} 
+                            onSort={handleSort}
+                            className="w-[15%] py-3 bg-gray-50"
+                          >
+                            Responsibility
+                          </SortableHeader>
+                        )}
+                        <SortableHeader 
+                          field="category" 
+                          sortField={sortField} 
+                          sortDirection={sortDirection} 
+                          onSort={handleSort}
+                          className="w-[15%] py-3 bg-gray-50"
+                        >
+                          Category
+                        </SortableHeader>
+                        <SortableHeader 
+                          field="frequency" 
+                          sortField={sortField} 
+                          sortDirection={sortDirection} 
+                          onSort={handleSort}
+                          className="w-[15%] py-3 bg-gray-50"
+                        >
+                          Frequencies & Timing
+                        </SortableHeader>
+                        <SortableHeader 
+                          field="due_time" 
+                          sortField={sortField} 
+                          sortDirection={sortDirection} 
+                          onSort={handleSort}
+                          className="w-[7%] py-3 bg-gray-50"
+                        >
+                          Due Time
+                        </SortableHeader>
+                        <SortableHeader 
+                          field="status" 
+                          sortField={sortField} 
+                          sortDirection={sortDirection} 
+                          onSort={handleSort}
+                          className="w-[8%] py-3 bg-gray-50"
+                        >
+                          Status
+                        </SortableHeader>
                         <TableHead className="w-[10%] py-3 bg-gray-50 text-center">Actions</TableHead>
                       </TableRow>
                     </TableHeader>
@@ -1312,7 +1455,7 @@ export default function RoleChecklistPage() {
                 </div>
 
                 {/* Pagination */}
-                {filteredTasks.length > 0 && (
+                {filteredAndSortedTasks.length > 0 && (
                   <Pagination
                     currentPage={currentPage}
                     totalPages={totalPages}

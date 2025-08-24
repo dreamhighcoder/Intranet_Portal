@@ -42,7 +42,9 @@ import {
   CalendarDays,
   MoreHorizontal,
   Check,
-  X
+  X,
+  ChevronUp,
+  ChevronDown
 } from "lucide-react"
 
 // Using the proper type from checklist.ts
@@ -315,6 +317,44 @@ const renderFrequencyWithDetails = (task: MasterTask) => {
         </div>
       )}
     </div>
+  )
+}
+
+// Sortable Header Component
+const SortableHeader = ({ 
+  field, 
+  children, 
+  sortField, 
+  sortDirection, 
+  onSort, 
+  className = "" 
+}: { 
+  field: string
+  children: React.ReactNode
+  sortField: string
+  sortDirection: 'asc' | 'desc'
+  onSort: (field: string) => void
+  className?: string
+}) => {
+  const isActive = sortField === field
+  
+  return (
+    <TableHead 
+      className={`cursor-pointer hover:bg-gray-100 transition-colors ${className}`}
+      onClick={() => onSort(field)}
+    >
+      <div className="flex items-center justify-between">
+        <span>{children}</span>
+        <div className="flex flex-col ml-1">
+          <ChevronUp 
+            className={`h-3 w-3 ${isActive && sortDirection === 'asc' ? 'text-blue-600' : 'text-gray-400'}`} 
+          />
+          <ChevronDown 
+            className={`h-3 w-3 -mt-1 ${isActive && sortDirection === 'desc' ? 'text-blue-600' : 'text-gray-400'}`} 
+          />
+        </div>
+      </div>
+    </TableHead>
   )
 }
 
@@ -752,6 +792,20 @@ export default function AdminMasterTasksPage() {
   const [currentPage, setCurrentPage] = useState(1)
   const tasksPerPage = 50
 
+  // Sorting state
+  const [sortField, setSortField] = useState<string>('')
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc')
+
+  // Sorting function
+  const handleSort = (field: string) => {
+    if (sortField === field) {
+      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc')
+    } else {
+      setSortField(field)
+      setSortDirection('asc')
+    }
+  }
+
   // File input ref for import functionality
   const fileInputRef = useRef<HTMLInputElement>(null)
 
@@ -1046,14 +1100,14 @@ export default function AdminMasterTasksPage() {
   // Export handler function
   const handleExport = async () => {
     try {
-      if (filteredTasks.length === 0) {
+      if (filteredAndSortedTasks.length === 0) {
         showToast('error', 'Export Failed', 'No tasks to export')
         return
       }
 
       // Export using current DB schema field names, prettifying key columns for readability
       const toTitle = (s: string) => s ? s.replace(/[-_]/g, ' ').replace(/\b\w/g, c => c.toUpperCase()) : ''
-      const exportData = filteredTasks.map(task => ({
+      const exportData = filteredAndSortedTasks.map(task => ({
         Title: task.title,
         Description: task.description || '',
         Responsibility: Array.isArray(task.responsibility) ? task.responsibility.map(v => toTitle(String(v))).join(', ') : '',
@@ -1400,8 +1454,8 @@ export default function AdminMasterTasksPage() {
     }
   }
 
-  // Filter tasks based on search and filters
-  const filteredTasks = tasks.filter(task => {
+  // Filter and sort tasks based on search and filters
+  const filteredAndSortedTasks = tasks.filter(task => {
     const matchesSearch = !searchTerm ||
       task.title?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       task.description?.toLowerCase().includes(searchTerm.toLowerCase())
@@ -1432,13 +1486,51 @@ export default function AdminMasterTasksPage() {
       (task.categories && task.categories.includes(filterCategory))
 
     return matchesSearch && matchesPosition && matchesStatus && matchesCategory
+  }).sort((a, b) => {
+    if (!sortField) return 0
+
+    let aValue: any = ''
+    let bValue: any = ''
+
+    switch (sortField) {
+      case 'title':
+        aValue = a.description?.toLowerCase() || ''
+        bValue = b.description?.toLowerCase() || ''
+        break
+      case 'responsibility':
+        aValue = a.responsibility?.[0] || ''
+        bValue = b.responsibility?.[0] || ''
+        break
+      case 'category':
+        aValue = a.categories?.[0] || a.category || ''
+        bValue = b.categories?.[0] || b.category || ''
+        break
+      case 'frequency':
+        aValue = a.frequencies?.[0] || ''
+        bValue = b.frequencies?.[0] || ''
+        break
+      case 'status':
+        aValue = a.publish_status || ''
+        bValue = b.publish_status || ''
+        break
+      case 'due_time':
+        aValue = (a as any).default_due_time || '17:00'
+        bValue = (b as any).default_due_time || '17:00'
+        break
+      default:
+        return 0
+    }
+
+    if (aValue < bValue) return sortDirection === 'asc' ? -1 : 1
+    if (aValue > bValue) return sortDirection === 'asc' ? 1 : -1
+    return 0
   })
 
   // Pagination calculations
-  const totalPages = Math.ceil(filteredTasks.length / tasksPerPage)
+  const totalPages = Math.ceil(filteredAndSortedTasks.length / tasksPerPage)
   const startIndex = (currentPage - 1) * tasksPerPage
   const endIndex = startIndex + tasksPerPage
-  const paginatedTasks = filteredTasks.slice(startIndex, endIndex)
+  const paginatedTasks = filteredAndSortedTasks.slice(startIndex, endIndex)
 
   // Reset to first page when filters change
   useEffect(() => {
@@ -1647,7 +1739,7 @@ export default function AdminMasterTasksPage() {
           <CardHeader className="flex flex-col lg:flex-row lg:items-center lg:justify-between space-y-4 lg:space-y-0">
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between space-y-2 sm:space-y-0">
               <CardTitle className="text-lg lg:text-xl mb-1">
-                Master Tasks ({Math.min(currentPage * tasksPerPage, tasks.length)} of {tasks.length})
+                Master Tasks ({Math.min(currentPage * tasksPerPage, filteredAndSortedTasks.length)} of {filteredAndSortedTasks.length})
                 {totalPages > 1 && (
                   <span className="text-sm font-normal text-gray-600 ml-2">
                     - Page {currentPage} of {totalPages}
@@ -1709,12 +1801,60 @@ export default function AdminMasterTasksPage() {
                             className="data-[state=checked]:bg-blue-500 data-[state=checked]:text-white data-[state=checked]:border-blue-500"
                           />
                         </TableHead>
-                        <TableHead className="w-[23%] py-3 bg-gray-50">Title & Description</TableHead>
-                        <TableHead className="w-[14%] py-3 bg-gray-50">Responsibilities</TableHead>
-                        <TableHead className="w-[14%] py-3 bg-gray-50">Categories</TableHead>
-                        <TableHead className="w-[14%] py-3 bg-gray-50">Frequencies & Timing</TableHead>
-                        <TableHead className="w-[10%] py-3 bg-gray-50 text-center">Status</TableHead>
-                        <TableHead className="w-[10%] py-3 bg-gray-50 text-center">Due Time</TableHead>
+                        <SortableHeader 
+                          field="title" 
+                          sortField={sortField} 
+                          sortDirection={sortDirection} 
+                          onSort={handleSort}
+                          className="w-[23%] py-3 bg-gray-50"
+                        >
+                          Title & Description
+                        </SortableHeader>
+                        <SortableHeader 
+                          field="responsibility" 
+                          sortField={sortField} 
+                          sortDirection={sortDirection} 
+                          onSort={handleSort}
+                          className="w-[14%] py-3 bg-gray-50"
+                        >
+                          Responsibilities
+                        </SortableHeader>
+                        <SortableHeader 
+                          field="category" 
+                          sortField={sortField} 
+                          sortDirection={sortDirection} 
+                          onSort={handleSort}
+                          className="w-[14%] py-3 bg-gray-50"
+                        >
+                          Categories
+                        </SortableHeader>
+                        <SortableHeader 
+                          field="frequency" 
+                          sortField={sortField} 
+                          sortDirection={sortDirection} 
+                          onSort={handleSort}
+                          className="w-[14%] py-3 bg-gray-50"
+                        >
+                          Frequencies & Timing
+                        </SortableHeader>
+                        <SortableHeader 
+                          field="status" 
+                          sortField={sortField} 
+                          sortDirection={sortDirection} 
+                          onSort={handleSort}
+                          className="w-[10%] py-3 bg-gray-50 text-center"
+                        >
+                          Status
+                        </SortableHeader>
+                        <SortableHeader 
+                          field="due_time" 
+                          sortField={sortField} 
+                          sortDirection={sortDirection} 
+                          onSort={handleSort}
+                          className="w-[10%] py-3 bg-gray-50 text-center"
+                        >
+                          Due Time
+                        </SortableHeader>
                         <TableHead className="w-[10%] py-3 bg-gray-50 text-center">Actions</TableHead>
                       </TableRow>
                     </TableHeader>
@@ -1982,7 +2122,7 @@ export default function AdminMasterTasksPage() {
                 </div>
 
                 {/* Pagination */}
-                {filteredTasks.length > 0 && (
+                {filteredAndSortedTasks.length > 0 && (
                   <Pagination
                     currentPage={currentPage}
                     totalPages={totalPages}
@@ -1990,7 +2130,7 @@ export default function AdminMasterTasksPage() {
                   />
                 )}
 
-                {filteredTasks.length === 0 && (
+                {filteredAndSortedTasks.length === 0 && (
                   <div className="text-center py-8">
                     <p className="text-gray-600">No tasks found matching your filters.</p>
                   </div>
