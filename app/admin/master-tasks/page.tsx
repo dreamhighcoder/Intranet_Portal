@@ -20,6 +20,7 @@ import * as XLSX from 'xlsx'
 import { toastSuccess, toastError } from "@/hooks/use-toast"
 import type { MasterChecklistTask, CreateMasterTaskRequest, UpdateMasterTaskRequest } from "@/types/checklist"
 import { PublishStatus } from "@/types/checklist"
+import { DEFAULT_DUE_TIMES } from "@/lib/constants"
 import {
   Plus,
   Edit,
@@ -1117,7 +1118,7 @@ export default function AdminMasterTasksPage() {
           : (task.category ? toTitle(String(task.category)) : ''), // legacy fallback
         Frequencies: Array.isArray(task.frequencies) ? task.frequencies.map(f => formatFrequency(f)).join(', ') : '',
         Timing: task.timing ? toTitle(String(task.timing)) : '',
-        'Due Time': (task as any).due_time || (task as any).default_due_time || '',
+        'Due Time': task.due_time || '',
         'Due Date': (task as any).due_date || '',
         'Start Date': (task as any).start_date || '',
         'End Date': (task as any).end_date || '',
@@ -1358,8 +1359,9 @@ export default function AdminMasterTasksPage() {
         // timing with default (map display -> enum value)
         const timing = normalizeTiming(row.timing ?? originalRow['Timing'] ?? 'anytime_during_day')
 
-        // optional dates/times
-        const due_time = (row.due_time ?? originalRow['Default Due Time'] ?? '').toString().trim() || undefined
+        // optional dates/times - auto-assign due_time based on timing if not provided
+        const due_time_from_file = (row.due_time ?? originalRow['Default Due Time'] ?? '').toString().trim()
+        const due_time = due_time_from_file || DEFAULT_DUE_TIMES[timing as keyof typeof DEFAULT_DUE_TIMES] || undefined
         const due_date = (row.due_date ?? originalRow['Due Date'] ?? '').toString().trim() || undefined
         const start_date = (row.start_date ?? originalRow['Start Date'] ?? '').toString().trim() || undefined
         const end_date = (row.end_date ?? originalRow['End Date'] ?? '').toString().trim() || undefined
@@ -1935,7 +1937,7 @@ export default function AdminMasterTasksPage() {
                           <TableCell className="text-center">
                             <div className="flex items-center justify-center text-sm">
                               <Clock className="w-3 h-3 mr-1 text-gray-400" />
-                              {(task as any).default_due_time || '17:00'}
+                              {task.due_time || 'Not set'}
                             </div>
                           </TableCell>
                           <TableCell className="text-center">
