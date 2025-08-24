@@ -22,7 +22,7 @@ import type { MasterChecklistTask, CreateMasterTaskRequest, UpdateMasterTaskRequ
 
 // Zod schema for form validation matching specifications
 const taskFormSchema = z.object({
-  title: z.string().max(200, 'Title must be less than 200 characters').optional(),
+  title: z.string().max(200, 'Title must be less than 500 characters').optional(),
   description: z.string().min(1, 'Description is required').max(500, 'Description must be less than 500 characters'),
   responsibility: z.array(z.string()).min(1, 'At least one responsibility is required'),
   categories: z.array(z.string()).min(1, 'At least one category is required'),
@@ -291,7 +291,7 @@ export default function TaskFormNew({ task, onSubmit, onCancel }: TaskFormProps)
                 <div className="flex justify-between items-center">
                   <Label htmlFor="description">Task Description *</Label>
                   <span className="text-xs text-muted-foreground">
-                    {form.watch('description')?.length || 0}/200 characters
+                    {form.watch('description')?.length || 0}/500 characters
                   </span>
                 </div>
                 <Textarea
@@ -300,7 +300,7 @@ export default function TaskFormNew({ task, onSubmit, onCancel }: TaskFormProps)
                   placeholder="Enter task description"
                   rows={3}
                   className={errors.description ? "border-red-500" : ""}
-                  maxLength={200}
+                  maxLength={500}
                 />
                 {errors.description && (
                   <p className="text-sm text-red-500">{errors.description.message}</p>

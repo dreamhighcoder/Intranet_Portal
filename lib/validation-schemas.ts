@@ -153,7 +153,7 @@ export const CreateMasterTaskSchema = z.object({
  */
 export const UpdateMasterTaskSchema = z.object({
   id: z.string().uuid('Invalid task ID'),
-  title: z.string().min(1, 'Title is required').max(200, 'Title must be less than 200 characters').optional(),
+  title: z.string().min(1, 'Title is required').max(500, 'Title must be less than 500 characters').optional(),
   description: z.string().max(500, 'Description must be less than 500 characters').optional(),
   position_id: z.string().uuid('Invalid position ID').optional(),
   responsibility: z.array(z.string()).min(1, 'At least one responsibility is required').optional(),
