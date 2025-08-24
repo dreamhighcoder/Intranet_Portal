@@ -12,7 +12,9 @@ import { Badge } from '@/components/ui/badge'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Input } from '@/components/ui/input'
-import { Check, X, Eye, LogOut, Settings, ChevronRight, Search, Clock } from 'lucide-react'
+import { Checkbox } from '@/components/ui/checkbox'
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { Check, X, Eye, LogOut, Settings, ChevronRight, Search, Clock, Trash2 } from 'lucide-react'
 import Link from 'next/link'
 import { toastError, toastSuccess } from '@/hooks/use-toast'
 import { toKebabCase } from '@/lib/responsibility-mapper'
@@ -445,6 +447,11 @@ export default function RoleChecklistPage() {
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false)
   const [processingTasks, setProcessingTasks] = useState<Set<string>>(new Set())
 
+  // Bulk action state
+  const [selectedTasks, setSelectedTasks] = useState<Set<string>>(new Set())
+  const [bulkDeleteConfirmModal, setBulkDeleteConfirmModal] = useState(false)
+  const [bulkActionLoading, setBulkActionLoading] = useState(false)
+
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1)
   const tasksPerPage = 15
@@ -680,6 +687,78 @@ export default function RoleChecklistPage() {
   const handleCloseDetailModal = () => {
     setIsDetailModalOpen(false)
     setSelectedTask(null)
+  }
+
+  // Bulk action functions
+  const handleSelectTask = (taskId: string, checked: boolean) => {
+    const newSelected = new Set(selectedTasks)
+    if (checked) {
+      newSelected.add(taskId)
+    } else {
+      newSelected.delete(taskId)
+    }
+    setSelectedTasks(newSelected)
+  }
+
+  const handleSelectAll = (checked: boolean) => {
+    if (checked) {
+      setSelectedTasks(new Set(paginatedTasks.map(task => task.id)))
+    } else {
+      setSelectedTasks(new Set())
+    }
+  }
+
+  const handleBulkDelete = () => {
+    if (selectedTasks.size === 0) {
+      toastError('No Selection', 'Please select tasks to delete')
+      return
+    }
+    setBulkDeleteConfirmModal(true)
+  }
+
+  const confirmBulkDelete = async () => {
+    setBulkDeleteConfirmModal(false)
+    setBulkActionLoading(true)
+
+    try {
+      const selectedTaskIds = Array.from(selectedTasks)
+      
+      // Delete all selected tasks using the DELETE endpoint
+      const deletePromises = selectedTaskIds.map(async (id) => {
+        const response = await fetch(`/api/task-instances/${id}`, {
+          method: 'DELETE',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+        })
+        
+        if (!response.ok) {
+          const errorData = await response.json()
+          throw new Error(errorData.error || `Failed to delete task ${id}`)
+        }
+        
+        return response.json()
+      })
+      
+      await Promise.all(deletePromises)
+
+      // Remove from UI
+      setTasks(tasks.filter(t => !selectedTasks.has(t.id)))
+      setSelectedTasks(new Set())
+
+      toastSuccess('Bulk Delete Complete', `Successfully deleted ${selectedTaskIds.length} task(s)`)
+      
+      // Refresh to ensure consistency
+      setRefreshKey((prev) => prev + 1)
+    } catch (error) {
+      console.error('Error in bulk delete:', error)
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+      toastError('Bulk Delete Failed', `Failed to delete tasks: ${errorMessage}`)
+      // Refresh data to ensure consistency
+      setRefreshKey((prev) => prev + 1)
+    } finally {
+      setBulkActionLoading(false)
+    }
   }
 
   // Apply filters to tasks
@@ -958,7 +1037,7 @@ export default function RoleChecklistPage() {
         <Card className="card-surface mb-6">
           <CardHeader>
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between space-y-2 sm:space-y-0">
-              <CardTitle className="text-lg lg:text-xl">
+              <CardTitle className="text-lg lg:text-xl mb-1">
                 Tasks ({Math.min(currentPage * 15, tasks.length)} of {tasks.length})
                 {totalPages > 1 && (
                   <span className="text-sm font-normal text-gray-600 ml-2">
@@ -966,6 +1045,25 @@ export default function RoleChecklistPage() {
                   </span>
                 )}
               </CardTitle>
+
+              {/* Bulk Actions */}
+              {selectedTasks.size > 0 && (
+                <div className="flex items-center space-x-3">
+                  <span className="text-sm font-medium text-gray-700">
+                    {selectedTasks.size} task{selectedTasks.size !== 1 ? 's' : ''} selected
+                  </span>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleBulkDelete}
+                    disabled={bulkActionLoading}
+                    className="flex items-center space-x-1 text-red-600 hover:text-red-700 border-red-200 hover:border-red-300"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                    <span>Delete Selected</span>
+                  </Button>
+                </div>
+              )}
             </div>
           </CardHeader>
           <CardContent className="p-0">
@@ -980,7 +1078,15 @@ export default function RoleChecklistPage() {
                   <Table className="table-fixed w-full">
                     <TableHeader>
                       <TableRow>
-                        <TableHead className={isAdmin ? "w-[25%] py-3 bg-gray-50" : "w-[40%] py-3"}>Title & Description</TableHead>
+                        <TableHead className="w-[5%] py-3 bg-gray-50 text-center">
+                          <Checkbox
+                            checked={selectedTasks.size === paginatedTasks.length && paginatedTasks.length > 0}
+                            onCheckedChange={handleSelectAll}
+                            aria-label="Select all tasks"
+                            className="data-[state=checked]:bg-blue-500 data-[state=checked]:text-white data-[state=checked]:border-blue-500"
+                          />
+                        </TableHead>
+                        <TableHead className={isAdmin ? "w-[20%] py-3 bg-gray-50" : "w-[35%] py-3"}>Title & Description</TableHead>
                         {isAdmin && <TableHead className="w-[15%] py-3 bg-gray-50">Responsibility</TableHead>}
                         <TableHead className="w-[15%] py-3 bg-gray-50">Category</TableHead>
                         <TableHead className="w-[15%] py-3 bg-gray-50">Frequencies & Timing</TableHead>
@@ -992,6 +1098,14 @@ export default function RoleChecklistPage() {
                     <TableBody>
                       {paginatedTasks.map((task) => (
                         <TableRow key={`${task.id}-${refreshKey}`}>
+                          <TableCell className="py-3 text-center">
+                            <Checkbox
+                              checked={selectedTasks.has(task.id)}
+                              onCheckedChange={(checked) => handleSelectTask(task.id, checked as boolean)}
+                              aria-label={`Select task ${task.master_task.title}`}
+                              className="data-[state=checked]:bg-blue-500 data-[state=checked]:text-white data-[state=checked]:border-blue-500"
+                            />
+                          </TableCell>
                           <TableCell className="py-3">
                             <div className="max-w-full">
                               {task.master_task.title && task.master_task.title.trim() && (
@@ -1256,6 +1370,53 @@ export default function RoleChecklistPage() {
         task={selectedTask}
         onTaskUpdate={() => setRefreshKey(prev => prev + 1)}
       />
+
+      {/* Bulk Delete Confirmation Modal */}
+      <Dialog open={bulkDeleteConfirmModal} onOpenChange={setBulkDeleteConfirmModal}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-red-600 flex items-center">
+              <Trash2 className="w-5 h-5 mr-2" />
+              Delete Selected Tasks
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <p className="text-gray-700">
+              Are you sure you want to delete <strong>{selectedTasks.size}</strong> selected task{selectedTasks.size !== 1 ? 's' : ''}?
+            </p>
+            <div className="bg-red-50 border border-red-200 rounded-lg p-3">
+              <p className="text-red-800 text-sm font-medium mb-2">This will permanently delete:</p>
+              <ul className="text-red-700 text-sm space-y-1">
+                <li>• {selectedTasks.size} task instance{selectedTasks.size !== 1 ? 's' : ''}</li>
+                <li>• All completion history for these tasks</li>
+              </ul>
+              <p className="text-red-800 text-sm font-medium mt-2">This action cannot be undone.</p>
+            </div>
+            <div className="flex justify-end space-x-2">
+              <Button
+                variant="outline"
+                onClick={() => setBulkDeleteConfirmModal(false)}
+                disabled={bulkActionLoading}
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="destructive"
+                onClick={confirmBulkDelete}
+                disabled={bulkActionLoading}
+                className="bg-red-600 hover:bg-red-700"
+              >
+                {bulkActionLoading ? (
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                ) : (
+                  <Trash2 className="w-4 h-4 mr-2" />
+                )}
+                Delete Tasks
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

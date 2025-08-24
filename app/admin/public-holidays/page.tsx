@@ -10,6 +10,7 @@ import { Label } from "@/components/ui/label"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { Alert, AlertDescription } from "@/components/ui/alert"
+import { Checkbox } from "@/components/ui/checkbox"
 import { ConfirmDeleteDialog } from "@/components/confirm-delete-dialog"
 
 import { publicHolidaysApi, authenticatedPost } from "@/lib/api-client"
@@ -137,6 +138,11 @@ export default function AdminPublicHolidaysPage() {
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
   const [holidayToDelete, setHolidayToDelete] = useState<PublicHoliday | null>(null)
   const [isDeleting, setIsDeleting] = useState(false)
+  
+  // Bulk action state
+  const [selectedHolidays, setSelectedHolidays] = useState<Set<string>>(new Set())
+  const [bulkDeleteConfirmModal, setBulkDeleteConfirmModal] = useState(false)
+  const [bulkActionLoading, setBulkActionLoading] = useState(false)
   
   const [alert, setAlert] = useState<{ type: 'success' | 'error'; message: string } | null>(null)
 
@@ -309,6 +315,72 @@ export default function AdminPublicHolidaysPage() {
     window.URL.revokeObjectURL(url)
   }
 
+  // Bulk action functions
+  const getHolidayKey = (holiday: PublicHoliday) => `${holiday.date}-${holiday.region || 'NSW'}`
+
+  const handleSelectHoliday = (holiday: PublicHoliday, checked: boolean) => {
+    const holidayKey = getHolidayKey(holiday)
+    const newSelected = new Set(selectedHolidays)
+    if (checked) {
+      newSelected.add(holidayKey)
+    } else {
+      newSelected.delete(holidayKey)
+    }
+    setSelectedHolidays(newSelected)
+  }
+
+  const handleSelectAll = (checked: boolean) => {
+    if (checked) {
+      setSelectedHolidays(new Set(paginatedHolidays.map(getHolidayKey)))
+    } else {
+      setSelectedHolidays(new Set())
+    }
+  }
+
+  const handleBulkDelete = () => {
+    if (selectedHolidays.size === 0) {
+      toastError('No Selection', 'Please select holidays to delete')
+      return
+    }
+    setBulkDeleteConfirmModal(true)
+  }
+
+  const confirmBulkDelete = async () => {
+    setBulkDeleteConfirmModal(false)
+    setBulkActionLoading(true)
+
+    try {
+      const selectedHolidayKeys = Array.from(selectedHolidays)
+      const holidaysToDelete = holidays.filter(h => selectedHolidayKeys.includes(getHolidayKey(h)))
+      
+      // Delete all selected holidays
+      await Promise.all(holidaysToDelete.map(holiday => 
+        publicHolidaysApi.delete(holiday.date, holiday.region)
+      ))
+
+      // Remove from UI
+      setHolidays(holidays.filter(h => !selectedHolidays.has(getHolidayKey(h))))
+      setSelectedHolidays(new Set())
+
+      toastSuccess('Bulk Delete Complete', `Successfully deleted ${holidaysToDelete.length} holiday(s)`)
+    } catch (error) {
+      console.error('Error in bulk delete:', error)
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+      
+      // Check if it's the audit constraint error and show helpful message
+      if (errorMessage.includes('audit_log_action_check') || errorMessage.includes('Fix Audit')) {
+        toastError('Database Fix Required', 'Please visit Admin > Fix Audit to resolve this issue')
+      } else {
+        toastError('Bulk Delete Failed', `Failed to delete holidays: ${errorMessage}`)
+      }
+      
+      // Refresh data to ensure consistency
+      await loadHolidays()
+    } finally {
+      setBulkActionLoading(false)
+    }
+  }
+
   // Pagination calculations
   const totalPages = Math.ceil(holidays.length / holidaysPerPage)
   const startIndex = (currentPage - 1) * holidaysPerPage
@@ -467,7 +539,7 @@ export default function AdminPublicHolidaysPage() {
         <Card className="card-surface">
             <CardHeader>
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between space-y-2 sm:space-y-0">
-                <CardTitle className="text-lg lg:text-xl">
+                <CardTitle className="text-lg lg:text-xl mb-1">
                   Holidays ({Math.min(currentPage * 15, holidays.length)} of {holidays.length})
                   {totalPages > 1 && (
                     <span className="text-sm font-normal text-gray-600 ml-2">
@@ -475,6 +547,25 @@ export default function AdminPublicHolidaysPage() {
                     </span>
                   )}
                 </CardTitle>
+
+                {/* Bulk Actions */}
+                {selectedHolidays.size > 0 && (
+                  <div className="flex items-center space-x-3">
+                    <span className="text-sm font-medium text-gray-700">
+                      {selectedHolidays.size} holiday{selectedHolidays.size !== 1 ? 's' : ''} selected
+                    </span>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleBulkDelete}
+                      disabled={bulkActionLoading}
+                      className="flex items-center space-x-1 text-red-600 hover:text-red-700 border-red-200 hover:border-red-300"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                      <span>Delete Selected</span>
+                    </Button>
+                  </div>
+                )}
               </div>
             </CardHeader>
 
@@ -489,12 +580,20 @@ export default function AdminPublicHolidaysPage() {
                 <Table>
                   <TableHeader>
                     <TableRow>
+                      <TableHead className="w-[5%] py-3 bg-gray-50 text-center">
+                        <Checkbox
+                          checked={selectedHolidays.size === paginatedHolidays.length && paginatedHolidays.length > 0}
+                          onCheckedChange={handleSelectAll}
+                          aria-label="Select all holidays"
+                          className="data-[state=checked]:bg-blue-500 data-[state=checked]:text-white data-[state=checked]:border-blue-500"
+                        />
+                      </TableHead>
                       <TableHead className="w-[15%] py-3 bg-gray-50 text-center">Date</TableHead>
                       <TableHead className="w-[10%] py-3 bg-gray-50 text-center">Day</TableHead>
-                      <TableHead className="w-[25%] py-3 bg-gray-50 text-center">Holiday Name</TableHead>
+                      <TableHead className="w-[20%] py-3 bg-gray-50 text-center">Holiday Name</TableHead>
                       <TableHead className="w-[15%] py-3 bg-gray-50 text-center">Region</TableHead>
                       <TableHead className="w-[15%] py-3 bg-gray-50 text-center">Source</TableHead>
-                      <TableHead className="w-[20%] py-3 bg-gray-50 text-center">Actions</TableHead>
+                      <TableHead className="w-[15%] py-3 bg-gray-50 text-center">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -506,6 +605,14 @@ export default function AdminPublicHolidaysPage() {
                       
                       return (
                         <TableRow key={holiday.date} className={isPast ? 'opacity-60' : ''}>
+                          <TableCell className="text-center">
+                            <Checkbox
+                              checked={selectedHolidays.has(getHolidayKey(holiday))}
+                              onCheckedChange={(checked) => handleSelectHoliday(holiday, checked as boolean)}
+                              aria-label={`Select holiday ${holiday.name}`}
+                              className="data-[state=checked]:bg-blue-500 data-[state=checked]:text-white data-[state=checked]:border-blue-500"
+                            />
+                          </TableCell>
                           <TableCell>
                             <div className={`font-mono ${isUpcoming ? 'flex justify-center text-blue-600 font-medium' : 'flex justify-center'}`}>
                               {date.toLocaleDateString('en-AU')}
@@ -636,6 +743,53 @@ export default function AdminPublicHolidaysPage() {
           itemName={holidayToDelete ? `${holidayToDelete.name} (${new Date(holidayToDelete.date).toLocaleDateString('en-AU')})` : ''}
           isLoading={isDeleting}
         />
+
+        {/* Bulk Delete Confirmation Modal */}
+        <Dialog open={bulkDeleteConfirmModal} onOpenChange={setBulkDeleteConfirmModal}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle className="text-red-600 flex items-center">
+                <Trash2 className="w-5 h-5 mr-2" />
+                Delete Selected Holidays
+              </DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4">
+              <p className="text-gray-700">
+                Are you sure you want to delete <strong>{selectedHolidays.size}</strong> selected holiday{selectedHolidays.size !== 1 ? 's' : ''}?
+              </p>
+              <div className="bg-red-50 border border-red-200 rounded-lg p-3">
+                <p className="text-red-800 text-sm font-medium mb-2">This will permanently delete:</p>
+                <ul className="text-red-700 text-sm space-y-1">
+                  <li>• {selectedHolidays.size} public holiday{selectedHolidays.size !== 1 ? 's' : ''}</li>
+                  <li>• May affect task scheduling and recurrence rules</li>
+                </ul>
+                <p className="text-red-800 text-sm font-medium mt-2">This action cannot be undone.</p>
+              </div>
+              <div className="flex justify-end space-x-2">
+                <Button
+                  variant="outline"
+                  onClick={() => setBulkDeleteConfirmModal(false)}
+                  disabled={bulkActionLoading}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  variant="destructive"
+                  onClick={confirmBulkDelete}
+                  disabled={bulkActionLoading}
+                  className="bg-red-600 hover:bg-red-700"
+                >
+                  {bulkActionLoading ? (
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                  ) : (
+                    <Trash2 className="w-4 h-4 mr-2" />
+                  )}
+                  Delete Holidays
+                </Button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
       </main>
     </div>
   )
