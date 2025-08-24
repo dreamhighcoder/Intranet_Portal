@@ -4,6 +4,7 @@ import { getTasksForRoleOnDate } from '@/lib/db'
 import { createRecurrenceEngine } from '@/lib/recurrence-engine'
 import { createHolidayHelper } from '@/lib/public-holidays'
 import { ChecklistQuerySchema } from '@/lib/validation-schemas'
+import { getAustralianDayOfWeek, getAustralianTime, getNineAMAustralian } from '@/lib/timezone-utils'
 
 export async function GET(request: NextRequest) {
   try {
@@ -75,8 +76,8 @@ export async function GET(request: NextRequest) {
           return false
         }
         
-        const targetDate = new Date(validatedDate)
-        const dayOfWeek = targetDate.getDay() // 0 = Sunday, 1 = Monday, etc.
+        // Use Australian timezone for day of week calculation
+        const dayOfWeek = getAustralianDayOfWeek(validatedDate)
         
         // Check each frequency in the array
         return task.frequencies.some(frequency => {
@@ -86,10 +87,12 @@ export async function GET(request: NextRequest) {
             case 'once_weekly':
               return dayOfWeek === 1 // Monday
             case 'start_of_every_month':
+              const targetDate = new Date(validatedDate)
               return targetDate.getDate() === 1
             case 'end_of_every_month':
-              const nextMonth = new Date(targetDate.getFullYear(), targetDate.getMonth() + 1, 0)
-              return targetDate.getDate() === nextMonth.getDate()
+              const targetDateEnd = new Date(validatedDate)
+              const nextMonth = new Date(targetDateEnd.getFullYear(), targetDateEnd.getMonth() + 1, 0)
+              return targetDateEnd.getDate() === nextMonth.getDate()
             case 'monday':
               return dayOfWeek === 1
             case 'tuesday':
@@ -134,10 +137,9 @@ export async function GET(request: NextRequest) {
       })
     }
     
-    // Calculate task counts
-    const now = new Date()
-    const nineAM = new Date()
-    nineAM.setHours(9, 0, 0, 0)
+    // Calculate task counts using Australian timezone
+    const now = getAustralianTime()
+    const nineAM = getNineAMAustralian()
     
     const counts = {
       total: 0,

@@ -50,7 +50,10 @@ export default function ChecklistCard({
         setLoading(true)
         setError(null)
 
-        const today = new Date().toISOString().split('T')[0]
+        // Use Australian timezone for date calculation
+        const today = new Date().toLocaleDateString('en-CA', { 
+          timeZone: 'Australia/Sydney' 
+        }); // en-CA gives YYYY-MM-DD format
 
         // Use checklist counts API for task counts (no authentication required)
         const queryParams = new URLSearchParams({
@@ -249,12 +252,11 @@ export default function ChecklistCard({
             <Button
               onClick={handleOpenChecklist}
               className={`w-full border-0 mt-auto ${hasNoTasks
-                  ? 'bg-gray-200 text-gray-500 hover:bg-gray-300'
+                  ? 'bg-gray-400 text-white hover:bg-gray-500'
                   : 'bg-[var(--color-primary)] hover:bg-[var(--color-primary)]/90 text-[var(--color-primary-on)]'
                 }`}
-              disabled={hasNoTasks}
             >
-              {hasNoTasks ? 'No Tasks Available' : 'Open Checklist'}
+              {hasNoTasks ? 'Open Checklist' : 'Open Checklist'}
             </Button>
           </>
         )}
