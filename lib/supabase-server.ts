@@ -11,3 +11,14 @@ export const supabaseServer = createClient(supabaseUrl, supabaseServiceKey, {
     persistSession: false
   }
 })
+
+// Function to create a new server-side Supabase client instance
+// This is useful when you need to set different sessions or configurations
+export function createServerSupabaseClient() {
+  return createClient(supabaseUrl, supabaseServiceKey, {
+    auth: {
+      autoRefreshToken: false,
+      persistSession: false
+    }
+  })
+}
