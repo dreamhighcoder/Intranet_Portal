@@ -125,7 +125,7 @@ export default function AdminPublicHolidaysPage() {
   
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1)
-  const holidaysPerPage = 15
+  const holidaysPerPage = 50
 
   const [newHoliday, setNewHoliday] = useState({
     date: '',

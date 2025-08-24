@@ -8,8 +8,8 @@
  */
 
 import { supabase } from './db'
-import type { MasterTask, TaskInstance } from './task-recurrence-status-engine'
-import { FrequencyType, TaskStatus } from './task-recurrence-status-engine'
+import type { MasterTask, TaskInstance } from './new-recurrence-engine'
+import { NewFrequencyType, TaskStatus } from './new-recurrence-engine'
 
 // ========================================
 // DATABASE SCHEMA INTERFACES
@@ -74,67 +74,67 @@ interface DatabaseTaskInstance {
 // ========================================
 
 /**
- * Map legacy frequency values to new FrequencyType enum
+ * Map legacy frequency values to new NewFrequencyType enum
  */
-const LEGACY_FREQUENCY_MAP: Record<string, FrequencyType[]> = {
-  'once_off_sticky': [FrequencyType.ONCE_OFF],
-  'every_day': [FrequencyType.EVERY_DAY],
-  'weekly': [FrequencyType.ONCE_WEEKLY],
+const LEGACY_FREQUENCY_MAP: Record<string, NewFrequencyType[]> = {
+  'once_off_sticky': [NewFrequencyType.ONCE_OFF],
+  'every_day': [NewFrequencyType.EVERY_DAY],
+  'weekly': [NewFrequencyType.ONCE_WEEKLY],
   'specific_weekdays': [], // Will be mapped based on weekdays array
-  'start_every_month': [FrequencyType.START_OF_EVERY_MONTH],
+  'start_every_month': [NewFrequencyType.START_OF_EVERY_MONTH],
   'start_certain_months': [], // Will be mapped based on months array
-  'every_month': [FrequencyType.ONCE_MONTHLY],
-  'certain_months': [FrequencyType.ONCE_MONTHLY], // Fallback
-  'end_every_month': [FrequencyType.END_OF_EVERY_MONTH],
+  'every_month': [NewFrequencyType.ONCE_MONTHLY],
+  'certain_months': [NewFrequencyType.ONCE_MONTHLY], // Fallback
+  'end_every_month': [NewFrequencyType.END_OF_EVERY_MONTH],
   'end_certain_months': [] // Will be mapped based on months array
 }
 
 /**
- * Map weekday numbers to FrequencyType
+ * Map weekday numbers to NewFrequencyType
  */
-const WEEKDAY_FREQUENCY_MAP: Record<number, FrequencyType> = {
-  1: FrequencyType.MONDAY,
-  2: FrequencyType.TUESDAY,
-  3: FrequencyType.WEDNESDAY,
-  4: FrequencyType.THURSDAY,
-  5: FrequencyType.FRIDAY,
-  6: FrequencyType.SATURDAY
+const WEEKDAY_FREQUENCY_MAP: Record<number, NewFrequencyType> = {
+  1: NewFrequencyType.MONDAY,
+  2: NewFrequencyType.TUESDAY,
+  3: NewFrequencyType.WEDNESDAY,
+  4: NewFrequencyType.THURSDAY,
+  5: NewFrequencyType.FRIDAY,
+  6: NewFrequencyType.SATURDAY
 }
 
 /**
- * Map month numbers to start-of-month FrequencyType
+ * Map month numbers to start-of-month NewFrequencyType
  */
-const START_MONTH_FREQUENCY_MAP: Record<number, FrequencyType> = {
-  1: FrequencyType.START_OF_MONTH_JAN,
-  2: FrequencyType.START_OF_MONTH_FEB,
-  3: FrequencyType.START_OF_MONTH_MAR,
-  4: FrequencyType.START_OF_MONTH_APR,
-  5: FrequencyType.START_OF_MONTH_MAY,
-  6: FrequencyType.START_OF_MONTH_JUN,
-  7: FrequencyType.START_OF_MONTH_JUL,
-  8: FrequencyType.START_OF_MONTH_AUG,
-  9: FrequencyType.START_OF_MONTH_SEP,
-  10: FrequencyType.START_OF_MONTH_OCT,
-  11: FrequencyType.START_OF_MONTH_NOV,
-  12: FrequencyType.START_OF_MONTH_DEC
+const START_MONTH_FREQUENCY_MAP: Record<number, NewFrequencyType> = {
+  1: NewFrequencyType.START_OF_MONTH_JAN,
+  2: NewFrequencyType.START_OF_MONTH_FEB,
+  3: NewFrequencyType.START_OF_MONTH_MAR,
+  4: NewFrequencyType.START_OF_MONTH_APR,
+  5: NewFrequencyType.START_OF_MONTH_MAY,
+  6: NewFrequencyType.START_OF_MONTH_JUN,
+  7: NewFrequencyType.START_OF_MONTH_JUL,
+  8: NewFrequencyType.START_OF_MONTH_AUG,
+  9: NewFrequencyType.START_OF_MONTH_SEP,
+  10: NewFrequencyType.START_OF_MONTH_OCT,
+  11: NewFrequencyType.START_OF_MONTH_NOV,
+  12: NewFrequencyType.START_OF_MONTH_DEC
 }
 
 /**
- * Map month numbers to end-of-month FrequencyType
+ * Map month numbers to end-of-month NewFrequencyType
  */
-const END_MONTH_FREQUENCY_MAP: Record<number, FrequencyType> = {
-  1: FrequencyType.END_OF_MONTH_JAN,
-  2: FrequencyType.END_OF_MONTH_FEB,
-  3: FrequencyType.END_OF_MONTH_MAR,
-  4: FrequencyType.END_OF_MONTH_APR,
-  5: FrequencyType.END_OF_MONTH_MAY,
-  6: FrequencyType.END_OF_MONTH_JUN,
-  7: FrequencyType.END_OF_MONTH_JUL,
-  8: FrequencyType.END_OF_MONTH_AUG,
-  9: FrequencyType.END_OF_MONTH_SEP,
-  10: FrequencyType.END_OF_MONTH_OCT,
-  11: FrequencyType.END_OF_MONTH_NOV,
-  12: FrequencyType.END_OF_MONTH_DEC
+const END_MONTH_FREQUENCY_MAP: Record<number, NewFrequencyType> = {
+  1: NewFrequencyType.END_OF_MONTH_JAN,
+  2: NewFrequencyType.END_OF_MONTH_FEB,
+  3: NewFrequencyType.END_OF_MONTH_MAR,
+  4: NewFrequencyType.END_OF_MONTH_APR,
+  5: NewFrequencyType.END_OF_MONTH_MAY,
+  6: NewFrequencyType.END_OF_MONTH_JUN,
+  7: NewFrequencyType.END_OF_MONTH_JUL,
+  8: NewFrequencyType.END_OF_MONTH_AUG,
+  9: NewFrequencyType.END_OF_MONTH_SEP,
+  10: NewFrequencyType.END_OF_MONTH_OCT,
+  11: NewFrequencyType.END_OF_MONTH_NOV,
+  12: NewFrequencyType.END_OF_MONTH_DEC
 }
 
 /**
@@ -287,13 +287,17 @@ export class TaskDatabaseAdapter {
   private convertDatabaseTaskToEngine(dbTask: DatabaseMasterTask): MasterTask {
     return {
       id: dbTask.id,
+      title: dbTask.title,
+      description: dbTask.description,
       active: dbTask.publish_status === 'active',
       frequencies: this.mapFrequencies(dbTask),
       timing: this.mapTiming(dbTask),
       publish_at: dbTask.publish_delay_date || dbTask.publish_delay || dbTask.publish_at,
       due_date: dbTask.due_date,
       start_date: dbTask.start_date,
-      end_date: dbTask.end_date
+      end_date: dbTask.end_date,
+      responsibility: [], // TODO: Map from position_id or other fields
+      categories: dbTask.category ? [dbTask.category] : []
     }
   }
 
@@ -340,20 +344,20 @@ export class TaskDatabaseAdapter {
   }
 
   /**
-   * Map database frequency data to FrequencyType array
+   * Map database frequency data to NewFrequencyType array
    */
-  private mapFrequencies(dbTask: DatabaseMasterTask): FrequencyType[] {
+  private mapFrequencies(dbTask: DatabaseMasterTask): NewFrequencyType[] {
     // If new frequencies array exists, use it directly
     if (dbTask.frequencies && dbTask.frequencies.length > 0) {
-      return dbTask.frequencies.map(f => f as FrequencyType)
+      return dbTask.frequencies.map(f => f as NewFrequencyType)
     }
 
     // Otherwise, map from legacy frequency + weekdays/months
     if (!dbTask.frequency) {
-      return [FrequencyType.EVERY_DAY] // Default fallback
+      return [NewFrequencyType.EVERY_DAY] // Default fallback
     }
 
-    let frequencies: FrequencyType[] = []
+    let frequencies: NewFrequencyType[] = []
 
     // Handle legacy frequency mapping
     const baseFrequencies = LEGACY_FREQUENCY_MAP[dbTask.frequency] || []
@@ -383,7 +387,7 @@ export class TaskDatabaseAdapter {
       }
     }
 
-    return frequencies.length > 0 ? frequencies : [FrequencyType.EVERY_DAY]
+    return frequencies.length > 0 ? frequencies : [NewFrequencyType.EVERY_DAY]
   }
 
   /**

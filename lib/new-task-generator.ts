@@ -9,8 +9,9 @@
  * - Support bulk operations for date ranges
  */
 
-import { createTaskRecurrenceStatusEngine, TaskStatus, type TaskRecurrenceStatusEngine, type MasterTask, type TaskInstance, type FrequencyType } from './task-recurrence-status-engine'
-import { taskDatabaseAdapter } from './task-database-adapter'
+import { NewRecurrenceEngine, TaskStatus, type MasterTask, type TaskInstance, type NewFrequencyType } from './new-recurrence-engine'
+import { TaskDatabaseAdapter } from './task-database-adapter'
+import { HolidayChecker as HolidayCheckerClass } from './holiday-checker'
 
 // ========================================
 // TYPES AND INTERFACES
@@ -34,7 +35,7 @@ export interface NewGenerationOptions {
 export interface NewTaskGenerationResult {
   taskId: string
   taskTitle: string
-  frequencies: FrequencyType[]
+  frequencies: NewFrequencyType[]
   newInstances: number
   carryInstances: number
   totalInstances: number
@@ -110,11 +111,14 @@ export interface NewStatusUpdateResult {
  * New task generator using the complete recurrence engine
  */
 export class NewTaskGenerator {
-  private engine: TaskRecurrenceStatusEngine
+  private engine: NewRecurrenceEngine
+  private adapter: TaskDatabaseAdapter
   private logLevel: 'silent' | 'info' | 'debug'
 
-  constructor(engine: TaskRecurrenceStatusEngine, logLevel: 'silent' | 'info' | 'debug' = 'info') {
-    this.engine = engine
+  constructor(logLevel: 'silent' | 'info' | 'debug' = 'info') {
+    const holidayChecker = new HolidayCheckerClass()
+    this.engine = new NewRecurrenceEngine(holidayChecker)
+    this.adapter = new TaskDatabaseAdapter()
     this.logLevel = logLevel
   }
 
@@ -130,7 +134,7 @@ export class NewTaskGenerator {
 
     try {
       // Step 1: Get all active master tasks using the database adapter
-      const masterTasks = await taskDatabaseAdapter.loadActiveMasterTasks()
+      const masterTasks = await this.adapter.loadActiveMasterTasks()
 
       if (masterTasks.length === 0) {
         this.log('info', 'No active master tasks found')
@@ -143,7 +147,7 @@ export class NewTaskGenerator {
 
       // Step 2: Check if instances already exist for this date
       if (!forceRegenerate && !dryRun) {
-        const instancesExist = await taskDatabaseAdapter.instancesExistForDate(date)
+        const instancesExist = await this.adapter.instancesExistForDate(date)
         if (instancesExist) {
           this.log('info', `Found existing instances for ${date}`)
           
@@ -156,7 +160,7 @@ export class NewTaskGenerator {
 
       // Step 3: Force delete existing instances if requested
       if (forceRegenerate && !dryRun && !testMode) {
-        await taskDatabaseAdapter.deleteInstancesForDate(date)
+        await this.adapter.deleteInstancesForDate(date)
         this.log('info', `Deleted existing instances for regeneration`)
       }
 
@@ -164,15 +168,15 @@ export class NewTaskGenerator {
       const generationResult = this.engine.generateInstancesForDate(tasksToProcess, date)
       
       // Step 5: Save instances to database if not in dry run mode
-      if (!dryRun && !testMode && generationResult.total_instances > 0) {
-        const allInstances = [...generationResult.new_instances, ...generationResult.carry_instances]
-        await taskDatabaseAdapter.saveTaskInstances(allInstances)
+      if (!dryRun && !testMode && (generationResult.instances.length > 0 || generationResult.carry_instances.length > 0)) {
+        const allInstances = [...generationResult.instances, ...generationResult.carry_instances]
+        await this.adapter.saveTaskInstances(allInstances)
         this.log('info', `Saved ${allInstances.length} instances to database`)
       }
 
       // Step 6: Build results
       const results: NewTaskGenerationResult[] = []
-      let totalNewInstances = generationResult.new_instances.length
+      let totalNewInstances = generationResult.instances.length
       let totalCarryInstances = generationResult.carry_instances.length
       let instancesSkipped = 0
       let errors = 0
@@ -180,7 +184,7 @@ export class NewTaskGenerator {
       // Group results by task
       const taskResults = new Map<string, { new: number, carry: number }>()
       
-      for (const instance of generationResult.new_instances) {
+      for (const instance of generationResult.instances) {
         const current = taskResults.get(instance.master_task_id) || { new: 0, carry: 0 }
         current.new++
         taskResults.set(instance.master_task_id, current)
@@ -198,7 +202,7 @@ export class NewTaskGenerator {
         
         results.push({
           taskId: task.id,
-          taskTitle: `Task ${task.id}`, // We don't have title in MasterTask interface
+          taskTitle: task.title || `Task ${task.id}`,
           frequencies: task.frequencies,
           newInstances: taskResult.new,
           carryInstances: taskResult.carry,
@@ -274,7 +278,7 @@ export class NewTaskGenerator {
 
     try {
       // Step 1: Get all instances for the date using the database adapter
-      const instances = await taskDatabaseAdapter.loadTaskInstancesForDate(date)
+      const instances = await this.adapter.loadTaskInstancesForDate(date)
 
       if (instances.length === 0) {
         this.log('info', 'No instances found for this date')
@@ -345,7 +349,7 @@ export class NewTaskGenerator {
 
       // Step 4: Apply updates to database using the adapter
       if (updates.length > 0) {
-        await taskDatabaseAdapter.updateTaskInstanceStatuses(updates)
+        await this.adapter.updateTaskInstanceStatuses(updates)
         this.log('info', `Updated ${updates.length} instances in database`)
       }
 
@@ -460,8 +464,7 @@ export class NewTaskGenerator {
 export async function createNewTaskGenerator(
   logLevel: 'silent' | 'info' | 'debug' = 'info'
 ): Promise<NewTaskGenerator> {
-  const engine = await createTaskRecurrenceStatusEngine()
-  return new NewTaskGenerator(engine, logLevel)
+  return new NewTaskGenerator(logLevel)
 }
 
 /**

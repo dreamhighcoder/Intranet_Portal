@@ -750,7 +750,7 @@ export default function AdminMasterTasksPage() {
 
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1)
-  const tasksPerPage = 15
+  const tasksPerPage = 50
 
   // File input ref for import functionality
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -1647,7 +1647,7 @@ export default function AdminMasterTasksPage() {
           <CardHeader className="flex flex-col lg:flex-row lg:items-center lg:justify-between space-y-4 lg:space-y-0">
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between space-y-2 sm:space-y-0">
               <CardTitle className="text-lg lg:text-xl mb-1">
-                Master Tasks ({Math.min(currentPage * 15, tasks.length)} of {tasks.length})
+                Master Tasks ({Math.min(currentPage * tasksPerPage, tasks.length)} of {tasks.length})
                 {totalPages > 1 && (
                   <span className="text-sm font-normal text-gray-600 ml-2">
                     - Page {currentPage} of {totalPages}
