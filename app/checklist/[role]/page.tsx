@@ -305,15 +305,16 @@ const SortableHeader = ({
   className?: string
 }) => {
   const isActive = sortField === field
+  const isCentered = className.includes('text-center')
   
   return (
     <TableHead 
       className={`cursor-pointer hover:bg-gray-100 transition-colors ${className}`}
       onClick={() => onSort(field)}
     >
-      <div className="flex items-center justify-between">
+      <div className={`flex items-center ${isCentered ? 'justify-center' : 'justify-left'}`}>
         <span>{children}</span>
-        <div className="flex flex-col ml-1">
+        <div className={`flex flex-col ${isCentered ? 'ml-1' : 'ml-1'}`}>
           <ChevronUp 
             className={`h-3 w-3 ${isActive && sortDirection === 'asc' ? 'text-blue-600' : 'text-gray-400'}`} 
           />
@@ -1222,7 +1223,7 @@ export default function RoleChecklistPage() {
                           sortField={sortField} 
                           sortDirection={sortDirection} 
                           onSort={handleSort}
-                          className="w-[7%] py-3 bg-gray-50"
+                          className="w-[7%] py-3 bg-gray-50 text-left"
                         >
                           Due Time
                         </SortableHeader>
@@ -1231,7 +1232,7 @@ export default function RoleChecklistPage() {
                           sortField={sortField} 
                           sortDirection={sortDirection} 
                           onSort={handleSort}
-                          className="w-[8%] py-3 bg-gray-50"
+                          className="w-[8%] py-3 bg-gray-50 text-center"
                         >
                           Status
                         </SortableHeader>
