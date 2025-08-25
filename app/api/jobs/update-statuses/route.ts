@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { runNewDailyStatusUpdate } from '@/lib/new-task-generator'
+import { getAustralianNow } from '@/lib/timezone-utils'
 
 export async function POST(request: NextRequest) {
   try {
@@ -31,7 +32,7 @@ export async function POST(request: NextRequest) {
         errors: result.errors
       },
       details: result,
-      timestamp: new Date().toISOString()
+      timestamp: getAustralianNow().toISOString()
     })
 
   } catch (error) {
@@ -69,7 +70,7 @@ export async function GET(request: NextRequest) {
         errors: result.errors
       },
       details: result,
-      timestamp: new Date().toISOString()
+      timestamp: getAustralianNow().toISOString()
     })
 
   } catch (error) {

@@ -8,6 +8,7 @@
 
 import { PublicHolidaysHelper, type HolidayChecker as BaseHolidayChecker } from './public-holidays'
 import { supabase } from './db'
+import { toAustralianTime, formatAustralianDate } from './timezone-utils'
 
 /**
  * Holiday checker interface for the recurrence engine
@@ -26,14 +27,24 @@ export class HolidayChecker implements HolidayChecker {
   private helper: PublicHolidaysHelper
   private initialized: boolean = false
 
-  constructor() {
-    // Initialize with empty holidays - will be loaded on first use
-    this.helper = new PublicHolidaysHelper([], {
-      workingDays: [1, 2, 3, 4, 5, 6], // Monday to Saturday (no Sunday)
-      skipSundays: true,
+  constructor(holidays?: Array<{date: string, name: string, region?: string}>) {
+    // Initialize with provided holidays or empty array
+    const holidayData = holidays || []
+    this.helper = new PublicHolidaysHelper(holidayData, {
+      workingDays: [1, 2, 3, 4, 5, 6], // Monday to Saturday (no Sunday - Sunday is 0)
+      skipSundays: true, // Explicitly skip Sundays as per specification
       skipPublicHolidays: true,
-      defaultRegion: 'National'
+      defaultRegion: 'National',
+      timezone: 'Australia/Sydney' // Use Australian timezone
     })
+    this.initialized = holidays ? true : false
+  }
+
+  /**
+   * Create a HolidayChecker with provided holidays data
+   */
+  static withHolidays(holidays: Array<{date: string, name: string, region?: string}>): HolidayChecker {
+    return new HolidayChecker(holidays)
   }
 
   /**
@@ -72,18 +83,22 @@ export class HolidayChecker implements HolidayChecker {
 
   /**
    * Check if a date is a public holiday
+   * Converts date to Australian timezone before checking
    */
   async isHoliday(date: Date): Promise<boolean> {
     await this.initializeHolidays()
-    return this.helper.isHoliday(date)
+    const australianDate = toAustralianTime(date)
+    return this.helper.isHoliday(australianDate)
   }
 
   /**
    * Check if a date is a business day (not weekend, not holiday)
+   * Converts date to Australian timezone before checking
    */
   async isBusinessDay(date: Date): Promise<boolean> {
     await this.initializeHolidays()
-    return this.helper.isBusinessDay(date)
+    const australianDate = toAustralianTime(date)
+    return this.helper.isBusinessDay(australianDate)
   }
 
   /**
@@ -105,17 +120,28 @@ export class HolidayChecker implements HolidayChecker {
   /**
    * Synchronous version for compatibility with existing code
    * Note: This will use cached holidays only
+   * Converts date to Australian timezone before checking
    */
   isHolidaySync(date: Date): boolean {
-    return this.helper.isHoliday(date)
+    const australianDate = toAustralianTime(date)
+    return this.helper.isHoliday(australianDate)
+  }
+
+  /**
+   * Debug method to get all loaded holidays
+   */
+  getAllHolidays() {
+    return this.helper.getAllHolidays()
   }
 
   /**
    * Synchronous version for compatibility with existing code
    * Note: This will use cached holidays only
+   * Converts date to Australian timezone before checking
    */
   isBusinessDaySync(date: Date): boolean {
-    return this.helper.isBusinessDay(date)
+    const australianDate = toAustralianTime(date)
+    return this.helper.isBusinessDay(australianDate)
   }
 
   /**

@@ -33,21 +33,22 @@ export interface TaskRow {
   id: string
   title: string
   description?: string
-  position_id?: string
-  frequency: string // Legacy enum field for backward compatibility
+  position_id?: string // Legacy field for backward compatibility
+  frequency?: string // Legacy enum field for backward compatibility
+  frequencies: string[] // New array field for multiple frequencies
   weekdays: number[]
   months: number[]
   timing: string
   due_time?: string
-  category?: string
+  category?: string // Legacy field for backward compatibility
+  categories: string[] // New array field for multiple categories
   publish_status: PublishStatus
-  publish_delay?: string
+  publish_delay_date?: string
   sticky_once_off: boolean
   allow_edit_when_locked: boolean
   created_at: string
   updated_at: string
   responsibility: string[]
-  categories: string[]
   frequency_rules: Record<string, any>
   due_date?: string
   created_by?: string

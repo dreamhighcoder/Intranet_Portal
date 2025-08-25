@@ -1,16 +1,70 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/auth-middleware'
 import { createClient } from '@supabase/supabase-js'
-import { createRecurrenceEngine } from '@/lib/recurrence-engine'
-import { createHolidayHelper } from '@/lib/public-holidays'
+import { NewRecurrenceEngine, NewFrequencyType, type MasterTask as NewMasterTask } from '@/lib/new-recurrence-engine'
+import { HolidayChecker } from '@/lib/holiday-checker'
 import { ChecklistQuerySchema } from '@/lib/validation-schemas'
 import { toKebabCase } from '@/lib/responsibility-mapper'
 import type { ChecklistInstanceStatus } from '@/types/checklist'
+import { 
+  getAustralianNow, 
+  getAustralianToday, 
+  parseAustralianDate, 
+  formatAustralianDate,
+  createAustralianDateTime,
+  isAustralianTimePast
+} from '@/lib/timezone-utils'
 
 // Use service role key to bypass RLS for server-side reads
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
 const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey)
+
+// Convert string frequencies to NewFrequencyType enum values
+function convertStringFrequenciesToEnum(frequencies: string[]): NewFrequencyType[] {
+  const frequencyMap: { [key: string]: NewFrequencyType } = {
+    'once_off': NewFrequencyType.ONCE_OFF,
+    'every_day': NewFrequencyType.EVERY_DAY,
+    'once_weekly': NewFrequencyType.ONCE_WEEKLY,
+    'monday': NewFrequencyType.MONDAY,
+    'tuesday': NewFrequencyType.TUESDAY,
+    'wednesday': NewFrequencyType.WEDNESDAY,
+    'thursday': NewFrequencyType.THURSDAY,
+    'friday': NewFrequencyType.FRIDAY,
+    'saturday': NewFrequencyType.SATURDAY,
+    'once_monthly': NewFrequencyType.ONCE_MONTHLY,
+    'start_of_every_month': NewFrequencyType.START_OF_EVERY_MONTH,
+    'start_of_month_jan': NewFrequencyType.START_OF_MONTH_JAN,
+    'start_of_month_feb': NewFrequencyType.START_OF_MONTH_FEB,
+    'start_of_month_mar': NewFrequencyType.START_OF_MONTH_MAR,
+    'start_of_month_apr': NewFrequencyType.START_OF_MONTH_APR,
+    'start_of_month_may': NewFrequencyType.START_OF_MONTH_MAY,
+    'start_of_month_jun': NewFrequencyType.START_OF_MONTH_JUN,
+    'start_of_month_jul': NewFrequencyType.START_OF_MONTH_JUL,
+    'start_of_month_aug': NewFrequencyType.START_OF_MONTH_AUG,
+    'start_of_month_sep': NewFrequencyType.START_OF_MONTH_SEP,
+    'start_of_month_oct': NewFrequencyType.START_OF_MONTH_OCT,
+    'start_of_month_nov': NewFrequencyType.START_OF_MONTH_NOV,
+    'start_of_month_dec': NewFrequencyType.START_OF_MONTH_DEC,
+    'end_of_every_month': NewFrequencyType.END_OF_EVERY_MONTH,
+    'end_of_month_jan': NewFrequencyType.END_OF_MONTH_JAN,
+    'end_of_month_feb': NewFrequencyType.END_OF_MONTH_FEB,
+    'end_of_month_mar': NewFrequencyType.END_OF_MONTH_MAR,
+    'end_of_month_apr': NewFrequencyType.END_OF_MONTH_APR,
+    'end_of_month_may': NewFrequencyType.END_OF_MONTH_MAY,
+    'end_of_month_jun': NewFrequencyType.END_OF_MONTH_JUN,
+    'end_of_month_jul': NewFrequencyType.END_OF_MONTH_JUL,
+    'end_of_month_aug': NewFrequencyType.END_OF_MONTH_AUG,
+    'end_of_month_sep': NewFrequencyType.END_OF_MONTH_SEP,
+    'end_of_month_oct': NewFrequencyType.END_OF_MONTH_OCT,
+    'end_of_month_nov': NewFrequencyType.END_OF_MONTH_NOV,
+    'end_of_month_dec': NewFrequencyType.END_OF_MONTH_DEC
+  }
+
+  return frequencies
+    .map(freq => frequencyMap[freq])
+    .filter(Boolean)
+}
 
 export async function GET(request: NextRequest) {
   try {
@@ -100,54 +154,48 @@ export async function GET(request: NextRequest) {
     // Create holiday helper and recurrence engine for filtering
     const { data: holidays, error: holidaysError } = await supabaseAdmin
       .from('public_holidays')
-      .select('*')
+      .select('date, name')
       .order('date', { ascending: true })
 
     if (holidaysError) {
       console.error('Error fetching holidays:', holidaysError)
     }
 
-    const holidayHelper = createHolidayHelper(holidays || [])
-    const recurrenceEngine = createRecurrenceEngine(holidayHelper)
+    const holidayChecker = new HolidayChecker(holidays || [])
+    const recurrenceEngine = new NewRecurrenceEngine(holidayChecker)
     
     // Filter tasks based on recurrence rules and date
     console.log('Checking recurrence for date:', validatedDate)
     
     const filteredTasks = roleFiltered.filter(task => {
       try {
-        // Convert frequencies array to frequency_rules format expected by recurrence engine
-        const frequencies = task.frequencies || ['every_day']
-        let frequency_rules = { type: 'daily' }
-        
-        if (frequencies.includes('every_day')) {
-          frequency_rules = { type: 'daily' }
-        } else if (frequencies.includes('once_weekly')) {
-          frequency_rules = { type: 'weekly' }
-        } else if (frequencies.includes('once_monthly')) {
-          frequency_rules = { type: 'monthly' }
-        } else if (frequencies.some(f => ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'].includes(f))) {
-          frequency_rules = { type: 'weekly', days: frequencies.filter(f => ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'].includes(f)) }
-        }
-        
-        const taskForRecurrence = {
+        // Convert task to NewMasterTask format for new engine
+        const masterTask: NewMasterTask = {
           id: task.id,
-          frequency_rules,
+          title: task.title || '',
+          description: task.description || '',
+          responsibility: task.responsibility || [],
+          categories: task.categories || [],
+          frequencies: convertStringFrequenciesToEnum(task.frequencies || ['every_day']),
+          timing: task.due_time || '09:00',
+          active: true,
+          publish_at: task.publish_delay || undefined,
           start_date: task.created_at?.split('T')[0],
-          end_date: null
+          end_date: undefined
         }
         
         console.log('Checking recurrence for task:', {
           id: task.id,
           title: task.title,
           frequencies: task.frequencies,
-          frequency_rules,
-          start_date: task.created_at?.split('T')[0]
+          convertedFrequencies: masterTask.frequencies,
+          start_date: masterTask.start_date
         })
         
-        const isDue = recurrenceEngine.isDueOnDate(taskForRecurrence, new Date(validatedDate))
-        console.log('Task is due:', isDue)
+        const shouldAppear = recurrenceEngine.shouldTaskAppearOnDate(masterTask, validatedDate)
+        console.log('Task should appear:', shouldAppear)
         
-        return isDue
+        return shouldAppear
       } catch (error) {
         console.error('Error checking task recurrence:', error)
         return true // Default to showing the task if there's an error

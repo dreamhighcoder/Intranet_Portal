@@ -1,52 +1,62 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/auth-middleware'
 import { toKebabCase, filterTasksByResponsibility } from '@/lib/responsibility-mapper'
-import { createTaskRecurrenceStatusEngine, type MasterTask, type FrequencyType } from '@/lib/task-recurrence-status-engine'
+import { NewRecurrenceEngine, NewFrequencyType, type MasterTask as NewMasterTask } from '@/lib/new-recurrence-engine'
+import { HolidayChecker } from '@/lib/holiday-checker'
 import { createClient } from '@supabase/supabase-js'
+import { 
+  getAustralianNow, 
+  getAustralianToday, 
+  parseAustralianDate, 
+  formatAustralianDate,
+  createAustralianDateTime,
+  isAustralianTimePast,
+  getAustralianDateRange
+} from '@/lib/timezone-utils'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
 const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey)
 
-// Convert string frequencies to FrequencyType enum values
-function convertStringFrequenciesToEnum(frequencies: string[]): FrequencyType[] {
-  const frequencyMap: { [key: string]: FrequencyType } = {
-    'once_off': 'once_off' as FrequencyType,
-    'every_day': 'every_day' as FrequencyType,
-    'once_weekly': 'once_weekly' as FrequencyType,
-    'monday': 'monday' as FrequencyType,
-    'tuesday': 'tuesday' as FrequencyType,
-    'wednesday': 'wednesday' as FrequencyType,
-    'thursday': 'thursday' as FrequencyType,
-    'friday': 'friday' as FrequencyType,
-    'saturday': 'saturday' as FrequencyType,
-    'once_monthly': 'once_monthly' as FrequencyType,
-    'start_of_every_month': 'start_of_every_month' as FrequencyType,
-    'start_of_month_jan': 'start_of_month_jan' as FrequencyType,
-    'start_of_month_feb': 'start_of_month_feb' as FrequencyType,
-    'start_of_month_mar': 'start_of_month_mar' as FrequencyType,
-    'start_of_month_apr': 'start_of_month_apr' as FrequencyType,
-    'start_of_month_may': 'start_of_month_may' as FrequencyType,
-    'start_of_month_jun': 'start_of_month_jun' as FrequencyType,
-    'start_of_month_jul': 'start_of_month_jul' as FrequencyType,
-    'start_of_month_aug': 'start_of_month_aug' as FrequencyType,
-    'start_of_month_sep': 'start_of_month_sep' as FrequencyType,
-    'start_of_month_oct': 'start_of_month_oct' as FrequencyType,
-    'start_of_month_nov': 'start_of_month_nov' as FrequencyType,
-    'start_of_month_dec': 'start_of_month_dec' as FrequencyType,
-    'end_of_every_month': 'end_of_every_month' as FrequencyType,
-    'end_of_month_jan': 'end_of_month_jan' as FrequencyType,
-    'end_of_month_feb': 'end_of_month_feb' as FrequencyType,
-    'end_of_month_mar': 'end_of_month_mar' as FrequencyType,
-    'end_of_month_apr': 'end_of_month_apr' as FrequencyType,
-    'end_of_month_may': 'end_of_month_may' as FrequencyType,
-    'end_of_month_jun': 'end_of_month_jun' as FrequencyType,
-    'end_of_month_jul': 'end_of_month_jul' as FrequencyType,
-    'end_of_month_aug': 'end_of_month_aug' as FrequencyType,
-    'end_of_month_sep': 'end_of_month_sep' as FrequencyType,
-    'end_of_month_oct': 'end_of_month_oct' as FrequencyType,
-    'end_of_month_nov': 'end_of_month_nov' as FrequencyType,
-    'end_of_month_dec': 'end_of_month_dec' as FrequencyType
+// Convert string frequencies to NewFrequencyType enum values
+function convertStringFrequenciesToEnum(frequencies: string[]): NewFrequencyType[] {
+  const frequencyMap: { [key: string]: NewFrequencyType } = {
+    'once_off': NewFrequencyType.ONCE_OFF,
+    'every_day': NewFrequencyType.EVERY_DAY,
+    'once_weekly': NewFrequencyType.ONCE_WEEKLY,
+    'monday': NewFrequencyType.MONDAY,
+    'tuesday': NewFrequencyType.TUESDAY,
+    'wednesday': NewFrequencyType.WEDNESDAY,
+    'thursday': NewFrequencyType.THURSDAY,
+    'friday': NewFrequencyType.FRIDAY,
+    'saturday': NewFrequencyType.SATURDAY,
+    'once_monthly': NewFrequencyType.ONCE_MONTHLY,
+    'start_of_every_month': NewFrequencyType.START_OF_EVERY_MONTH,
+    'start_of_month_jan': NewFrequencyType.START_OF_MONTH_JAN,
+    'start_of_month_feb': NewFrequencyType.START_OF_MONTH_FEB,
+    'start_of_month_mar': NewFrequencyType.START_OF_MONTH_MAR,
+    'start_of_month_apr': NewFrequencyType.START_OF_MONTH_APR,
+    'start_of_month_may': NewFrequencyType.START_OF_MONTH_MAY,
+    'start_of_month_jun': NewFrequencyType.START_OF_MONTH_JUN,
+    'start_of_month_jul': NewFrequencyType.START_OF_MONTH_JUL,
+    'start_of_month_aug': NewFrequencyType.START_OF_MONTH_AUG,
+    'start_of_month_sep': NewFrequencyType.START_OF_MONTH_SEP,
+    'start_of_month_oct': NewFrequencyType.START_OF_MONTH_OCT,
+    'start_of_month_nov': NewFrequencyType.START_OF_MONTH_NOV,
+    'start_of_month_dec': NewFrequencyType.START_OF_MONTH_DEC,
+    'end_of_every_month': NewFrequencyType.END_OF_EVERY_MONTH,
+    'end_of_month_jan': NewFrequencyType.END_OF_MONTH_JAN,
+    'end_of_month_feb': NewFrequencyType.END_OF_MONTH_FEB,
+    'end_of_month_mar': NewFrequencyType.END_OF_MONTH_MAR,
+    'end_of_month_apr': NewFrequencyType.END_OF_MONTH_APR,
+    'end_of_month_may': NewFrequencyType.END_OF_MONTH_MAY,
+    'end_of_month_jun': NewFrequencyType.END_OF_MONTH_JUN,
+    'end_of_month_jul': NewFrequencyType.END_OF_MONTH_JUL,
+    'end_of_month_aug': NewFrequencyType.END_OF_MONTH_AUG,
+    'end_of_month_sep': NewFrequencyType.END_OF_MONTH_SEP,
+    'end_of_month_oct': NewFrequencyType.END_OF_MONTH_OCT,
+    'end_of_month_nov': NewFrequencyType.END_OF_MONTH_NOV,
+    'end_of_month_dec': NewFrequencyType.END_OF_MONTH_DEC
   }
 
   return frequencies
@@ -82,8 +92,9 @@ export async function GET(request: NextRequest) {
     
     const searchParams = request.nextUrl.searchParams
     
-    const year = parseInt(searchParams.get('year') || new Date().getFullYear().toString())
-    const month = parseInt(searchParams.get('month') || (new Date().getMonth() + 1).toString())
+    const australianNow = getAustralianNow()
+    const year = parseInt(searchParams.get('year') || australianNow.getFullYear().toString())
+    const month = parseInt(searchParams.get('month') || (australianNow.getMonth() + 1).toString())
     const positionId = searchParams.get('position_id')
     const view = searchParams.get('view') || 'month' // 'month' or 'week'
 
@@ -98,7 +109,7 @@ export async function GET(request: NextRequest) {
     if (view === 'week') {
       // Week view - get the week containing the specified date
       const weekDate = searchParams.get('date') 
-        ? new Date(searchParams.get('date')!)
+        ? parseAustralianDate(searchParams.get('date')!)
         : new Date(year, month - 1, 1)
       
       startDate = new Date(weekDate)
@@ -107,13 +118,13 @@ export async function GET(request: NextRequest) {
       endDate = new Date(startDate)
       endDate.setDate(startDate.getDate() + 6) // End of week (Saturday)
     } else {
-      // Month view
+      // Month view - use Australian timezone
       startDate = new Date(year, month - 1, 1)
       endDate = new Date(year, month, 0) // Last day of month
     }
 
-    const startDateStr = startDate.toISOString().split('T')[0]
-    const endDateStr = endDate.toISOString().split('T')[0]
+    const startDateStr = formatAustralianDate(startDate)
+    const endDateStr = formatAustralianDate(endDate)
 
     // Determine responsibility filter variants
     let responsibilityVariants: string[] | null = null
@@ -147,8 +158,15 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    // Get holidays for the new recurrence engine
+    const { data: holidays } = await supabaseAdmin
+      .from('public_holidays')
+      .select('date, name')
+      .order('date')
+
     // Create the new recurrence engine
-    const recurrenceEngine = await createTaskRecurrenceStatusEngine()
+    const holidayChecker = new HolidayChecker(holidays || [])
+    const recurrenceEngine = new NewRecurrenceEngine(holidayChecker)
 
     // Build master_tasks query
     let taskQuery = supabaseAdmin
@@ -192,13 +210,13 @@ export async function GET(request: NextRequest) {
         })
       : (masterTasks || [])
 
-    // Build calendar map
+    // Build calendar map using Australian timezone
     const calendarMap: Record<string, any> = {}
-    const cur = new Date(startDate)
-    while (cur <= endDate) {
-      const ds = cur.toISOString().split('T')[0]
-      calendarMap[ds] = {
-        date: ds,
+    const dateRange = getAustralianDateRange(startDate, endDate)
+    
+    for (const dateStr of dateRange) {
+      calendarMap[dateStr] = {
+        date: dateStr,
         total: 0,
         completed: 0,
         pending: 0,
@@ -206,14 +224,12 @@ export async function GET(request: NextRequest) {
         missed: 0,
         tasks: [] as any[],
       }
-      cur.setDate(cur.getDate() + 1)
     }
 
-    // Fill occurrences using new recurrence engine
-    const now = new Date()
+    // Fill occurrences using new recurrence engine with Australian timezone
     for (const task of roleFiltered) {
-      // Convert task to MasterTask format for new engine
-      const masterTask: MasterTask = {
+      // Convert task to NewMasterTask format for new engine
+      const masterTask: NewMasterTask = {
         id: task.id,
         title: task.title || '',
         description: task.description || '',
@@ -227,27 +243,26 @@ export async function GET(request: NextRequest) {
         end_date: task.end_date || undefined
       }
       
-      // iterate across range and add when due
-      const iter = new Date(startDate)
-      while (iter <= endDate) {
-        const ds = iter.toISOString().split('T')[0]
+      // iterate across date range and add when due
+      for (const dateStr of dateRange) {
         let shouldAppear = false
         
         try {
-          shouldAppear = recurrenceEngine.shouldTaskAppearOnDate(masterTask, ds)
+          shouldAppear = recurrenceEngine.shouldTaskAppearOnDate(masterTask, dateStr)
         } catch (error) {
           console.error('Error checking if task should appear:', error)
           shouldAppear = false
         }
         
         if (shouldAppear) {
-          const day = calendarMap[ds]
+          const day = calendarMap[dateStr]
           if (day) {
             day.total++
-            const dueTime = task.due_time ? new Date(`${ds}T${task.due_time}`) : null
-            const status = dueTime && now > dueTime ? 'overdue' : 'pending'
+            // Check if task is overdue using Australian timezone
+            const isOverdue = task.due_time ? isAustralianTimePast(dateStr, task.due_time) : false
+            const status = isOverdue ? 'overdue' : 'pending'
             day.tasks.push({ 
-              id: `${task.id}:${ds}`, 
+              id: `${task.id}:${dateStr}`, 
               title: task.title, 
               category: task.categories?.[0] || 'general', 
               position: '', 
@@ -257,21 +272,20 @@ export async function GET(request: NextRequest) {
             else day.pending++
           }
         }
-        iter.setDate(iter.getDate() + 1)
       }
     }
 
     const calendarArray = Object.values(calendarMap)
 
     // Get holidays for overlay
-    const { data: holidays } = await supabaseAdmin
+    const { data: holidaysOverlay } = await supabaseAdmin
       .from('public_holidays')
       .select('*')
       .gte('date', startDateStr)
       .lte('date', endDateStr)
 
     // Holidays overlay
-    const holidayMap = (holidays || []).reduce((acc: any, h: any) => { acc[h.date] = h.name; return acc }, {})
+    const holidayMap = (holidaysOverlay || []).reduce((acc: any, h: any) => { acc[h.date] = h.name; return acc }, {})
     calendarArray.forEach((day: any) => {
       if (holidayMap[day.date]) day.holiday = holidayMap[day.date]
     })

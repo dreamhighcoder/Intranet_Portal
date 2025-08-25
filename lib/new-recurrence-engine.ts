@@ -13,6 +13,16 @@
  */
 
 import { HolidayChecker } from './holiday-checker'
+import { 
+  getAustralianNow, 
+  getAustralianToday, 
+  parseAustralianDate, 
+  formatAustralianDate,
+  getAustralianDayOfWeek,
+  createAustralianDateTime,
+  isAustralianTimePast,
+  toAustralianTime
+} from './timezone-utils'
 
 // ========================================
 // TYPES AND INTERFACES
@@ -161,7 +171,7 @@ export class NewRecurrenceEngine {
    * Generate task instances for a specific date
    */
   generateInstancesForDate(masterTasks: MasterTask[], date: string): GenerationResult {
-    const targetDate = new Date(date + 'T00:00:00')
+    const targetDate = parseAustralianDate(date) // Parse in Australian timezone
     const instances: TaskInstance[] = []
     const carry_instances: TaskInstance[] = []
 
@@ -170,13 +180,13 @@ export class NewRecurrenceEngine {
       if (!task.active) continue
       
       // Skip if before start_date
-      if (task.start_date && targetDate < new Date(task.start_date + 'T00:00:00')) continue
+      if (task.start_date && targetDate < parseAustralianDate(task.start_date)) continue
       
       // Skip if after end_date
-      if (task.end_date && targetDate > new Date(task.end_date + 'T00:00:00')) continue
+      if (task.end_date && targetDate > parseAustralianDate(task.end_date)) continue
       
       // Skip if before publish_at date
-      if (task.publish_at && targetDate < new Date(task.publish_at + 'T00:00:00')) continue
+      if (task.publish_at && targetDate < parseAustralianDate(task.publish_at)) continue
 
       // Process each frequency in the task
       for (const frequency of task.frequencies) {
@@ -208,6 +218,35 @@ export class NewRecurrenceEngine {
       instances,
       carry_instances
     }
+  }
+
+  /**
+   * Check if a task should appear on a specific date (for calendar/checklist views)
+   */
+  shouldTaskAppearOnDate(task: MasterTask, date: string): boolean {
+    const targetDate = parseAustralianDate(date) // Parse in Australian timezone
+    
+    // Skip if not active
+    if (!task.active) return false
+    
+    // Skip if before start_date
+    if (task.start_date && targetDate < parseAustralianDate(task.start_date)) return false
+    
+    // Skip if after end_date
+    if (task.end_date && targetDate > parseAustralianDate(task.end_date)) return false
+    
+    // Skip if before publish_at date
+    if (task.publish_at && targetDate < parseAustralianDate(task.publish_at)) return false
+
+    // Check if any frequency should appear on this date
+    for (const frequency of task.frequencies) {
+      const result = this.processTaskForDate(task, frequency, targetDate)
+      if (result.shouldAppear) {
+        return true
+      }
+    }
+    
+    return false
   }
 
   /**
@@ -330,7 +369,7 @@ export class NewRecurrenceEngine {
     dueDate: string
   } {
     // Skip Sundays (day 0) and public holidays
-    if (date.getDay() === 0 || this.holidayChecker.isHolidaySync(date)) {
+    if (this.isSundayOrHoliday(date)) {
       return { shouldAppear: false, isCarryOver: false, dueDate: '' }
     }
 
@@ -702,7 +741,7 @@ export class NewRecurrenceEngine {
         case NewFrequencyType.START_OF_MONTH_NOV:
         case NewFrequencyType.START_OF_MONTH_DEC:
           // Lock at Saturday cutoff (or earlier PH stop)
-          const saturdayCutoff = this.calculateSaturdayCutoff(instance, currentDateTime)
+          const saturdayCutoff = this.calculateSaturdayCutoff(instance, frequency)
           if (currentDateTime >= saturdayCutoff) {
             newStatus = TaskStatus.MISSED
             locked = true
@@ -727,23 +766,26 @@ export class NewRecurrenceEngine {
   // ========================================
 
   private formatDate(date: Date): string {
-    return date.toISOString().split('T')[0]
+    return formatAustralianDate(date)
   }
 
   private formatTime(date: Date): string {
-    return date.toTimeString().split(' ')[0].substring(0, 5)
+    const australianDate = toAustralianTime(date)
+    return australianDate.toTimeString().split(' ')[0].substring(0, 5)
   }
 
   private isWeekend(date: Date): boolean {
-    const day = date.getDay()
+    const australianDate = toAustralianTime(date)
+    const day = australianDate.getDay()
     return day === 0 || day === 6 // Sunday or Saturday
   }
 
   private getWeekMonday(date: Date): Date {
-    const monday = new Date(date)
-    const day = date.getDay()
+    const australianDate = toAustralianTime(date)
+    const monday = new Date(australianDate)
+    const day = australianDate.getDay()
     const diff = day === 0 ? -6 : 1 - day // Sunday is 0, Monday is 1
-    monday.setDate(date.getDate() + diff)
+    monday.setDate(australianDate.getDate() + diff)
     return monday
   }
 
@@ -935,15 +977,65 @@ export class NewRecurrenceEngine {
     return count
   }
 
-  private calculateSaturdayCutoff(instance: TaskInstance, currentDateTime: Date): Date {
-    // This would need to be implemented based on the instance's week/month context
-    // For now, return a placeholder
+  private calculateSaturdayCutoff(instance: TaskInstance, freqForCutoff: NewFrequencyType): Date {
     const instanceDate = new Date(instance.date)
-    const weekMonday = this.getWeekMonday(instanceDate)
-    const saturday = new Date(weekMonday)
-    saturday.setDate(weekMonday.getDate() + 5)
-    saturday.setHours(23, 59, 59, 999)
-    return saturday
+
+    // For weekday-based and start-of-month frequencies, cutoff is last Saturday of relevant period
+    if (
+      freqForCutoff === NewFrequencyType.MONDAY ||
+      freqForCutoff === NewFrequencyType.TUESDAY ||
+      freqForCutoff === NewFrequencyType.WEDNESDAY ||
+      freqForCutoff === NewFrequencyType.THURSDAY ||
+      freqForCutoff === NewFrequencyType.FRIDAY ||
+      freqForCutoff === NewFrequencyType.SATURDAY ||
+      freqForCutoff === NewFrequencyType.START_OF_EVERY_MONTH ||
+      freqForCutoff === NewFrequencyType.START_OF_MONTH_JAN ||
+      freqForCutoff === NewFrequencyType.START_OF_MONTH_FEB ||
+      freqForCutoff === NewFrequencyType.START_OF_MONTH_MAR ||
+      freqForCutoff === NewFrequencyType.START_OF_MONTH_APR ||
+      freqForCutoff === NewFrequencyType.START_OF_MONTH_MAY ||
+      freqForCutoff === NewFrequencyType.START_OF_MONTH_JUN ||
+      freqForCutoff === NewFrequencyType.START_OF_MONTH_JUL ||
+      freqForCutoff === NewFrequencyType.START_OF_MONTH_AUG ||
+      freqForCutoff === NewFrequencyType.START_OF_MONTH_SEP ||
+      freqForCutoff === NewFrequencyType.START_OF_MONTH_OCT ||
+      freqForCutoff === NewFrequencyType.START_OF_MONTH_NOV ||
+      freqForCutoff === NewFrequencyType.START_OF_MONTH_DEC
+    ) {
+      // Determine weekly vs monthly cutoff
+      if (
+        freqForCutoff === NewFrequencyType.MONDAY ||
+        freqForCutoff === NewFrequencyType.TUESDAY ||
+        freqForCutoff === NewFrequencyType.WEDNESDAY ||
+        freqForCutoff === NewFrequencyType.THURSDAY ||
+        freqForCutoff === NewFrequencyType.FRIDAY ||
+        freqForCutoff === NewFrequencyType.SATURDAY
+      ) {
+        const weekMonday = this.getWeekMonday(instanceDate)
+        let saturday = new Date(weekMonday)
+        saturday.setDate(weekMonday.getDate() + 5)
+        // If Saturday is a PH, move to nearest earlier non-PH weekday in week
+        if (this.holidayChecker.isHolidaySync(saturday)) {
+          const earlier = this.findNearestEarlierWeekdayInWeek(saturday, weekMonday)
+          if (earlier) saturday = earlier
+        }
+        saturday.setHours(23, 59, 59, 999)
+        return saturday
+      }
+
+      // Start-of-month: last Saturday of the month (or earlier non-PH)
+      let lastSat = this.getLastSaturdayOfMonth(instanceDate)
+      if (this.holidayChecker.isHolidaySync(lastSat)) {
+        const earlier = this.findNearestEarlierWeekdayInMonth(lastSat)
+        if (earlier) lastSat = earlier
+      }
+      lastSat.setHours(23, 59, 59, 999)
+      return lastSat
+    }
+
+    // Default: lock at due date 23:59
+    const dueEnd = new Date(`${instance.due_date}T23:59:00`)
+    return dueEnd
   }
 
   private getFrequencyFromMasterTasks(masterTaskId: string, masterTasks?: MasterTask[]): NewFrequencyType {
@@ -956,6 +1048,54 @@ export class NewRecurrenceEngine {
     // Default fallback
     return NewFrequencyType.EVERY_DAY
   }
+
+  /**
+   * Helper method to check if a date is Sunday or a public holiday
+   * This ensures consistent checking across all frequency types
+   * Uses Australian timezone for day-of-week calculation
+   */
+  private isSundayOrHoliday(date: Date): boolean {
+    // Convert to Australian timezone for accurate day-of-week calculation
+    const australianDate = toAustralianTime(date)
+    
+    // Check if it's Sunday (day 0) in Australian timezone
+    if (australianDate.getDay() === 0) {
+      return true
+    }
+    
+    // Check if it's a public holiday
+    try {
+      return this.holidayChecker.isHolidaySync(australianDate)
+    } catch (error) {
+      // If holiday checking fails, log the error and assume it's not a holiday
+      console.warn('Holiday checking failed for date:', australianDate, error)
+      return false
+    }
+  }
+
+  /**
+   * Helper method to check if a date is a weekend (Saturday or Sunday)
+   * Uses Australian timezone for accurate day-of-week calculation
+   */
+  private isWeekendDay(date: Date): boolean {
+    const australianDate = toAustralianTime(date)
+    const day = australianDate.getDay()
+    return day === 0 || day === 6 // Sunday or Saturday
+  }
+
+  /**
+   * Helper method to safely check if a date is a public holiday
+   * with proper error handling and Australian timezone
+   */
+  private isPublicHoliday(date: Date): boolean {
+    try {
+      const australianDate = toAustralianTime(date)
+      return this.holidayChecker.isHolidaySync(australianDate)
+    } catch (error) {
+      console.warn('Holiday checking failed for date:', date, error)
+      return false
+    }
+  }
 }
 
 // ========================================
@@ -963,14 +1103,14 @@ export class NewRecurrenceEngine {
 // ========================================
 
 export function createNewRecurrenceEngine(publicHolidays: any[] = []): NewRecurrenceEngine {
-  const holidayChecker = new HolidayChecker()
-  return new NewRecurrenceEngine(holidayChecker)
+  const holidayChecker = new HolidayChecker(publicHolidays)
+  return new NewRecurrenceEngine(holidayChecker, 'Australia/Sydney')
 }
 
 export function createNewRecurrenceEngineWithTimezone(
   publicHolidays: any[] = [], 
   timezone: string = 'Australia/Sydney'
 ): NewRecurrenceEngine {
-  const holidayChecker = new HolidayChecker()
+  const holidayChecker = new HolidayChecker(publicHolidays)
   return new NewRecurrenceEngine(holidayChecker, timezone)
 }

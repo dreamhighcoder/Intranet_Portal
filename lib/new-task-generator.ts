@@ -12,6 +12,12 @@
 import { NewRecurrenceEngine, TaskStatus, type MasterTask, type TaskInstance, type NewFrequencyType } from './new-recurrence-engine'
 import { TaskDatabaseAdapter } from './task-database-adapter'
 import { HolidayChecker as HolidayCheckerClass } from './holiday-checker'
+import { 
+  getAustralianNow, 
+  getAustralianToday, 
+  parseAustralianDate, 
+  formatAustralianDate
+} from './timezone-utils'
 
 // ========================================
 // TYPES AND INTERFACES
@@ -267,7 +273,7 @@ export class NewTaskGenerator {
   async updateStatusesForDate(options: NewStatusUpdateOptions = {}): Promise<NewStatusUpdateResult> {
     const startTime = Date.now()
     const { 
-      date = new Date().toISOString().split('T')[0],
+      date = getAustralianToday(),
       testMode = false,
       dryRun = false,
       maxInstances
@@ -289,8 +295,8 @@ export class NewTaskGenerator {
       const instancesToProcess = maxInstances ? instances.slice(0, maxInstances) : instances
       this.log('info', `Processing ${instancesToProcess.length} instances`)
 
-      // Step 2: Update statuses using the engine
-      const currentDateTime = new Date()
+      // Step 2: Update statuses using the engine with Australian timezone
+      const currentDateTime = getAustralianNow()
       const statusResults = this.engine.updateInstanceStatuses(instancesToProcess, currentDateTime)
 
       // Step 3: Collect updates for database
@@ -474,7 +480,7 @@ export async function runNewDailyGeneration(
   date?: string,
   options: Partial<NewGenerationOptions> = {}
 ): Promise<NewGenerationResult> {
-  const targetDate = date || new Date().toISOString().split('T')[0]
+  const targetDate = date || getAustralianToday()
   
   const generator = await createNewTaskGenerator()
   
@@ -491,7 +497,7 @@ export async function runNewDailyStatusUpdate(
   date?: string,
   options: Partial<NewStatusUpdateOptions> = {}
 ): Promise<NewStatusUpdateResult> {
-  const targetDate = date || new Date().toISOString().split('T')[0]
+  const targetDate = date || getAustralianToday()
   
   const generator = await createNewTaskGenerator()
   

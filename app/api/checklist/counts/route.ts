@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase-server'
 import { getTasksForRoleOnDate } from '@/lib/db'
-import { createRecurrenceEngine } from '@/lib/recurrence-engine'
-import { createHolidayHelper } from '@/lib/public-holidays'
+import { TaskRecurrenceEngine } from '@/lib/task-recurrence-engine'
+import { getHolidayChecker } from '@/lib/holiday-checker-adapter'
 import { ChecklistQuerySchema } from '@/lib/validation-schemas'
-import { getAustralianDayOfWeek, getAustralianTime, getNineAMAustralian } from '@/lib/timezone-utils'
+import { getAustralianNow, createAustralianDateTime } from '@/lib/timezone-utils'
 
 export async function GET(request: NextRequest) {
   try {
@@ -34,89 +34,36 @@ export async function GET(request: NextRequest) {
     
     console.log(`DEBUG: Found ${tasks.length} tasks for role '${validatedRole}' on date '${validatedDate}'`)
     
-    // Create holiday helper and recurrence engine for filtering
-    // Fetch holidays from database and create helper
-    const { data: holidays, error: holidaysError } = await supabaseServer
-      .from('public_holidays')
-      .select('*')
-      .order('date', { ascending: true })
-
-    if (holidaysError) {
-      console.error('Error fetching holidays:', holidaysError)
-    }
-
-    const holidayHelper = createHolidayHelper(holidays || [])
-    const recurrenceEngine = createRecurrenceEngine(holidayHelper)
+    // Get holiday checker and create recurrence engine
+    const holidayChecker = await getHolidayChecker()
+    const recurrenceEngine = new TaskRecurrenceEngine({ holidayChecker })
     
-    // Check if the date is a public holiday - if so, return empty counts
-    const targetDate = new Date(validatedDate)
-    if (holidayHelper.isHoliday(targetDate)) {
-      return NextResponse.json({
-        success: true,
-        data: {
-          total: 0,
-          newSinceNine: 0,
-          dueToday: 0,
-          overdue: 0,
-          completed: 0
-        },
-        meta: {
-          role: validatedRole,
-          date: validatedDate,
-          is_holiday: true
-        }
-      })
-    }
-    
-    // Filter tasks based on frequencies array and date
+    // Filter tasks that should appear on this date using the comprehensive recurrence engine
     const filteredTasks = tasks.filter(task => {
       try {
-        // Check if the task is due on the specified date using frequencies array
-        if (!task.frequencies || task.frequencies.length === 0) {
-          return false
+        // Convert task to the format expected by recurrence engine
+        const masterTask = {
+          id: task.id,
+          title: task.title,
+          responsibility: task.responsibility || [],
+          frequencies: task.frequencies || [],
+          categories: task.categories || [],
+          timing: task.timing as any || 'anytime_during_day',
+          due_time: task.due_time,
+          publish_delay_date: task.publish_delay_date,
+          publish_status: task.publish_status as any || 'active',
+          due_date: task.due_date
         }
         
-        // Use Australian timezone for day of week calculation
-        const dayOfWeek = getAustralianDayOfWeek(validatedDate)
-        
-        // Check each frequency in the array
-        return task.frequencies.some(frequency => {
-          switch (frequency) {
-            case 'every_day':
-              return dayOfWeek !== 0 // Every day except Sunday
-            case 'once_weekly':
-              return dayOfWeek === 1 // Monday
-            case 'start_of_every_month':
-              const targetDate = new Date(validatedDate)
-              return targetDate.getDate() === 1
-            case 'end_of_every_month':
-              const targetDateEnd = new Date(validatedDate)
-              const nextMonth = new Date(targetDateEnd.getFullYear(), targetDateEnd.getMonth() + 1, 0)
-              return targetDateEnd.getDate() === nextMonth.getDate()
-            case 'monday':
-              return dayOfWeek === 1
-            case 'tuesday':
-              return dayOfWeek === 2
-            case 'wednesday':
-              return dayOfWeek === 3
-            case 'thursday':
-              return dayOfWeek === 4
-            case 'friday':
-              return dayOfWeek === 5
-            case 'saturday':
-              return dayOfWeek === 6
-            case 'once_off':
-              return true // Always show once-off tasks
-            default:
-              return false
-          }
-        })
+        return recurrenceEngine.shouldTaskAppear(masterTask, validatedDate)
       } catch (error) {
-        console.error('Error checking task frequency:', error)
-        // If there's an error with frequency calculation, include the task
+        console.error('Error checking task recurrence:', error)
+        // If there's an error with recurrence calculation, include the task
         return true
       }
     })
+    
+    console.log(`DEBUG: After recurrence filtering: ${filteredTasks.length} tasks should appear`)
     
     // Get existing checklist instances for this role and date
     const { data: instances, error: instancesError } = await supabaseServer
@@ -138,8 +85,8 @@ export async function GET(request: NextRequest) {
     }
     
     // Calculate task counts using Australian timezone
-    const now = getAustralianTime()
-    const nineAM = getNineAMAustralian()
+    const now = getAustralianNow()
+    const nineAM = createAustralianDateTime(validatedDate, '09:00')
     
     const counts = {
       total: 0,
@@ -153,39 +100,56 @@ export async function GET(request: NextRequest) {
       const instance = instanceMap.get(task.id)
       const isCompleted = instance?.status === 'completed'
       
-      // Count total tasks (all tasks that should appear today)
       counts.total++
       
       if (isCompleted) {
         counts.completed++
       } else {
-        // Count tasks due today (not completed)
-        counts.dueToday++
+        // Convert task to master task format for due time calculation
+        const masterTask = {
+          id: task.id,
+          title: task.title,
+          responsibility: task.responsibility || [],
+          frequencies: task.frequencies || [],
+          categories: task.categories || [],
+          timing: task.timing as any || 'anytime_during_day',
+          due_time: task.due_time,
+          publish_delay_date: task.publish_delay_date,
+          publish_status: task.publish_status as any || 'active',
+          due_date: task.due_date
+        }
         
-        // Check if overdue (past due time on today's date)
-        if (task.due_time) {
-          const dueTime = new Date(`${validatedDate}T${task.due_time}`)
-          if (now > dueTime) {
+        // Calculate due time using recurrence engine
+        const dueTime = recurrenceEngine.calculateDueTime(masterTask)
+        const dueDateTime = createAustralianDateTime(validatedDate, dueTime)
+        
+        // Check if task is due today
+        if (validatedDate === now.toISOString().split('T')[0]) {
+          counts.dueToday++
+          
+          // Check if overdue
+          if (now > dueDateTime) {
             counts.overdue++
           }
         }
         
-        // Count new tasks since 9 AM (created or appeared after 9 AM)
-        // For this, we check if the instance was created today after 9 AM
-        if (instance) {
-          const instanceCreatedAt = new Date(instance.created_at)
-          if (instanceCreatedAt > nineAM) {
-            counts.newSinceNine++
-          }
-        } else {
-          // If no instance exists, check if the master task was created today after 9 AM
-          const taskCreatedAt = new Date(task.created_at)
-          if (taskCreatedAt > nineAM) {
-            counts.newSinceNine++
-          }
+        // Check if task was created since 9 AM
+        const taskCreatedAt = instance?.created_at ? new Date(instance.created_at) : now
+        if (taskCreatedAt > nineAM) {
+          counts.newSinceNine++
         }
       }
     })
+    
+    // Get total master tasks count for metadata
+    const { count: totalMasterTasks } = await supabaseServer
+      .from('master_tasks')
+      .select('*', { count: 'exact', head: true })
+      .overlaps('responsibility', [validatedRole])
+      .eq('publish_status', 'active')
+    
+    // Check if today is a holiday
+    const isHoliday = holidayChecker.isHoliday(validatedDate)
     
     return NextResponse.json({
       success: true,
@@ -193,8 +157,8 @@ export async function GET(request: NextRequest) {
       meta: {
         role: validatedRole,
         date: validatedDate,
-        total_master_tasks: filteredTasks.length,
-        is_holiday: false
+        total_master_tasks: totalMasterTasks || 0,
+        is_holiday: isHoliday
       }
     })
     

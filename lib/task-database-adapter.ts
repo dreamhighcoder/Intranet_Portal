@@ -285,6 +285,17 @@ export class TaskDatabaseAdapter {
    * Convert database master task to engine format
    */
   private convertDatabaseTaskToEngine(dbTask: DatabaseMasterTask): MasterTask {
+    // Responsibility and categories can be array columns per latest schema.
+    // Fallback to legacy single fields when arrays are missing.
+    const anyTask: any = dbTask as any
+    const responsibility: string[] = Array.isArray(anyTask.responsibility)
+      ? anyTask.responsibility
+      : []
+
+    const categories: string[] = Array.isArray(anyTask.categories)
+      ? anyTask.categories
+      : (dbTask.category ? [dbTask.category] : [])
+
     return {
       id: dbTask.id,
       title: dbTask.title,
@@ -296,8 +307,8 @@ export class TaskDatabaseAdapter {
       due_date: dbTask.due_date,
       start_date: dbTask.start_date,
       end_date: dbTask.end_date,
-      responsibility: [], // TODO: Map from position_id or other fields
-      categories: dbTask.category ? [dbTask.category] : []
+      responsibility,
+      categories
     }
   }
 
