@@ -217,6 +217,11 @@ export class NewRecurrenceEngine {
   shouldTaskAppearOnDate(task: MasterTask, date: string): boolean {
     const targetDate = parseAustralianDate(date)
 
+    // Global rule: never assign/show tasks on Sundays or public holidays
+    if (this.isSundayOrHoliday(targetDate)) {
+      return false
+    }
+
     if (!this.isTaskActiveOnDate(task, targetDate)) {
       return false
     }

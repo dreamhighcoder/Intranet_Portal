@@ -179,16 +179,13 @@ export async function GET(request: NextRequest) {
         categories,
         publish_status,
         publish_delay,
-        start_date,
-        end_date,
-        due_time,
+        due_date,
         frequencies,
         created_at
       `)
       .eq('publish_status', 'active')
 
-    // Publish delay condition across range: visible if publish_delay is null or <= end of range
-    taskQuery = taskQuery.or(`publish_delay.is.null,publish_delay.lte.${endDateStr}`)
+
 
     // Non-admins must be restricted to their responsibility only
     if (user.role !== 'admin' && responsibilityVariants && responsibilityVariants.length > 0) {
@@ -226,16 +223,7 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // Precompute dates to suppress (Sundays and public holidays)
-    const suppressedDateSet = new Set<string>()
-    for (const dateStr of dateRange) {
-      const d = parseAustralianDate(dateStr)
-      const isSunday = d.getDay() === 0
-      const isHoliday = holidayChecker.isHolidaySync(d)
-      if (isSunday || isHoliday) {
-        suppressedDateSet.add(dateStr)
-      }
-    }
+
 
     // Fill occurrences using new recurrence engine with Australian timezone
     for (const task of roleFiltered) {
@@ -249,9 +237,8 @@ export async function GET(request: NextRequest) {
         frequencies: convertStringFrequenciesToEnum(task.frequencies || []),
         timing: task.due_time || '09:00',
         active: true,
-        publish_at: task.publish_delay || undefined,
-        start_date: task.start_date || task.created_at?.split('T')[0],
-        end_date: task.end_date || undefined
+        publish_delay: task.publish_delay || undefined,
+        due_date: task.due_date || undefined
       }
       
       // iterate across date range and add when due
@@ -266,10 +253,6 @@ export async function GET(request: NextRequest) {
         }
         
         if (shouldAppear) {
-          // Suppress creating tasks on Sundays and public holidays
-          if (suppressedDateSet.has(dateStr)) {
-            continue
-          }
           const day = calendarMap[dateStr]
           if (day) {
             day.total++
