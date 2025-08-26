@@ -17,22 +17,22 @@ export function PublicNavigation({ onLoginClick }: PublicNavigationProps) {
       }}
     >
       <div className="max-w-content-lg mx-auto px-4 sm:px-6 lg:px-18">
-        <div className="flex justify-between items-center h-20">
+        <div className="flex flex-wrap justify-between items-center gap-2 min-h-16 md:min-h-20 py-3 overflow-hidden">
           {/* Logo and Title */}
-          <div className="flex items-center space-x-3">
+          <div className="flex items-center space-x-3 min-w-0">
             <svg className="w-10 h-10" fill="currentColor" viewBox="0 0 24 24">
               <path d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 9.172V5L8 4z" />
             </svg>
-            <span className="font-semibold text-xl">Richmond Pharmacy</span>
+            <span className="font-semibold text-xl truncate">Richmond Pharmacy</span>
           </div>
 
           {/* Login Button */}
-          <div className="flex items-center">
+          <div className="flex items-center shrink-0">
             <Button
               onClick={onLoginClick}
               variant="outline"
               size="sm"
-              className="border-white/20 hover:bg-white/10 bg-transparent flex items-center space-x-2"
+              className="border-white/20 hover:bg-white/10 bg-transparent flex items-center space-x-2 whitespace-nowrap"
               style={{
                 color: "var(--color-primary-on)",
                 borderColor: "rgba(255, 255, 255, 0.2)",

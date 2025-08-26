@@ -176,7 +176,7 @@ export default function AdminDashboard() {
             {quickActions.map((action) => {
               const IconComponent = action.icon
               return (
-                <Card key={action.title} className="card-surface hover:shadow-lg transition-shadow">
+                <Card key={action.title} className="card-surface hover:shadow-lg transition-shadow flex flex-col">
                   <CardHeader className="pb-2 sm:pb-3">
                     <div className="flex items-center justify-between">
                       <CardTitle className="text-base sm:text-lg text-[var(--color-text)]">
@@ -187,18 +187,20 @@ export default function AdminDashboard() {
                       </div>
                     </div>
                   </CardHeader>
-                  <CardContent>
+                  <CardContent className="flex flex-col flex-1">
                     <p className="text-xs sm:text-sm text-[var(--color-text-secondary)] mb-3 sm:mb-4">
                       {action.description}
                     </p>
-                    <Button 
-                      asChild
-                      className="w-full bg-[var(--color-primary)] hover:bg-[var(--color-primary)]/90 text-[var(--color-primary-on)] text-sm"
-                    >
-                      <Link href={action.href}>
-                        Manage
-                      </Link>
-                    </Button>
+                    <div className="mt-auto">
+                      <Button 
+                        asChild
+                        className="w-full bg-[var(--color-primary)] hover:bg-[var(--color-primary)]/90 text-[var(--color-primary-on)] text-sm"
+                      >
+                        <Link href={action.href}>
+                          Manage
+                        </Link>
+                      </Button>
+                    </div>
                   </CardContent>
                 </Card>
               )

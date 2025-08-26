@@ -532,31 +532,31 @@ export default function ReportsPage() {
             </div>
 
             <div className="flex justify-between items-center mt-4 pt-4 border-t">
-              <div className="flex space-x-2">
+              <div className="flex flex-wrap gap-2">
                 <Button
                   variant={activeReportType === "overview" ? "default" : "outline"}
                   onClick={() => setActiveReportType("overview")}
-                  className={activeReportType === "overview" ? "text-white" : ""}
+                  className={`${activeReportType === "overview" ? "text-white" : ""} whitespace-nowrap`}
                 >
                   Overview
                 </Button>
                 <Button
                   variant={activeReportType === "completion-rate" ? "default" : "outline"}
                   onClick={() => setActiveReportType("completion-rate")}
-                  className={activeReportType === "completion-rate" ? "text-white" : ""}
+                  className={`${activeReportType === "completion-rate" ? "text-white" : ""} whitespace-nowrap`}
                 >
                   Completion Rate
                 </Button>
                 <Button
                   variant={activeReportType === "missed-tasks" ? "default" : "outline"}
                   onClick={() => setActiveReportType("missed-tasks")}
-                  className={activeReportType === "missed-tasks" ? "text-white" : ""}
+                  className={`${activeReportType === "missed-tasks" ? "text-white" : ""} whitespace-nowrap`}
                 >
                   Missed Tasks
                 </Button>
               </div>
               
-              <Button onClick={exportToExcel} variant="outline">
+              <Button onClick={exportToExcel} variant="outline" className="whitespace-nowrap">
                 <Download className="w-4 h-4 mr-2" />
                 Export Excel
               </Button>

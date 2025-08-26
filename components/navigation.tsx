@@ -137,7 +137,7 @@ export function Navigation() {
               }}
             >
               <LogOut className="w-4 h-4" />
-              <span>Logout</span>
+              <span className="hidden lg:inline">Logout</span>
             </Button>
           </div>
 

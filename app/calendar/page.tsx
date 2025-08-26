@@ -250,7 +250,7 @@ export default function CalendarPage() {
                     {date.getDate()}
                   </span>
                   {day.total > 0 && (
-                    <Badge variant="outline" className="text-xs">
+                    <Badge variant="outline" className="text-xs shrink-0">
                       {day.total}
                     </Badge>
                   )}
@@ -273,7 +273,7 @@ export default function CalendarPage() {
                     </div>
                   ))}
                   {day.tasks.length > 3 && (
-                    <div className="text-xs text-gray-500">
+                    <div className="text-xs text-gray-500 truncate">
                       +{day.tasks.length - 3} more
                     </div>
                   )}
@@ -343,7 +343,7 @@ export default function CalendarPage() {
                 {day.day}
               </span>
               {day.data.total > 0 && (
-                <Badge variant="outline" className="text-xs">
+                <Badge variant="outline" className="text-xs shrink-0">
                   {day.data.total}
                 </Badge>
               )}
@@ -366,7 +366,7 @@ export default function CalendarPage() {
                 </div>
               ))}
               {day.data.tasks.length > 2 && (
-                <div className="text-xs text-gray-500">
+                <div className="text-xs text-gray-500 truncate">
                   +{day.data.tasks.length - 2} more
                 </div>
               )}
@@ -429,6 +429,14 @@ export default function CalendarPage() {
             >
               <ChevronRight className="w-4 h-4" />
             </Button>
+            
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setCurrentDate(new Date())}
+            >
+              Today
+            </Button>
           </div>
 
           <div className="flex items-center space-x-2">
@@ -444,7 +452,7 @@ export default function CalendarPage() {
 
             {isAdmin && positions.length > 0 && (
               <Select value={selectedPosition} onValueChange={setSelectedPosition}>
-                <SelectTrigger className="w-48">
+                <SelectTrigger className="w-full">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -457,20 +465,12 @@ export default function CalendarPage() {
                 </SelectContent>
               </Select>
             )}
-
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setCurrentDate(new Date())}
-            >
-              Today
-            </Button>
           </div>
         </div>
 
         {/* Summary Stats */}
         {calendarData && (
-          <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
+          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-4 mb-6">
             <Card className="py-5 h-22">
               <CardContent>
                 <div className="flex items-center space-x-4">
@@ -478,7 +478,7 @@ export default function CalendarPage() {
                     <CalendarIcon className="w-8 h-8 text-blue-600" />
                   </div>
                   <div>
-                    <p className="text-sm text-gray-600">Total Tasks</p>
+                    <p className="text-sm text-gray-600 hidden sm:inline">Total Tasks</p>
                     <p className="text-lg font-semibold">{calendarData.summary.totalTasks}</p>
                   </div>
                   
@@ -493,7 +493,7 @@ export default function CalendarPage() {
                     <CheckCircle className="w-8 h-8 text-green-600" />
                   </div>
                   <div>
-                    <p className="text-sm text-gray-600">Completed</p>
+                    <p className="text-sm text-gray-600 hidden sm:inline">Completed</p>
                     <p className="text-lg font-semibold">{calendarData.summary.completedTasks}</p>
                   </div>
                 </div>
@@ -507,7 +507,7 @@ export default function CalendarPage() {
                     <Clock className="w-8 h-8 text-yellow-600" />
                   </div>
                   <div>
-                    <p className="text-sm text-gray-600">Pending</p>
+                    <p className="text-sm text-gray-600 hidden sm:inline">Pending</p>
                     <p className="text-lg font-semibold">{calendarData.summary.pendingTasks}</p>
                   </div>
                 </div>
@@ -521,7 +521,7 @@ export default function CalendarPage() {
                     <AlertTriangle className="w-8 h-8 text-red-600" />
                   </div>
                   <div>
-                    <p className="text-sm text-gray-600">Overdue</p>
+                    <p className="text-sm text-gray-600 hidden sm:inline">Overdue</p>
                     <p className="text-lg font-semibold">{calendarData.summary.overdueTasks}</p>
                   </div>
                 </div>
@@ -535,7 +535,7 @@ export default function CalendarPage() {
                     <Users className="w-8 h-8 text-purple-600" />
                   </div>
                   <div>
-                    <p className="text-sm text-gray-600">Completion Rate</p>
+                    <p className="text-sm text-gray-600 hidden sm:inline">Completion Rate</p>
                     <p className="text-lg font-semibold">{calendarData.summary.completionRate}%</p>
                   </div>
                 </div>

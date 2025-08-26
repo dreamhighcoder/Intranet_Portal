@@ -12,9 +12,7 @@ import { Badge } from '@/components/ui/badge'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Input } from '@/components/ui/input'
-import { Checkbox } from '@/components/ui/checkbox'
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
-import { Check, X, Eye, LogOut, Settings, ChevronRight, Search, Clock, Trash2, ChevronUp, ChevronDown } from 'lucide-react'
+import { Check, X, Eye, LogOut, Settings, ChevronRight, Search, Clock, ChevronUp, ChevronDown } from 'lucide-react'
 import Link from 'next/link'
 import { toastError, toastSuccess } from '@/hooks/use-toast'
 import { toKebabCase } from '@/lib/responsibility-mapper'
@@ -322,14 +320,14 @@ const renderFrequencyWithDetails = (task: ChecklistTask) => {
 }
 
 // Sortable Header Component
-const SortableHeader = ({ 
-  field, 
-  children, 
-  sortField, 
-  sortDirection, 
-  onSort, 
-  className = "" 
-}: { 
+const SortableHeader = ({
+  field,
+  children,
+  sortField,
+  sortDirection,
+  onSort,
+  className = ""
+}: {
   field: string
   children: React.ReactNode
   sortField: string
@@ -339,20 +337,20 @@ const SortableHeader = ({
 }) => {
   const isActive = sortField === field
   const isCentered = className.includes('text-center')
-  
+
   return (
-    <TableHead 
+    <TableHead
       className={`cursor-pointer hover:bg-gray-100 transition-colors ${className}`}
       onClick={() => onSort(field)}
     >
       <div className={`flex items-center ${isCentered ? 'justify-center' : 'justify-left'}`}>
         <span>{children}</span>
         <div className={`flex flex-col ${isCentered ? 'ml-1' : 'ml-1'}`}>
-          <ChevronUp 
-            className={`h-3 w-3 ${isActive && sortDirection === 'asc' ? 'text-blue-600' : 'text-gray-400'}`} 
+          <ChevronUp
+            className={`h-3 w-3 ${isActive && sortDirection === 'asc' ? 'text-blue-600' : 'text-gray-400'}`}
           />
-          <ChevronDown 
-            className={`h-3 w-3 -mt-1 ${isActive && sortDirection === 'desc' ? 'text-blue-600' : 'text-gray-400'}`} 
+          <ChevronDown
+            className={`h-3 w-3 -mt-1 ${isActive && sortDirection === 'desc' ? 'text-blue-600' : 'text-gray-400'}`}
           />
         </div>
       </div>
@@ -519,10 +517,7 @@ export default function RoleChecklistPage() {
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false)
   const [processingTasks, setProcessingTasks] = useState<Set<string>>(new Set())
 
-  // Bulk action state
-  const [selectedTasks, setSelectedTasks] = useState<Set<string>>(new Set())
-  const [bulkDeleteConfirmModal, setBulkDeleteConfirmModal] = useState(false)
-  const [bulkActionLoading, setBulkActionLoading] = useState(false)
+
 
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1)
@@ -812,7 +807,7 @@ export default function RoleChecklistPage() {
 
     try {
       const selectedTaskIds = Array.from(selectedTasks)
-      
+
       // Delete all selected tasks using the DELETE endpoint
       const deletePromises = selectedTaskIds.map(async (id) => {
         const response = await fetch(`/api/task-instances/${id}`, {
@@ -821,15 +816,15 @@ export default function RoleChecklistPage() {
             'Content-Type': 'application/json',
           },
         })
-        
+
         if (!response.ok) {
           const errorData = await response.json()
           throw new Error(errorData.error || `Failed to delete task ${id}`)
         }
-        
+
         return response.json()
       })
-      
+
       await Promise.all(deletePromises)
 
       // Remove from UI
@@ -837,7 +832,7 @@ export default function RoleChecklistPage() {
       setSelectedTasks(new Set())
 
       toastSuccess('Bulk Delete Complete', `Successfully deleted ${selectedTaskIds.length} task(s)`)
-      
+
       // Refresh to ensure consistency
       setRefreshKey((prev) => prev + 1)
     } catch (error) {
@@ -1047,10 +1042,10 @@ export default function RoleChecklistPage() {
       <main className="max-w-content-lg mx-auto px-4 sm:px-6 lg:px-18 py-6 sm:py-8">
         {/* Header */}
         <div className="mb-6 pharmacy-gradient rounded-lg p-6">
-          <div className="flex items-center justify-between">
-            <div>
+          <div className="flex flex-wrap justify-between gap-3">
+            <div className="min-w-0">
               <div className="flex items-center space-x-4 mb-2">
-                <h1 className="text-3xl font-bold text-white">
+                <h1 className="text-xl sm:text-2xl md:text-3xl font-bold text-white">
                   {isAdmin ? "Daily Checklist Overview" : `${role.charAt(0).toUpperCase() + role.slice(1)} Checklist`} —{" "}
                   {new Date(currentDate).toLocaleDateString("en-AU", {
                     weekday: "long",
@@ -1073,16 +1068,18 @@ export default function RoleChecklistPage() {
 
             {/* Checklist Management Button for Administrators */}
             {userRole === 'admin' && (
-              <Button
-                asChild
-                variant="outline"
-                className="bg-blue-600 text-white hover:bg-blue-700 border-blue-600 hover:border-blue-700 font-medium disabled:opacity-50"
-              >
-                <Link href="/admin/master-tasks" className="flex items-center space-x-2">
-                  <Settings className="w-4 h-4" />
-                  <span>Master Tasks Management</span>
-                </Link>
-              </Button>
+              <div className="min-w-0">
+                <Button
+                  asChild
+                  variant="outline"
+                  className="bg-blue-600 text-white hover:bg-blue-700 border-blue-600 hover:border-blue-700 font-medium disabled:opacity-50 max-w-full"
+                >
+                  <Link href="/admin/master-tasks" className="flex items-center space-x-2 truncate">
+                    <Settings className="w-4 h-4" />
+                    <span className="truncate">Master Tasks Management</span>
+                  </Link>
+                </Button>
+              </div>
             )}
           </div>
         </div>
@@ -1177,24 +1174,7 @@ export default function RoleChecklistPage() {
                 )}
               </CardTitle>
 
-              {/* Bulk Actions */}
-              {selectedTasks.size > 0 && (
-                <div className="flex items-center space-x-3">
-                  <span className="text-sm font-medium text-gray-700">
-                    {selectedTasks.size} task{selectedTasks.size !== 1 ? 's' : ''} selected
-                  </span>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={handleBulkDelete}
-                    disabled={bulkActionLoading}
-                    className="flex items-center space-x-1 text-red-600 hover:text-red-700 border-red-200 hover:border-red-300"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                    <span>Delete Selected</span>
-                  </Button>
-                </div>
-              )}
+
             </div>
           </CardHeader>
           <CardContent className="p-0">
@@ -1205,71 +1185,64 @@ export default function RoleChecklistPage() {
             ) : (
               <>
                 {/* Desktop Table */}
-                <div className="hidden lg:block overflow-x-auto px-4">
+                <div className="hidden xl:block overflow-x-auto px-4">
                   <Table className="table-fixed w-full">
                     <TableHeader>
                       <TableRow>
-                        <TableHead className="w-[5%] py-3 bg-gray-50 text-center">
-                          <Checkbox
-                            checked={selectedTasks.size === paginatedTasks.length && paginatedTasks.length > 0}
-                            onCheckedChange={handleSelectAll}
-                            aria-label="Select all tasks"
-                            className="data-[state=checked]:bg-blue-500 data-[state=checked]:text-white data-[state=checked]:border-blue-500"
-                          />
-                        </TableHead>
-                        <SortableHeader 
-                          field="title" 
-                          sortField={sortField} 
-                          sortDirection={sortDirection} 
+
+                        <SortableHeader
+                          field="title"
+                          sortField={sortField}
+                          sortDirection={sortDirection}
                           onSort={handleSort}
-                          className={isAdmin ? "w-[20%] py-3 bg-gray-50" : "w-[35%] py-3 bg-gray-50"}
+                          className={isAdmin ? "w-[23%] py-3 bg-gray-50" : "w-[30%] py-3 bg-gray-50"}
                         >
                           Title & Description
                         </SortableHeader>
                         {isAdmin && (
-                          <SortableHeader 
-                            field="responsibility" 
-                            sortField={sortField} 
-                            sortDirection={sortDirection} 
+                          <SortableHeader
+                            field="responsibility"
+                            sortField={sortField}
+                            sortDirection={sortDirection}
                             onSort={handleSort}
-                            className="w-[15%] py-3 bg-gray-50"
+                            className="w-[16%] py-3 bg-gray-50"
                           >
                             Responsibility
                           </SortableHeader>
                         )}
-                        <SortableHeader 
-                          field="category" 
-                          sortField={sortField} 
-                          sortDirection={sortDirection} 
+                        <SortableHeader
+                          field="category"
+                          sortField={sortField}
+                          sortDirection={sortDirection}
                           onSort={handleSort}
-                          className="w-[15%] py-3 bg-gray-50"
+                          className="w-[19%] py-3 bg-gray-50"
                         >
                           Category
                         </SortableHeader>
-                        <SortableHeader 
-                          field="frequency" 
-                          sortField={sortField} 
-                          sortDirection={sortDirection} 
+                        <SortableHeader
+                          field="frequency"
+                          sortField={sortField}
+                          sortDirection={sortDirection}
                           onSort={handleSort}
                           className="w-[15%] py-3 bg-gray-50"
                         >
                           Frequencies & Timing
                         </SortableHeader>
-                        <SortableHeader 
-                          field="due_time" 
-                          sortField={sortField} 
-                          sortDirection={sortDirection} 
+                        <SortableHeader
+                          field="due_time"
+                          sortField={sortField}
+                          sortDirection={sortDirection}
                           onSort={handleSort}
                           className="w-[7%] py-3 bg-gray-50 text-left"
                         >
                           Due Time
                         </SortableHeader>
-                        <SortableHeader 
-                          field="status" 
-                          sortField={sortField} 
-                          sortDirection={sortDirection} 
+                        <SortableHeader
+                          field="status"
+                          sortField={sortField}
+                          sortDirection={sortDirection}
                           onSort={handleSort}
-                          className="w-[8%] py-3 bg-gray-50"
+                          className="w-[10%] py-3 bg-gray-50"
                         >
                           Status
                         </SortableHeader>
@@ -1279,14 +1252,7 @@ export default function RoleChecklistPage() {
                     <TableBody>
                       {paginatedTasks.map((task) => (
                         <TableRow key={`${task.id}-${refreshKey}`}>
-                          <TableCell className="py-3 text-center">
-                            <Checkbox
-                              checked={selectedTasks.has(task.id)}
-                              onCheckedChange={(checked) => handleSelectTask(task.id, checked as boolean)}
-                              aria-label={`Select task ${task.master_task.title}`}
-                              className="data-[state=checked]:bg-blue-500 data-[state=checked]:text-white data-[state=checked]:border-blue-500"
-                            />
-                          </TableCell>
+
                           <TableCell className="py-3">
                             <div className="max-w-full">
                               {task.master_task.title && task.master_task.title.trim() && (
@@ -1381,7 +1347,7 @@ export default function RoleChecklistPage() {
                 </div>
 
                 {/* Mobile/Tablet Card Layout */}
-                <div className="lg:hidden space-y-4 p-4">
+                <div className="xl:hidden space-y-4 p-4">
                   {paginatedTasks.map((task) => (
                     <Card key={`${task.id}-${refreshKey}`} className="border border-gray-200">
                       <CardContent className="p-4">
@@ -1397,7 +1363,7 @@ export default function RoleChecklistPage() {
                           </div>
 
                           {/* Details Grid */}
-                          <div className="space-y-3 text-sm">
+                          <div className="space-y-3 text-sm grid sm:grid-cols-2 gap-2">
                             {isAdmin && (
                               <div>
                                 <span className="text-gray-500">Responsibility:</span>
@@ -1412,79 +1378,83 @@ export default function RoleChecklistPage() {
                                 {renderBadgesWithTruncation(task.master_task.categories, 3, 'category')}
                               </div>
                             </div>
+
+                          </div>
+
+                          <div className="space-y-3 text-sm grid sm:grid-cols-2 gap-2">
                             <div>
                               <span className="text-gray-500">Frequencies & Timing:</span>
                               <div className="mt-1">
                                 {renderFrequencyWithDetails(task)}
                               </div>
                             </div>
-                            <div>
-                              <span className="text-gray-500">Due Time:</span>
-                              <div className="mt-1 font-medium">
-                                {task.master_task.due_time ? (
-                                  <span>{task.master_task.due_time}</span>
-                                ) : (
-                                  <span className="text-gray-400">No due time</span>
-                                )}
+                            <div className="flex grid grid-cols-2 gap-2">
+                              <div>
+                                <span className="text-gray-500">Due Time:</span>
+                                <div className="mt-1 font-medium">
+                                  {task.master_task.due_time ? (
+                                    <span>{task.master_task.due_time}</span>
+                                  ) : (
+                                    <span className="text-gray-400">No due time</span>
+                                  )}
+                                </div>
+                              </div>
+                              <div className="items-center space-x-2">
+                                <span className="text-sm text-gray-500">Status:</span>
+                                <div className="mt-1">
+                                  {getStatusBadge(task)}
+                                </div>
                               </div>
                             </div>
                           </div>
 
-                          {/* Status and Actions */}
-                          <div className="flex flex-col space-y-3 pt-3 border-t">
-                            <div className="flex items-center justify-between">
-                              <div className="flex items-center space-x-2">
-                                <span className="text-sm text-gray-500">Status:</span>
-                                {getStatusBadge(task)}
-                              </div>
-                            </div>
 
-                            <div className="flex space-x-2">
-                              {task.status === "completed" ? (
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  onClick={() => handleTaskUndo(task.id)}
-                                  disabled={processingTasks.has(task.id)}
-                                  className="flex-1 border-green-300 bg-green-100 text-green-800 hover:bg-green-200 hover:border-green-400 font-medium disabled:opacity-50"
-                                >
-                                  {processingTasks.has(task.id) ? (
-                                    <span className="flex items-center justify-center">
-                                      <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-green-800 mr-1"></div>
-                                      Processing...
-                                    </span>
-                                  ) : (
-                                    <span>✓ Done</span>
-                                  )}
-                                </Button>
-                              ) : (
-                                <Button
-                                  size="sm"
-                                  onClick={() => handleTaskComplete(task.id)}
-                                  disabled={processingTasks.has(task.id)}
-                                  className="flex-1 bg-blue-600 text-white hover:bg-blue-700 border-blue-600 hover:border-blue-700 font-medium disabled:opacity-50"
-                                >
-                                  {processingTasks.has(task.id) ? (
-                                    <span className="flex items-center justify-center">
-                                      <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-white mr-1"></div>
-                                      Processing...
-                                    </span>
-                                  ) : (
-                                    <span>Done ?</span>
-                                  )}
-                                </Button>
-                              )}
+                          {/* Actions */}
+                          <div className="flex space-x-2 grid grid-cols-2 gap-2">
+                            {task.status === "completed" ? (
                               <Button
                                 size="sm"
                                 variant="outline"
-                                onClick={() => handleViewDetails(task)}
-                                title="View Details"
-                                className="hover:bg-gray-100"
+                                onClick={() => handleTaskUndo(task.id)}
+                                disabled={processingTasks.has(task.id)}
+                                className="flex-1 border-green-300 bg-green-100 text-green-800 hover:bg-green-200 hover:border-green-400 font-medium disabled:opacity-50"
                               >
-                                <Eye className="h-4 w-4" />
-                                <span className="ml-1"></span>
+                                {processingTasks.has(task.id) ? (
+                                  <span className="flex items-center justify-center">
+                                    <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-green-800 mr-1"></div>
+                                    Processing...
+                                  </span>
+                                ) : (
+                                  <span>✓ Done</span>
+                                )}
                               </Button>
-                            </div>
+                            ) : (
+                              <Button
+                                size="sm"
+                                onClick={() => handleTaskComplete(task.id)}
+                                disabled={processingTasks.has(task.id)}
+                                className="bg-blue-600 text-white hover:bg-blue-700 border-blue-600 hover:border-blue-700 font-medium disabled:opacity-50"
+                              >
+                                {processingTasks.has(task.id) ? (
+                                  <span className="flex items-center justify-center">
+                                    <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-white mr-1"></div>
+                                    Processing...
+                                  </span>
+                                ) : (
+                                  <span>Done ?</span>
+                                )}
+                              </Button>
+                            )}
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => handleViewDetails(task)}
+                              title="View Details"
+                              className="hover:bg-gray-100"
+                            >
+                              <Eye className="h-4 w-4" />
+                              <span className="ml-1">Details</span>
+                            </Button>
                           </div>
                         </div>
                       </CardContent>
@@ -1552,52 +1522,7 @@ export default function RoleChecklistPage() {
         onTaskUpdate={() => setRefreshKey(prev => prev + 1)}
       />
 
-      {/* Bulk Delete Confirmation Modal */}
-      <Dialog open={bulkDeleteConfirmModal} onOpenChange={setBulkDeleteConfirmModal}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle className="text-red-600 flex items-center">
-              <Trash2 className="w-5 h-5 mr-2" />
-              Delete Selected Tasks
-            </DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4">
-            <p className="text-gray-700">
-              Are you sure you want to delete <strong>{selectedTasks.size}</strong> selected task{selectedTasks.size !== 1 ? 's' : ''}?
-            </p>
-            <div className="bg-red-50 border border-red-200 rounded-lg p-3">
-              <p className="text-red-800 text-sm font-medium mb-2">This will permanently delete:</p>
-              <ul className="text-red-700 text-sm space-y-1">
-                <li>• {selectedTasks.size} task instance{selectedTasks.size !== 1 ? 's' : ''}</li>
-                <li>• All completion history for these tasks</li>
-              </ul>
-              <p className="text-red-800 text-sm font-medium mt-2">This action cannot be undone.</p>
-            </div>
-            <div className="flex justify-end space-x-2">
-              <Button
-                variant="outline"
-                onClick={() => setBulkDeleteConfirmModal(false)}
-                disabled={bulkActionLoading}
-              >
-                Cancel
-              </Button>
-              <Button
-                variant="destructive"
-                onClick={confirmBulkDelete}
-                disabled={bulkActionLoading}
-                className="bg-red-600 hover:bg-red-700"
-              >
-                {bulkActionLoading ? (
-                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                ) : (
-                  <Trash2 className="w-4 h-4 mr-2" />
-                )}
-                Delete Tasks
-              </Button>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
+
     </div>
   )
 }

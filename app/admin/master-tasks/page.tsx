@@ -1941,7 +1941,7 @@ export default function AdminMasterTasksPage() {
                             </div>
                           </TableCell>
                           <TableCell className="text-center">
-                            <div className="flex justify-center space-x-1">
+                            <div className="flex flex-wrap justify-center gap-1 max-w-full">
                               <Dialog>
                                 <DialogTrigger asChild>
                                   <Button
@@ -2011,7 +2011,7 @@ export default function AdminMasterTasksPage() {
                             </div>
                           </div>
                           {/* Details Grid */}
-                          <div className="space-y-3 text-sm">
+                          <div className="space-y-3 text-sm grid sm:grid-cols-2 gap-2">
                             <div>
                               <span className="text-gray-500">Responsibilities:</span>
                               <div className="mt-1">
@@ -2025,12 +2025,6 @@ export default function AdminMasterTasksPage() {
                                 ) : (
                                   <span className="text-gray-400 text-xs">None</span>
                                 )}
-                              </div>
-                            </div>
-                            <div>
-                              <span className="text-gray-500">Frequency:</span>
-                              <div className="mt-1">
-                                {renderFrequencyWithDetails(task)}
                               </div>
                             </div>
                             <div>
@@ -2049,6 +2043,12 @@ export default function AdminMasterTasksPage() {
                               </div>
                             </div>
                             <div>
+                              <span className="text-gray-500">Frequency:</span>
+                              <div className="mt-1">
+                                {renderFrequencyWithDetails(task)}
+                              </div>
+                            </div>
+                            <div>
                               <span className="text-gray-500">Due Time:</span>
                               <div className="flex items-center font-medium mt-1">
                                 <Clock className="w-3 h-3 mr-1 text-gray-400" />
@@ -2059,8 +2059,8 @@ export default function AdminMasterTasksPage() {
 
                           {/* Status and Actions */}
                           <div className="flex flex-col space-y-3 pt-3 border-t">
-                            <div className="flex items-center justify-between">
-                              <div className="flex items-center space-x-2">
+                            <div className="sm:flex items-center justify-between space-y-2">
+                              <div className="flex items-center justify-center space-x-2">
                                 <span className="text-sm text-gray-500">Status:</span>
                                 <Select
                                   value={task.publish_status}
@@ -2078,7 +2078,7 @@ export default function AdminMasterTasksPage() {
                                   </SelectContent>
                                 </Select>
                               </div>
-                              <div className="flex space-x-1">
+                              <div className="flex items-center justify-center flex-wrap gap-4">
                                 <Dialog>
                                   <DialogTrigger asChild>
                                     <Button

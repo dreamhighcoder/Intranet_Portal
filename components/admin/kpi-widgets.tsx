@@ -109,9 +109,9 @@ export function KPIWidgets() {
       bgColor: "bg-red-100",
     },
     {
-      title: "Total Tasks",
+      title: "Total Completed Tasks",
       value: isLoading ? "..." : stats?.totalTasks || 0,
-      description: "Total tasks in period",
+      description: "Total completed tasks in period",
       icon: Calendar,
       color: "text-purple-600",
       bgColor: "bg-purple-100",
