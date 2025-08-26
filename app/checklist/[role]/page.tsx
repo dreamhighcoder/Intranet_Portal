@@ -118,9 +118,42 @@ const getTimingColor = (timing: string) => {
 }
 
 const formatResponsibility = (responsibility: string) => {
-  return responsibility
+  if (!responsibility) return ''
+  const key = responsibility.trim().toLowerCase()
+
+  // Explicit mappings for known formats
+  const SPECIAL_MAP: Record<string, string> = {
+    'pharmacist-primary': 'Pharmacist (Primary)',
+    'pharmacist-supporting': 'Pharmacist (Supporting)',
+    'pharmacy-assistant-s': 'Pharmacy Assistant/s',
+    'dispensary-technician-s': 'Dispensary Technician/s',
+    'daa-packer-s': 'DAA Packer/s',
+    'operational-managerial': 'Operational/Managerial',
+  }
+  if (SPECIAL_MAP[key]) return SPECIAL_MAP[key]
+
+  // Helper to title-case with acronym handling
+  const toTitle = (w: string) => {
+    if (w.toLowerCase() === 'daa') return 'DAA'
+    return w.charAt(0).toUpperCase() + w.slice(1)
+  }
+
+  // Pharmacist variants with parentheses
+  const pharmacistMatch = key.match(/^pharmacist-(primary|supporting)$/)
+  if (pharmacistMatch) {
+    return `Pharmacist (${toTitle(pharmacistMatch[1])})`
+  }
+
+  // Plural marker: trailing "-s" -> "/s"
+  if (key.endsWith('-s')) {
+    const base = key.slice(0, -2).split('-').map(toTitle).join(' ')
+    return `${base}/s`
+  }
+
+  // Default: kebab-case to spaced Title Case
+  return key
     .split('-')
-    .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+    .map(toTitle)
     .join(' ')
 }
 
@@ -1236,11 +1269,11 @@ export default function RoleChecklistPage() {
                           sortField={sortField} 
                           sortDirection={sortDirection} 
                           onSort={handleSort}
-                          className="w-[8%] py-3 bg-gray-50 text-center"
+                          className="w-[8%] py-3 bg-gray-50"
                         >
                           Status
                         </SortableHeader>
-                        <TableHead className="w-[10%] py-3 bg-gray-50 text-center">Actions</TableHead>
+                        <TableHead className="w-[10%] py-3 bg-gray-50">Actions</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -1337,7 +1370,7 @@ export default function RoleChecklistPage() {
                                 className="hover:bg-gray-100"
                               >
                                 <Eye className="h-4 w-4" />
-                                <span className="ml-1">Details</span>
+                                <span className="ml-1"></span>
                               </Button>
                             </div>
                           </TableCell>
@@ -1449,7 +1482,7 @@ export default function RoleChecklistPage() {
                                 className="hover:bg-gray-100"
                               >
                                 <Eye className="h-4 w-4" />
-                                <span className="ml-1">Details</span>
+                                <span className="ml-1"></span>
                               </Button>
                             </div>
                           </div>

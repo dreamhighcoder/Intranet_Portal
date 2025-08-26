@@ -155,16 +155,13 @@ export default function UsersPositionsPage() {
   }
 
   const canDeletePosition = (position: Position) => {
-    // Super admins can delete any position except their own
+    // No one can delete the Super Administrator position
+    if (position.is_super_admin) {
+      return false
+    }
+
+    // Super admins can delete other positions (but super admin is already blocked above)
     if (isSuperAdmin) {
-      // Check if this is the super admin's own position
-      if (position.password_hash) {
-        const decodedPassword = atob(position.password_hash)
-        // If this is the super admin position (admin123), prevent deletion
-        if (decodedPassword === 'admin123') {
-          return false
-        }
-      }
       return true
     }
     

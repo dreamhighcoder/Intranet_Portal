@@ -4,7 +4,7 @@ import { getTasksForRoleOnDate } from '@/lib/db'
 import { TaskRecurrenceEngine } from '@/lib/task-recurrence-engine'
 import { getHolidayChecker } from '@/lib/holiday-checker-adapter'
 import { ChecklistQuerySchema } from '@/lib/validation-schemas'
-import { getAustralianNow, createAustralianDateTime } from '@/lib/timezone-utils'
+import { getAustralianNow, getAustralianToday, createAustralianDateTime } from '@/lib/timezone-utils'
 
 export async function GET(request: NextRequest) {
   try {
@@ -89,52 +89,57 @@ export async function GET(request: NextRequest) {
     const nineAM = createAustralianDateTime(validatedDate, '09:00')
     
     const counts = {
-      total: 0,
-      newSinceNine: 0,
-      dueToday: 0,
-      overdue: 0,
-      completed: 0
+      total: 0,           // pending tasks to do today
+      newSinceNine: 0,    // pending and created since 9:00am today
+      dueToday: 0,        // pending and scheduled for today
+      overdue: 0,         // pending and past due time
+      completed: 0        // completed today
     }
     
     filteredTasks.forEach(task => {
       const instance = instanceMap.get(task.id)
       const isCompleted = instance?.status === 'completed'
       
-      counts.total++
-      
       if (isCompleted) {
         counts.completed++
-      } else {
-        // Convert task to master task format for due time calculation
-        const masterTask = {
-          id: task.id,
-          title: task.title,
-          responsibility: task.responsibility || [],
-          frequencies: task.frequencies || [],
-          categories: task.categories || [],
-          timing: task.timing as any || 'anytime_during_day',
-          due_time: task.due_time,
-          publish_delay_date: task.publish_delay_date,
-          publish_status: task.publish_status as any || 'active',
-          due_date: task.due_date
+        return
+      }
+
+      // Only count pending tasks as "to do"
+      counts.total++
+
+      // Convert task to master task format for due time calculation
+      const masterTask = {
+        id: task.id,
+        title: task.title,
+        responsibility: task.responsibility || [],
+        frequencies: task.frequencies || [],
+        categories: task.categories || [],
+        timing: task.timing as any || 'anytime_during_day',
+        due_time: task.due_time,
+        publish_delay_date: task.publish_delay_date,
+        publish_status: task.publish_status as any || 'active',
+        due_date: task.due_date
+      }
+      
+      // Calculate due time using recurrence engine
+      const dueTime = recurrenceEngine.calculateDueTime(masterTask)
+      const dueDateTime = createAustralianDateTime(validatedDate, dueTime)
+      
+      // Count tasks specifically due today (pending)
+      const australianToday = getAustralianToday()
+      if (validatedDate === australianToday) {
+        counts.dueToday++
+        
+        // Check if overdue using Australian-local time
+        if (now > dueDateTime) {
+          counts.overdue++
         }
-        
-        // Calculate due time using recurrence engine
-        const dueTime = recurrenceEngine.calculateDueTime(masterTask)
-        const dueDateTime = createAustralianDateTime(validatedDate, dueTime)
-        
-        // Check if task is due today
-        if (validatedDate === now.toISOString().split('T')[0]) {
-          counts.dueToday++
-          
-          // Check if overdue
-          if (now > dueDateTime) {
-            counts.overdue++
-          }
-        }
-        
-        // Check if task was created since 9 AM
-        const taskCreatedAt = instance?.created_at ? new Date(instance.created_at) : now
+      }
+      
+      // Count new tasks since 9:00am only when an instance exists and was created after 9:00
+      if (instance?.created_at) {
+        const taskCreatedAt = new Date(instance.created_at)
         if (taskCreatedAt > nineAM) {
           counts.newSinceNine++
         }
