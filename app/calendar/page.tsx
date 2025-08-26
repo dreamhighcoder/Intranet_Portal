@@ -21,6 +21,7 @@ import {
   Users
 } from "lucide-react"
 import { useRouter } from "next/navigation"
+import { getAustralianToday, formatAustralianDate, toAustralianTime } from "@/lib/timezone-utils"
 
 interface CalendarDay {
   date: string
@@ -141,7 +142,7 @@ export default function CalendarPage() {
       }
       
       if (view === "week") {
-        params.append('date', currentDate.toISOString().split('T')[0])
+        params.append('date', formatAustralianDate(currentDate))
       }
 
       const url = `/api/calendar?${params.toString()}`
@@ -221,7 +222,7 @@ export default function CalendarPage() {
     if (!calendarData) return null
 
     const { calendar } = calendarData
-    const today = new Date().toISOString().split('T')[0]
+    const today = getAustralianToday()
 
     if (view === "week") {
       return (
@@ -232,7 +233,8 @@ export default function CalendarPage() {
             </div>
           ))}
           {calendar.map((day, index) => {
-            const date = new Date(day.date)
+            // Interpret server date as Australian local date for display
+            const date = toAustralianTime(new Date(day.date))
             const isToday = day.date === today
             
             return (
@@ -284,21 +286,22 @@ export default function CalendarPage() {
     }
 
     // Month view
-    const firstDayOfMonth = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1)
-    const startDate = new Date(firstDayOfMonth)
-    startDate.setDate(startDate.getDate() - firstDayOfMonth.getDay())
+    // Compute grid using Australian timezone to avoid UTC shifts
+    const ausFirst = toAustralianTime(new Date(currentDate.getFullYear(), currentDate.getMonth(), 1))
+    const startDate = new Date(ausFirst)
+    startDate.setDate(startDate.getDate() - ausFirst.getDay())
     
     const days = []
     for (let i = 0; i < 42; i++) {
       const date = new Date(startDate)
       date.setDate(startDate.getDate() + i)
-      const dateStr = date.toISOString().split('T')[0]
+      const dateStr = formatAustralianDate(date)
       const dayData = calendar.find(d => d.date === dateStr)
       
       days.push({
         date: dateStr,
         day: date.getDate(),
-        isCurrentMonth: date.getMonth() === currentDate.getMonth(),
+        isCurrentMonth: date.getMonth() === ausFirst.getMonth(),
         isToday: dateStr === today,
         data: dayData || {
           date: dateStr,
@@ -413,8 +416,8 @@ export default function CalendarPage() {
               <CalendarIcon className="w-4 h-4" />
               <span className="font-medium">
                 {view === 'month' 
-                  ? `${monthNames[currentDate.getMonth()]} ${currentDate.getFullYear()}`
-                  : `Week of ${currentDate.toLocaleDateString()}`
+                  ? `${monthNames[toAustralianTime(currentDate).getMonth()]} ${toAustralianTime(currentDate).getFullYear()}`
+                  : `Week of ${formatAustralianDate(currentDate)}`
                 }
               </span>
             </div>

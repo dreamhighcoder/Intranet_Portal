@@ -30,23 +30,25 @@ CREATE TABLE IF NOT EXISTS master_tasks (
     id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
     title TEXT NOT NULL,
     description TEXT,
-    position_id UUID REFERENCES positions(id),
-    frequency TEXT CHECK (frequency IN (
-        'once_off_sticky', 'every_day', 'weekly', 'specific_weekdays',
-        'start_every_month', 'start_certain_months', 'every_month',
-        'certain_months', 'end_every_month', 'end_certain_months'
-    )) NOT NULL,
-    weekdays INTEGER[] DEFAULT '{}',
-    months INTEGER[] DEFAULT '{}',
-    timing TEXT,
-    default_due_time TIME,
-    category TEXT,
-    publish_status TEXT CHECK (publish_status IN ('active', 'draft', 'inactive')) DEFAULT 'active',
-    publish_delay_date DATE,
-    sticky_once_off BOOLEAN DEFAULT FALSE,
-    allow_edit_when_locked BOOLEAN DEFAULT FALSE,
+    timing TEXT NOT NULL DEFAULT 'anytime_during_day',
+    due_time TIME,
+    start_date DATE,
+    end_date DATE,
+    frequencies TEXT[] DEFAULT '{}',
+    responsibility TEXT[] DEFAULT '{}',
+    categories TEXT[] DEFAULT '{}',
+    publish_status TEXT CHECK (publish_status IN ('active', 'draft', 'inactive')) DEFAULT 'draft',
+    publish_at TIMESTAMP WITH TIME ZONE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Create task_assignments table for many-to-many relationship
+CREATE TABLE IF NOT EXISTS task_assignments (
+    id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+    master_task_id UUID REFERENCES master_tasks(id) ON DELETE CASCADE,
+    position_id UUID REFERENCES positions(id) ON DELETE CASCADE,
+    UNIQUE (master_task_id, position_id)
 );
 
 -- Create task_instances table

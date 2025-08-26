@@ -41,6 +41,15 @@ export class HolidayChecker implements HolidayChecker {
   }
 
   /**
+   * Create and initialize a HolidayChecker instance
+   */
+  static async create(): Promise<HolidayChecker> {
+    const checker = new HolidayChecker();
+    await checker.initializeHolidays();
+    return checker;
+  }
+
+  /**
    * Create a HolidayChecker with provided holidays data
    */
   static withHolidays(holidays: Array<{date: string, name: string, region?: string}>): HolidayChecker {
@@ -179,11 +188,11 @@ export class HolidayChecker implements HolidayChecker {
 /**
  * Create a holiday checker instance
  */
-export function createHolidayChecker(): HolidayChecker {
-  return new HolidayChecker()
+export async function createHolidayChecker(): Promise<HolidayChecker> {
+  return await HolidayChecker.create();
 }
 
 /**
- * Default holiday checker instance
+ * Default holiday checker instance (as a promise)
  */
-export const defaultHolidayChecker = new HolidayChecker()
+export const defaultHolidayChecker: Promise<HolidayChecker> = HolidayChecker.create();

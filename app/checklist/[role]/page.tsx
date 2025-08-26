@@ -566,9 +566,13 @@ export default function RoleChecklistPage() {
         console.log('Response keys:', data ? Object.keys(data) : 'null')
 
         if (!data || !data.success) {
-          console.error('API reported failure:', data?.error)
-          console.error('Full response object:', JSON.stringify(data, null, 2))
-          throw new Error(data?.error || 'Failed to fetch tasks')
+          console.warn('API reported failure:', data?.error)
+          console.warn('Full response object:', JSON.stringify(data, null, 2))
+          // Avoid throwing to prevent Next.js unhandled error; show toast and keep UI usable
+          setTasks([])
+          const message = data?.error || 'Failed to fetch tasks'
+          toastError('Error', message)
+          return
         }
 
         console.log('Tasks received:', data.data?.length || 0)

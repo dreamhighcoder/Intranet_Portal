@@ -109,7 +109,7 @@ export async function authenticatedGet<T = any>(url: string, retryCount = 0): Pr
         console.warn(`Failed to fetch ${url}:`, {
           status: response.status,
           statusText: response.statusText,
-          errorBody: errorBody || 'Empty response',
+          errorBody: typeof errorBody === 'string' ? errorBody : JSON.stringify(errorBody) || 'Empty response',
           attempt: retryCount + 1,
           url: url
         })

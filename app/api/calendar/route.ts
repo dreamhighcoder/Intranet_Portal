@@ -226,6 +226,17 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    // Precompute dates to suppress (Sundays and public holidays)
+    const suppressedDateSet = new Set<string>()
+    for (const dateStr of dateRange) {
+      const d = parseAustralianDate(dateStr)
+      const isSunday = d.getDay() === 0
+      const isHoliday = holidayChecker.isHolidaySync(d)
+      if (isSunday || isHoliday) {
+        suppressedDateSet.add(dateStr)
+      }
+    }
+
     // Fill occurrences using new recurrence engine with Australian timezone
     for (const task of roleFiltered) {
       // Convert task to NewMasterTask format for new engine
@@ -255,6 +266,10 @@ export async function GET(request: NextRequest) {
         }
         
         if (shouldAppear) {
+          // Suppress creating tasks on Sundays and public holidays
+          if (suppressedDateSet.has(dateStr)) {
+            continue
+          }
           const day = calendarMap[dateStr]
           if (day) {
             day.total++

@@ -8,6 +8,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Check, X, Eye, Clock, AlertTriangle } from 'lucide-react'
 import { toastError, toastSuccess } from '@/hooks/use-toast'
+import { createAustralianDateTime, getAustralianNow } from '@/lib/timezone-utils'
 
 interface ChecklistTask {
   id: string
@@ -164,8 +165,10 @@ export default function ChecklistView({
         if (selectedStatus === "overdue") {
           if (task.status === "completed") return false
           if (task.master_task?.due_time) {
-            const dueTime = new Date(`${date}T${task.master_task.due_time}`)
-            const now = new Date()
+            // Compare in Australian timezone
+            const { createAustralianDateTime, getAustralianNow } = await import('@/lib/timezone-utils')
+            const dueTime = createAustralianDateTime(date, task.master_task.due_time)
+            const now = getAustralianNow()
             return now > dueTime
           }
           return false
@@ -204,8 +207,8 @@ export default function ChecklistView({
 
     // Check if overdue
     if (task.master_task?.due_time) {
-      const dueTime = new Date(`${date}T${task.master_task.due_time}`)
-      const now = new Date()
+      const dueTime = createAustralianDateTime(date, task.master_task.due_time)
+      const now = getAustralianNow()
       if (now > dueTime) {
         return (
           <Badge className="bg-red-100 text-red-800 border-red-200">

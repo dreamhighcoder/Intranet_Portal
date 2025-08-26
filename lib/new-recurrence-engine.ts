@@ -102,10 +102,8 @@ export interface MasterTask {
   active: boolean
   frequencies: NewFrequencyType[] // Array of frequencies
   timing: string // Default due time (HH:MM format)
-  publish_at?: string // ISO date string - no instances before this date
+  publish_delay?: string; // e.g., '1d', '2w', '3m'
   due_date?: string // For OnceOff tasks - admin-entered due date
-  start_date?: string // When task becomes active
-  end_date?: string // When task expires
   responsibility?: string[] // Position responsibilities
   categories?: string[] // Task categories
 }
@@ -171,39 +169,32 @@ export class NewRecurrenceEngine {
    * Generate task instances for a specific date
    */
   generateInstancesForDate(masterTasks: MasterTask[], date: string): GenerationResult {
-    const targetDate = parseAustralianDate(date) // Parse in Australian timezone
+    const targetDate = parseAustralianDate(date)
     const instances: TaskInstance[] = []
     const carry_instances: TaskInstance[] = []
 
     for (const task of masterTasks) {
-      // Skip if not active
-      if (!task.active) continue
-      
-      // Skip if before start_date
-      if (task.start_date && targetDate < parseAustralianDate(task.start_date)) continue
-      
-      // Skip if after end_date
-      if (task.end_date && targetDate > parseAustralianDate(task.end_date)) continue
-      
-      // Skip if before publish_at date
-      if (task.publish_at && targetDate < parseAustralianDate(task.publish_at)) continue
+      if (!this.isTaskActiveOnDate(task, targetDate)) {
+        continue
+      }
 
-      // Process each frequency in the task
       for (const frequency of task.frequencies) {
         const result = this.processTaskForDate(task, frequency, targetDate)
         if (result.shouldAppear) {
           const instance: TaskInstance = {
-            id: `${task.id}-${frequency}-${date}`,
+            id: this.generateInstanceId(task.id, frequency, date),
             master_task_id: task.id,
             date: date,
             due_date: result.dueDate,
             due_time: task.timing,
             status: TaskStatus.PENDING,
             locked: false,
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString()
+            created_at: getAustralianNow().toISOString(),
+            updated_at: getAustralianNow().toISOString(),
+            is_carry_instance: result.isCarryOver,
+            original_appearance_date: result.isCarryOver ? result.originalAppearanceDate : date
           }
-
+          
           if (result.isCarryOver) {
             carry_instances.push(instance)
           } else {
@@ -224,21 +215,12 @@ export class NewRecurrenceEngine {
    * Check if a task should appear on a specific date (for calendar/checklist views)
    */
   shouldTaskAppearOnDate(task: MasterTask, date: string): boolean {
-    const targetDate = parseAustralianDate(date) // Parse in Australian timezone
-    
-    // Skip if not active
-    if (!task.active) return false
-    
-    // Skip if before start_date
-    if (task.start_date && targetDate < parseAustralianDate(task.start_date)) return false
-    
-    // Skip if after end_date
-    if (task.end_date && targetDate > parseAustralianDate(task.end_date)) return false
-    
-    // Skip if before publish_at date
-    if (task.publish_at && targetDate < parseAustralianDate(task.publish_at)) return false
+    const targetDate = parseAustralianDate(date)
 
-    // Check if any frequency should appear on this date
+    if (!this.isTaskActiveOnDate(task, targetDate)) {
+      return false
+    }
+
     for (const frequency of task.frequencies) {
       const result = this.processTaskForDate(task, frequency, targetDate)
       if (result.shouldAppear) {
@@ -247,6 +229,30 @@ export class NewRecurrenceEngine {
     }
     
     return false
+  }
+
+  /**
+   * Check if a task is active and within its valid date range
+   */
+  private isTaskActiveOnDate(task: MasterTask, date: Date): boolean {
+    if (!task.active) return false
+    return true
+  }
+
+  /**
+   * Generate a unique ID for a task instance
+   */
+  private generateInstanceId(taskId: string, frequency: NewFrequencyType, date: string): string {
+    const hash = (str: string) => {
+      let hash = 0
+      for (let i = 0; i < str.length; i++) {
+        const char = str.charCodeAt(i)
+        hash = (hash << 5) - hash + char
+        hash |= 0 // Convert to 32bit integer
+      }
+      return Math.abs(hash).toString(36).substring(0, 5)
+    }
+    return `${taskId}-${frequency}-${date}-${hash(taskId + frequency + date)}`
   }
 
   /**
@@ -340,20 +346,28 @@ export class NewRecurrenceEngine {
     shouldAppear: boolean
     isCarryOver: boolean
     dueDate: string
+    originalAppearanceDate?: string
   } {
     if (!task.due_date) {
       return { shouldAppear: false, isCarryOver: false, dueDate: '' }
     }
 
-    const dueDate = new Date(task.due_date)
-    const firstEligibleDate = task.publish_at ? new Date(task.publish_at) : dueDate
+    const dueDate = parseAustralianDate(task.due_date)
+    const publishDate = new Date(dueDate)
+    if (task.publish_delay) {
+      const delayMatch = task.publish_delay.match(/^(\d+)([d])$/)
+      if (delayMatch) {
+        const amount = parseInt(delayMatch[1], 10)
+        publishDate.setDate(dueDate.getDate() - amount)
+      }
+    }
 
-    // Appears from first eligible date onwards (same instance continues)
-    if (date >= firstEligibleDate) {
+    // The task appears on the publish date and every day after until the due date
+    if (date >= publishDate && date <= dueDate) {
       return {
         shouldAppear: true,
-        isCarryOver: date > firstEligibleDate,
-        dueDate: task.due_date
+        isCarryOver: date > publishDate,
+        dueDate: formatAustralianDate(dueDate),
       }
     }
 
@@ -368,7 +382,6 @@ export class NewRecurrenceEngine {
     isCarryOver: boolean
     dueDate: string
   } {
-    // Skip Sundays (day 0) and public holidays
     if (this.isSundayOrHoliday(date)) {
       return { shouldAppear: false, isCarryOver: false, dueDate: '' }
     }
@@ -376,48 +389,49 @@ export class NewRecurrenceEngine {
     return {
       shouldAppear: true,
       isCarryOver: false,
-      dueDate: this.formatDate(date)
+      dueDate: formatAustralianDate(date)
     }
   }
 
   /**
-   * 3) Once Weekly - Monday anchored, carries through Saturday, locks on due date
+   * 3) Once Weekly - Monday anchored, carries through Saturday
+   * - Appear each Monday; if Monday is PH → Tuesday; if Tuesday also PH → next non-PH weekday forward within same week.
+   * - Due date: Saturday of that week; if PH, nearest earlier non-PH weekday (same week).
    */
   private processOnceWeekly(task: MasterTask, date: Date): {
     shouldAppear: boolean
     isCarryOver: boolean
     dueDate: string
+    originalAppearanceDate?: string
   } {
-    const monday = this.getWeekMonday(date)
-    const saturday = new Date(monday)
-    saturday.setDate(monday.getDate() + 5)
+    const weekMonday = this.getWeekMonday(date)
+    const weekSaturday = this.getWeekSaturday(date)
 
-    // Find the appearance date (Monday or shifted)
-    let appearanceDate = new Date(monday)
-    if (this.holidayChecker.isHolidaySync(appearanceDate)) {
-      // If Monday is PH → Tuesday
-      appearanceDate.setDate(appearanceDate.getDate() + 1)
-      if (this.holidayChecker.isHolidaySync(appearanceDate)) {
-        // If Tuesday also PH → next latest weekday forward in same week
-        appearanceDate = this.findNextWeekdayInWeek(appearanceDate, saturday)
+    // Find next non-PH weekday (Mon–Fri) within the same week starting from Monday
+    const nextWorkdayInWeek = (start: Date): Date | null => {
+      const d = new Date(start)
+      while (d <= weekSaturday) {
+        const day = d.getDay()
+        const isWeekday = day >= 1 && day <= 5 // Mon–Fri
+        if (isWeekday && !this.isHoliday(d)) return d
+        d.setDate(d.getDate() + 1)
       }
+      return null
     }
 
-    // Find the due date (Saturday or nearest earlier non-PH weekday)
-    let dueDate = new Date(saturday)
-    if (this.holidayChecker.isHolidaySync(dueDate)) {
-      const earlierDate = this.findNearestEarlierWeekdayInWeek(dueDate, monday)
-      if (earlierDate) {
-        dueDate = earlierDate
-      }
+    const appearanceDate = nextWorkdayInWeek(weekMonday)
+    if (!appearanceDate) {
+      return { shouldAppear: false, isCarryOver: false, dueDate: '' }
     }
 
-    // Appears from appearance date through due date
+    const dueDate = this.findPreviousBusinessDay(weekSaturday)
+
     if (date >= appearanceDate && date <= dueDate) {
       return {
         shouldAppear: true,
-        isCarryOver: date > appearanceDate,
-        dueDate: this.formatDate(dueDate)
+        isCarryOver: date.getTime() > appearanceDate.getTime(),
+        dueDate: formatAustralianDate(dueDate),
+        originalAppearanceDate: formatAustralianDate(appearanceDate)
       }
     }
 
@@ -425,52 +439,87 @@ export class NewRecurrenceEngine {
   }
 
   /**
-   * 4) Every Mon/Tue/Wed/Thu/Fri/Sat - Specific weekday, carries through Saturday
+   * 4) Every Mon/Tue/Wed/Thu/Fri/Sat (per selected weekday)
+   * - Appear on the specified weekday.
+   * - If target weekday is PH:
+   *   - Tue–Sat: appear on nearest earlier non-PH weekday in the same week; if none earlier, appear on the next latest non-PH weekday forward (same week).
+   *   - Mon: appear on the next latest non-PH weekday forward (same week).
+   * - Carry: Same instance keeps reappearing daily up to and including Saturday of that week.
+   * - Due date: The scheduled day’s date (after any PH shift) or last business day before Saturday if carrying.
    */
   private processSpecificWeekday(task: MasterTask, frequency: NewFrequencyType, date: Date): {
     shouldAppear: boolean
     isCarryOver: boolean
     dueDate: string
+    originalAppearanceDate?: string
   } {
-    const targetWeekday = this.getTargetWeekday(frequency)
+    const weekdayIndexMap: { [key: string]: number } = {
+      'monday': 1, 'tuesday': 2, 'wednesday': 3,
+      'thursday': 4, 'friday': 5, 'saturday': 6
+    }
+    const targetWeekday = weekdayIndexMap[frequency]
+    if (targetWeekday === undefined) {
+      return { shouldAppear: false, isCarryOver: false, dueDate: '' }
+    }
+
+    // Compute week boundaries and the scheduled day for this week
     const weekMonday = this.getWeekMonday(date)
-    const weekSaturday = new Date(weekMonday)
-    weekSaturday.setDate(weekMonday.getDate() + 5)
+    const weekSaturday = this.getWeekSaturday(date)
+    const scheduled = new Date(weekMonday)
+    scheduled.setDate(weekMonday.getDate() + (targetWeekday - 1))
 
-    // Find the scheduled day in this week
-    const scheduledDay = new Date(weekMonday)
-    scheduledDay.setDate(weekMonday.getDate() + (targetWeekday - 1))
+    // Helper: find previous business day within the same week
+    const prevBusinessInWeek = (start: Date): Date | null => {
+      const d = new Date(start)
+      while (d >= weekMonday) {
+        if (!this.isSundayOrHoliday(d)) return d
+        d.setDate(d.getDate() - 1)
+      }
+      return null
+    }
 
-    // Handle PH shifting
-    let appearanceDate = new Date(scheduledDay)
-    if (this.holidayChecker.isHolidaySync(appearanceDate)) {
-      if (targetWeekday === 1) { // Monday
-        // For Mon: appear on next latest non-PH weekday forward
-        appearanceDate = this.findNextWeekdayInWeek(appearanceDate, weekSaturday)
-      } else { // Tue-Sat
-        // For Tue-Sat: appear on nearest earlier non-PH weekday in same week
-        const earlierDate = this.findNearestEarlierWeekdayInWeek(appearanceDate, weekMonday)
-        if (earlierDate) {
-          appearanceDate = earlierDate
-        } else {
-          // If none earlier, appear on next latest non-PH weekday forward
-          appearanceDate = this.findNextWeekdayInWeek(appearanceDate, weekSaturday)
+    // Helper: find next business day within the same week
+    const nextBusinessInWeek = (start: Date): Date | null => {
+      const d = new Date(start)
+      while (d <= weekSaturday) {
+        if (!this.isSundayOrHoliday(d)) return d
+        d.setDate(d.getDate() + 1)
+      }
+      return null
+    }
+
+    // Determine appearance date based on PH shifting rules
+    let appearanceDate: Date | null = null
+    if (!this.isHoliday(scheduled)) {
+      appearanceDate = scheduled
+    } else {
+      if (targetWeekday === 1) {
+        // Monday: always move forward within the same week
+        appearanceDate = nextBusinessInWeek(new Date(scheduled))
+      } else {
+        // Tue–Sat: prefer nearest earlier within the same week; if none, move forward
+        appearanceDate = prevBusinessInWeek(new Date(scheduled))
+        if (!appearanceDate) {
+          appearanceDate = nextBusinessInWeek(new Date(scheduled))
         }
       }
     }
 
-    // Find the cutoff date (Saturday or nearest earlier non-PH weekday)
-    let cutoffDate = new Date(weekSaturday)
-    if (this.holidayChecker.isHolidaySync(cutoffDate)) {
-      cutoffDate = this.findNearestEarlierWeekdayInWeek(cutoffDate, weekMonday) || cutoffDate
+    if (!appearanceDate) {
+      return { shouldAppear: false, isCarryOver: false, dueDate: '' }
     }
 
-    // Appears from appearance date through cutoff date
-    if (date >= appearanceDate && date <= cutoffDate) {
+    // Due date: the scheduled day (after shift), but if carrying through week, cap at last business day before/at Saturday
+    const weekDue = this.findPreviousBusinessDay(weekSaturday)
+    const effectiveDue = weekDue < appearanceDate ? appearanceDate : weekDue
+
+    // Appear each day from appearanceDate through effectiveDue (carry)
+    if (date >= appearanceDate && date <= effectiveDue) {
       return {
         shouldAppear: true,
-        isCarryOver: date > appearanceDate,
-        dueDate: this.formatDate(scheduledDay) // Due date is the original scheduled day
+        isCarryOver: date.getTime() > appearanceDate.getTime(),
+        dueDate: formatAustralianDate(effectiveDue),
+        originalAppearanceDate: formatAustralianDate(appearanceDate)
       }
     }
 
@@ -478,92 +527,37 @@ export class NewRecurrenceEngine {
   }
 
   /**
-   * 5) Start of Month - 1st of month (with shifts), +5 workdays due, carries to last Saturday
+   * 5) Start of Every Month
+   * - Appear: 1st; if Sat/Sun → first Monday after; if that day is a PH → next non-PH weekday.
+   * - Due: 5 full workdays from appearance, excluding weekends & PHs; if lands on PH → extend to next weekday.
    */
   private processStartOfMonth(task: MasterTask, date: Date): {
     shouldAppear: boolean
     isCarryOver: boolean
     dueDate: string
+    originalAppearanceDate?: string
   } {
-    // Only process if we're in the same month as the target date
-    const targetMonth = date.getMonth()
-    const targetYear = date.getFullYear()
-    const firstOfMonth = new Date(Date.UTC(targetYear, targetMonth, 1))
-    
-    // Find appearance date for this month
-    let appearanceDate = new Date(firstOfMonth)
-    if (this.isWeekend(appearanceDate)) {
-      // If 1st is Sat/Sun → first Monday after
-      appearanceDate = this.findFirstMondayAfter(appearanceDate)
-    }
-    if (this.holidayChecker.isHolidaySync(appearanceDate)) {
-      // If that day is PH → next latest non-PH weekday forward
-      appearanceDate = this.findNextWeekday(appearanceDate)
+    const firstDayOfMonth = new Date(date.getFullYear(), date.getMonth(), 1)
+    // First Monday after if weekend; then push forward if PH to next weekday
+    const mondayAfterWeekend = firstDayOfMonth.getDay() === 6
+      ? new Date(firstDayOfMonth.getFullYear(), firstDayOfMonth.getMonth(), 3)
+      : firstDayOfMonth.getDay() === 0
+        ? new Date(firstDayOfMonth.getFullYear(), firstDayOfMonth.getMonth(), 2)
+        : firstDayOfMonth
+    const appearanceDate = this.findNextWeekday(mondayAfterWeekend)
+
+    if (appearanceDate.getMonth() !== date.getMonth()) {
+      return { shouldAppear: false, isCarryOver: false, dueDate: '' }
     }
 
-    // Calculate due date: +5 workdays from appearance
-    const dueDate = this.addWorkdays(appearanceDate, 5)
-    
-    // Find cutoff date: last Saturday of month (or nearest earlier non-PH)
-    const lastSaturday = this.getLastSaturdayOfMonth(date)
-    let cutoffDate = new Date(lastSaturday)
-    if (this.holidayChecker.isHolidaySync(cutoffDate)) {
-      const earlierDate = this.findNearestEarlierWeekdayInMonth(cutoffDate)
-      if (earlierDate) {
-        cutoffDate = earlierDate
-      }
-    }
+    const dueDate = this.addWorkdaysExcludingWeekends(appearanceDate, 5)
 
-    // Appears from appearance date through cutoff date
-    if (date >= appearanceDate && date <= cutoffDate) {
-      return {
-        shouldAppear: true,
-        isCarryOver: date > appearanceDate,
-        dueDate: this.formatDate(dueDate)
-      }
-    }
-
-    return { shouldAppear: false, isCarryOver: false, dueDate: '' }
-  }
-
-  /**
-   * 6) Once Monthly - Same appearance as Start of Month, due last Saturday, locks on due date
-   */
-  private processOnceMonthly(task: MasterTask, date: Date): {
-    shouldAppear: boolean
-    isCarryOver: boolean
-    dueDate: string
-  } {
-    // Only process if we're in the same month as the target date
-    const targetMonth = date.getMonth()
-    const targetYear = date.getFullYear()
-    const firstOfMonth = new Date(Date.UTC(targetYear, targetMonth, 1))
-    
-    // Find appearance date (same as Start of Month)
-    let appearanceDate = new Date(firstOfMonth)
-    if (this.isWeekend(appearanceDate)) {
-      appearanceDate = this.findFirstMondayAfter(appearanceDate)
-    }
-    if (this.holidayChecker.isHolidaySync(appearanceDate)) {
-      appearanceDate = this.findNextWeekday(appearanceDate)
-    }
-
-    // Due date: last Saturday of month (or nearest earlier non-PH)
-    const lastSaturday = this.getLastSaturdayOfMonth(date)
-    let dueDate = new Date(lastSaturday)
-    if (this.holidayChecker.isHolidaySync(dueDate)) {
-      const earlierDate = this.findNearestEarlierWeekdayInMonth(dueDate)
-      if (earlierDate) {
-        dueDate = earlierDate
-      }
-    }
-
-    // Appears from appearance date through due date only (not past due date)
     if (date >= appearanceDate && date <= dueDate) {
       return {
         shouldAppear: true,
-        isCarryOver: date > appearanceDate,
-        dueDate: this.formatDate(dueDate)
+        isCarryOver: date.getTime() > appearanceDate.getTime(),
+        dueDate: formatAustralianDate(dueDate),
+        originalAppearanceDate: formatAustralianDate(appearanceDate)
       }
     }
 
@@ -571,546 +565,315 @@ export class NewRecurrenceEngine {
   }
 
   /**
-   * 7) End of Month - Last Monday with ≥5 workdays, due last Saturday, locks on due date
-   */
-  private processEndOfMonth(task: MasterTask, date: Date): {
-    shouldAppear: boolean
-    isCarryOver: boolean
-    dueDate: string
-  } {
-    // Only process if we're in the same month as the target date
-    const targetMonth = date.getMonth()
-    const targetYear = date.getFullYear()
-    
-    // Find appearance date: latest Monday with ≥5 remaining workdays
-    const appearanceDate = this.findEndOfMonthAppearanceDate(date)
-    
-    // Due date: last Saturday of month (or nearest earlier non-PH)
-    const lastSaturday = this.getLastSaturdayOfMonth(date)
-    let dueDate = new Date(lastSaturday)
-    if (this.holidayChecker.isHolidaySync(dueDate)) {
-      const earlierDate = this.findNearestEarlierWeekdayInMonth(dueDate)
-      if (earlierDate) {
-        dueDate = earlierDate
-      }
-    }
-
-    // Appears from appearance date through due date only
-    if (date >= appearanceDate && date <= dueDate) {
-      return {
-        shouldAppear: true,
-        isCarryOver: date > appearanceDate,
-        dueDate: this.formatDate(dueDate)
-      }
-    }
-
-    return { shouldAppear: false, isCarryOver: false, dueDate: '' }
-  }
-
-  /**
-   * 6) Start of January/February/etc - Same as Start of Month but specific months
+   * 6) Start of Specific Month - follows Start of Every Month rules for a specific month
    */
   private processStartOfSpecificMonth(task: MasterTask, frequency: NewFrequencyType, date: Date): {
     shouldAppear: boolean
     isCarryOver: boolean
     dueDate: string
+    originalAppearanceDate?: string
   } {
-    const targetMonth = this.getTargetMonth(frequency)
-    
-    // Only process if we're in the target month
-    if (date.getMonth() !== targetMonth) {
+    const month = this.getMonthFromFrequency(frequency)
+    if (month === -1 || date.getMonth() !== month) {
       return { shouldAppear: false, isCarryOver: false, dueDate: '' }
     }
 
-    // Use the same logic as Start of Month
-    return this.processStartOfMonth(task, date)
+    const firstDayOfMonth = new Date(date.getFullYear(), date.getMonth(), 1)
+    const mondayAfterWeekend = firstDayOfMonth.getDay() === 6
+      ? new Date(firstDayOfMonth.getFullYear(), firstDayOfMonth.getMonth(), 3)
+      : firstDayOfMonth.getDay() === 0
+        ? new Date(firstDayOfMonth.getFullYear(), firstDayOfMonth.getMonth(), 2)
+        : firstDayOfMonth
+    const appearanceDate = this.findNextWeekday(mondayAfterWeekend)
+
+    if (appearanceDate.getMonth() !== month) {
+      return { shouldAppear: false, isCarryOver: false, dueDate: '' }
+    }
+
+    const dueDate = this.addWorkdaysExcludingWeekends(appearanceDate, 5)
+
+    if (date >= appearanceDate && date <= dueDate) {
+      return {
+        shouldAppear: true,
+        isCarryOver: date.getTime() > appearanceDate.getTime(),
+        dueDate: formatAustralianDate(dueDate),
+        originalAppearanceDate: formatAustralianDate(appearanceDate)
+      }
+    }
+
+    return { shouldAppear: false, isCarryOver: false, dueDate: '' }
   }
 
   /**
-   * 9) End of January/February/etc - Same as End of Month but specific months
+   * 7) Once Monthly
+   * - Appear: Same as Start of Every Month (weekend→Monday; PH→next weekday).
+   * - Due: Last Saturday of the month; if PH, nearest earlier non-PH weekday.
+   */
+  private processOnceMonthly(task: MasterTask, date: Date): {
+    shouldAppear: boolean
+    isCarryOver: boolean
+    dueDate: string
+    originalAppearanceDate?: string
+  } {
+    const firstDayOfMonth = new Date(date.getFullYear(), date.getMonth(), 1)
+    const mondayAfterWeekend = firstDayOfMonth.getDay() === 6
+      ? new Date(firstDayOfMonth.getFullYear(), firstDayOfMonth.getMonth(), 3)
+      : firstDayOfMonth.getDay() === 0
+        ? new Date(firstDayOfMonth.getFullYear(), firstDayOfMonth.getMonth(), 2)
+        : firstDayOfMonth
+    const appearanceDate = this.findNextWeekday(mondayAfterWeekend)
+
+    if (appearanceDate.getMonth() !== date.getMonth()) {
+      return { shouldAppear: false, isCarryOver: false, dueDate: '' }
+    }
+
+    const lastDayOfMonth = new Date(date.getFullYear(), date.getMonth() + 1, 0)
+    const dueDate = this.findPreviousBusinessDay(this.getWeekSaturday(lastDayOfMonth))
+
+    if (date >= appearanceDate && date <= dueDate) {
+      return {
+        shouldAppear: true,
+        isCarryOver: date.getTime() > appearanceDate.getTime(),
+        dueDate: formatAustralianDate(dueDate),
+        originalAppearanceDate: formatAustralianDate(appearanceDate)
+      }
+    }
+
+    return { shouldAppear: false, isCarryOver: false, dueDate: '' }
+  }
+
+  /**
+   * 8) End of Every Month
+   * - Appear: Last Monday of the month. If <5 workdays remain → shift to previous Monday. If that Monday is a PH → shift to next non-PH weekday (still within week/month).
+   * - Due: Last Saturday of the month. If PH → nearest earlier non-PH weekday.
+   */
+  private processEndOfMonth(task: MasterTask, date: Date): {
+    shouldAppear: boolean
+    isCarryOver: boolean
+    dueDate: string
+    originalAppearanceDate?: string
+  } {
+    const lastDayOfMonth = new Date(date.getFullYear(), date.getMonth() + 1, 0)
+    let lastMonday = this.getLastMondayOfMonth(date)
+
+    // Ensure at least 5 workdays (Mon–Fri excluding PH) remain after appearance
+    const hasFiveWorkdays = (start: Date, end: Date): boolean => {
+      let d = new Date(start)
+      let count = 0
+      while (d <= end) {
+        const day = d.getDay()
+        const isWeekday = day >= 1 && day <= 5
+        if (isWeekday && !this.isHoliday(d)) count++
+        d.setDate(d.getDate() + 1)
+      }
+      return count >= 5
+    }
+
+    if (!hasFiveWorkdays(lastMonday, lastDayOfMonth)) {
+      lastMonday.setDate(lastMonday.getDate() - 7)
+    }
+
+    // If that Monday is a PH → next non-PH weekday (prefer within same week/month)
+    let appearanceDate = new Date(lastMonday)
+    while (appearanceDate.getMonth() === date.getMonth() && this.isHoliday(appearanceDate)) {
+      appearanceDate.setDate(appearanceDate.getDate() + 1)
+      // stop if goes beyond month
+      if (appearanceDate > lastDayOfMonth) break
+    }
+
+    if (appearanceDate.getMonth() !== date.getMonth()) {
+      return { shouldAppear: false, isCarryOver: false, dueDate: '' }
+    }
+
+    const dueDate = this.findPreviousBusinessDay(this.getWeekSaturday(lastDayOfMonth))
+
+    if (date >= appearanceDate && date <= dueDate) {
+      return {
+        shouldAppear: true,
+        isCarryOver: date.getTime() > appearanceDate.getTime(),
+        dueDate: formatAustralianDate(dueDate),
+        originalAppearanceDate: formatAustralianDate(appearanceDate)
+      }
+    }
+
+    return { shouldAppear: false, isCarryOver: false, dueDate: '' }
+  }
+
+  /**
+   * 9) End of Specific Month - follows End of Every Month rules for a specific month
    */
   private processEndOfSpecificMonth(task: MasterTask, frequency: NewFrequencyType, date: Date): {
     shouldAppear: boolean
     isCarryOver: boolean
     dueDate: string
+    originalAppearanceDate?: string
   } {
-    const targetMonth = this.getTargetMonth(frequency)
-    
-    // Only process if we're in the target month
-    if (date.getMonth() !== targetMonth) {
+    const month = this.getMonthFromFrequency(frequency)
+    if (month === -1 || date.getMonth() !== month) {
       return { shouldAppear: false, isCarryOver: false, dueDate: '' }
     }
 
-    // Use the same logic as End of Month
-    return this.processEndOfMonth(task, date)
-  }
+    const lastDayOfMonth = new Date(date.getFullYear(), date.getMonth() + 1, 0)
+    let lastMonday = this.getLastMondayOfMonth(date)
 
-  /**
-   * Calculate status update for an instance based on current time
-   */
-  private calculateStatusUpdate(instance: TaskInstance, currentDateTime: Date, masterTasks?: MasterTask[]): StatusUpdateResult {
-    const currentDate = this.formatDate(currentDateTime)
-    const currentTime = this.formatTime(currentDateTime)
-    const dueDate = instance.due_date
-    const dueTime = instance.due_time_override || instance.due_time
+    // Ensure at least 5 workdays (Mon–Fri excluding PH) remain after appearance
+    const hasFiveWorkdays = (start: Date, end: Date): boolean => {
+      let d = new Date(start)
+      let count = 0
+      while (d <= end) {
+        const day = d.getDay()
+        const isWeekday = day >= 1 && day <= 5
+        if (isWeekday && !this.isHoliday(d)) count++
+        d.setDate(d.getDate() + 1)
+      }
+      return count >= 5
+    }
 
-    let newStatus = instance.status
-    let locked = instance.locked
-    let reason = 'No change'
+    if (!hasFiveWorkdays(lastMonday, lastDayOfMonth)) {
+      lastMonday.setDate(lastMonday.getDate() - 7)
+    }
 
-    // Skip if already done
-    if (instance.status === TaskStatus.DONE) {
+    // If that Monday is a PH → next non-PH weekday within month
+    let appearanceDate = new Date(lastMonday)
+    while (appearanceDate.getMonth() === month && this.isHoliday(appearanceDate)) {
+      appearanceDate.setDate(appearanceDate.getDate() + 1)
+      if (appearanceDate > lastDayOfMonth) break
+    }
+
+    if (appearanceDate.getMonth() !== month) {
+      return { shouldAppear: false, isCarryOver: false, dueDate: '' }
+    }
+
+    const dueDate = this.findPreviousBusinessDay(this.getWeekSaturday(lastDayOfMonth))
+
+    if (date >= appearanceDate && date <= dueDate) {
       return {
-        instance_id: instance.id,
-        old_status: instance.status,
-        new_status: instance.status,
-        locked,
-        updated: false,
-        reason: 'Already completed'
+        shouldAppear: true,
+        isCarryOver: date.getTime() > appearanceDate.getTime(),
+        dueDate: formatAustralianDate(dueDate),
+        originalAppearanceDate: formatAustralianDate(appearanceDate)
       }
     }
 
-    // Get master task frequency to determine locking rules
-    const frequency = this.getFrequencyFromMasterTasks(instance.master_task_id, masterTasks)
-
-    // Status transitions based on time
-    if (currentDate === dueDate && currentTime >= dueTime) {
-      // At due time on due date → Overdue (unlocked)
-      if (instance.status === TaskStatus.PENDING || instance.status === TaskStatus.IN_PROGRESS) {
-        newStatus = TaskStatus.OVERDUE
-        reason = 'Past due time'
-      }
-    }
-
-    // Locking rules based on frequency
-    if (currentDate > dueDate || (currentDate === dueDate && currentTime >= '23:59')) {
-      switch (frequency) {
-        case NewFrequencyType.ONCE_OFF:
-          // Never auto-lock
-          break
-          
-        case NewFrequencyType.EVERY_DAY:
-          // Lock at 23:59 same date
-          if (currentDate === dueDate && currentTime >= '23:59') {
-            newStatus = TaskStatus.MISSED
-            locked = true
-            reason = 'Missed at 23:59'
-          }
-          break
-          
-        case NewFrequencyType.ONCE_WEEKLY:
-        case NewFrequencyType.ONCE_MONTHLY:
-        case NewFrequencyType.END_OF_EVERY_MONTH:
-        case NewFrequencyType.END_OF_MONTH_JAN:
-        case NewFrequencyType.END_OF_MONTH_FEB:
-        case NewFrequencyType.END_OF_MONTH_MAR:
-        case NewFrequencyType.END_OF_MONTH_APR:
-        case NewFrequencyType.END_OF_MONTH_MAY:
-        case NewFrequencyType.END_OF_MONTH_JUN:
-        case NewFrequencyType.END_OF_MONTH_JUL:
-        case NewFrequencyType.END_OF_MONTH_AUG:
-        case NewFrequencyType.END_OF_MONTH_SEP:
-        case NewFrequencyType.END_OF_MONTH_OCT:
-        case NewFrequencyType.END_OF_MONTH_NOV:
-        case NewFrequencyType.END_OF_MONTH_DEC:
-          // Lock at 23:59 on due date
-          if (currentDate === dueDate && currentTime >= '23:59') {
-            newStatus = TaskStatus.MISSED
-            locked = true
-            reason = 'Missed at due date cutoff'
-          }
-          break
-          
-        case NewFrequencyType.MONDAY:
-        case NewFrequencyType.TUESDAY:
-        case NewFrequencyType.WEDNESDAY:
-        case NewFrequencyType.THURSDAY:
-        case NewFrequencyType.FRIDAY:
-        case NewFrequencyType.SATURDAY:
-        case NewFrequencyType.START_OF_EVERY_MONTH:
-        case NewFrequencyType.START_OF_MONTH_JAN:
-        case NewFrequencyType.START_OF_MONTH_FEB:
-        case NewFrequencyType.START_OF_MONTH_MAR:
-        case NewFrequencyType.START_OF_MONTH_APR:
-        case NewFrequencyType.START_OF_MONTH_MAY:
-        case NewFrequencyType.START_OF_MONTH_JUN:
-        case NewFrequencyType.START_OF_MONTH_JUL:
-        case NewFrequencyType.START_OF_MONTH_AUG:
-        case NewFrequencyType.START_OF_MONTH_SEP:
-        case NewFrequencyType.START_OF_MONTH_OCT:
-        case NewFrequencyType.START_OF_MONTH_NOV:
-        case NewFrequencyType.START_OF_MONTH_DEC:
-          // Lock at Saturday cutoff (or earlier PH stop)
-          const saturdayCutoff = this.calculateSaturdayCutoff(instance, frequency)
-          if (currentDateTime >= saturdayCutoff) {
-            newStatus = TaskStatus.MISSED
-            locked = true
-            reason = 'Missed at Saturday cutoff'
-          }
-          break
-      }
-    }
-
-    return {
-      instance_id: instance.id,
-      old_status: instance.status,
-      new_status: newStatus,
-      locked,
-      updated: newStatus !== instance.status || locked !== instance.locked,
-      reason
-    }
+    return { shouldAppear: false, isCarryOver: false, dueDate: '' }
   }
 
   // ========================================
-  // UTILITY METHODS
+  // HELPER FUNCTIONS
   // ========================================
 
-  private formatDate(date: Date): string {
-    return formatAustralianDate(date)
+  private getMonthFromFrequency(frequency: NewFrequencyType): number {
+    const monthMap: { [key: string]: number } = {
+      'start_of_month_jan': 0, 'end_of_month_jan': 0,
+      'start_of_month_feb': 1, 'end_of_month_feb': 1,
+      'start_of_month_mar': 2, 'end_of_month_mar': 2,
+      'start_of_month_apr': 3, 'end_of_month_apr': 3,
+      'start_of_month_may': 4, 'end_of_month_may': 4,
+      'start_of_month_jun': 5, 'end_of_month_jun': 5,
+      'start_of_month_jul': 6, 'end_of_month_jul': 6,
+      'start_of_month_aug': 7, 'end_of_month_aug': 7,
+      'start_of_month_sep': 8, 'end_of_month_sep': 8,
+      'start_of_month_oct': 9, 'end_of_month_oct': 9,
+      'start_of_month_nov': 10, 'end_of_month_nov': 10,
+      'start_of_month_dec': 11, 'end_of_month_dec': 11,
+    };
+    return monthMap[frequency] ?? -1;
   }
 
-  private formatTime(date: Date): string {
-    const australianDate = toAustralianTime(date)
-    return australianDate.toTimeString().split(' ')[0].substring(0, 5)
+  private isHoliday(date: Date): boolean {
+    return this.holidayChecker.isHolidaySync(date);
+  }
+
+  private isSundayOrHoliday(date: Date): boolean {
+    return date.getDay() === 0 || this.isHoliday(date);
   }
 
   private isWeekend(date: Date): boolean {
-    const australianDate = toAustralianTime(date)
-    const day = australianDate.getDay()
+    const day = date.getDay()
     return day === 0 || day === 6 // Sunday or Saturday
   }
 
-  private getWeekMonday(date: Date): Date {
-    const australianDate = toAustralianTime(date)
-    const monday = new Date(australianDate)
-    const day = australianDate.getDay()
-    const diff = day === 0 ? -6 : 1 - day // Sunday is 0, Monday is 1
-    monday.setDate(australianDate.getDate() + diff)
-    return monday
+  private isNonWorkingDay(date: Date): boolean {
+    // Non-working for monthly workday calculations: weekends (Sat/Sun) or PH
+    return this.isWeekend(date) || this.isHoliday(date)
   }
 
-  private getTargetWeekday(frequency: NewFrequencyType): number {
-    switch (frequency) {
-      case NewFrequencyType.MONDAY: return 1
-      case NewFrequencyType.TUESDAY: return 2
-      case NewFrequencyType.WEDNESDAY: return 3
-      case NewFrequencyType.THURSDAY: return 4
-      case NewFrequencyType.FRIDAY: return 5
-      case NewFrequencyType.SATURDAY: return 6
-      default: return 1
+  private findNextBusinessDay(date: Date): Date {
+    // Business day for weekly/carry rules: skip Sundays and PHs; Saturday allowed
+    let nextDay = new Date(date);
+    while (this.isSundayOrHoliday(nextDay)) {
+      nextDay.setDate(nextDay.getDate() + 1);
     }
+    return nextDay;
   }
 
-  private getTargetMonth(frequency: NewFrequencyType): number {
-    switch (frequency) {
-      case NewFrequencyType.START_OF_MONTH_JAN:
-      case NewFrequencyType.END_OF_MONTH_JAN:
-        return 0 // January
-      case NewFrequencyType.START_OF_MONTH_FEB:
-      case NewFrequencyType.END_OF_MONTH_FEB:
-        return 1 // February
-      case NewFrequencyType.START_OF_MONTH_MAR:
-      case NewFrequencyType.END_OF_MONTH_MAR:
-        return 2 // March
-      case NewFrequencyType.START_OF_MONTH_APR:
-      case NewFrequencyType.END_OF_MONTH_APR:
-        return 3 // April
-      case NewFrequencyType.START_OF_MONTH_MAY:
-      case NewFrequencyType.END_OF_MONTH_MAY:
-        return 4 // May
-      case NewFrequencyType.START_OF_MONTH_JUN:
-      case NewFrequencyType.END_OF_MONTH_JUN:
-        return 5 // June
-      case NewFrequencyType.START_OF_MONTH_JUL:
-      case NewFrequencyType.END_OF_MONTH_JUL:
-        return 6 // July
-      case NewFrequencyType.START_OF_MONTH_AUG:
-      case NewFrequencyType.END_OF_MONTH_AUG:
-        return 7 // August
-      case NewFrequencyType.START_OF_MONTH_SEP:
-      case NewFrequencyType.END_OF_MONTH_SEP:
-        return 8 // September
-      case NewFrequencyType.START_OF_MONTH_OCT:
-      case NewFrequencyType.END_OF_MONTH_OCT:
-        return 9 // October
-      case NewFrequencyType.START_OF_MONTH_NOV:
-      case NewFrequencyType.END_OF_MONTH_NOV:
-        return 10 // November
-      case NewFrequencyType.START_OF_MONTH_DEC:
-      case NewFrequencyType.END_OF_MONTH_DEC:
-        return 11 // December
-      default:
-        return 0
+  private findPreviousBusinessDay(date: Date): Date {
+    // Business day for weekly/carry rules: skip Sundays and PHs; Saturday allowed
+    let prevDay = new Date(date);
+    while (this.isSundayOrHoliday(prevDay)) {
+      prevDay.setDate(prevDay.getDate() - 1);
     }
-  }
-
-  private findNextWeekdayInWeek(startDate: Date, endDate: Date): Date {
-    let current = new Date(startDate)
-    current.setDate(current.getDate() + 1)
-    
-    while (current <= endDate) {
-      if (!this.isWeekend(current) && !this.holidayChecker.isHolidaySync(current)) {
-        return current
-      }
-      current.setDate(current.getDate() + 1)
-    }
-    
-    return startDate // Fallback
-  }
-
-  private findNearestEarlierWeekdayInWeek(startDate: Date, weekStart: Date): Date | null {
-    let current = new Date(startDate)
-    current.setDate(current.getDate() - 1)
-    
-    while (current >= weekStart) {
-      if (!this.isWeekend(current) && !this.holidayChecker.isHolidaySync(current)) {
-        return current
-      }
-      current.setDate(current.getDate() - 1)
-    }
-    
-    return null
-  }
-
-  private findFirstMondayAfter(date: Date): Date {
-    let current = new Date(date)
-    while (current.getDay() !== 1) {
-      current.setDate(current.getDate() + 1)
-    }
-    return current
+    return prevDay;
   }
 
   private findNextWeekday(date: Date): Date {
-    let current = new Date(date)
-    current.setDate(current.getDate() + 1)
-    
-    while (this.isWeekend(current) || this.holidayChecker.isHolidaySync(current)) {
-      current.setDate(current.getDate() + 1)
+    // Weekday Mon–Fri and not a PH (used for monthly start rules)
+    let d = new Date(date)
+    while (d.getDay() === 0 || d.getDay() === 6 || this.isHoliday(d)) {
+      d.setDate(d.getDate() + 1)
     }
-    
-    return current
+    return d
   }
 
-  private addWorkdays(startDate: Date, workdays: number): Date {
-    let current = new Date(startDate)
+  private addWorkdaysExcludingWeekends(date: Date, days: number): Date {
+    // Count 5 full workdays excluding weekends & PHs, extend forward if landing on PH/weekend
+    let d = new Date(date)
     let added = 0
-    
-    while (added < workdays) {
-      current.setDate(current.getDate() + 1)
-      if (!this.isWeekend(current) && !this.holidayChecker.isHolidaySync(current)) {
+    while (added < days) {
+      d.setDate(d.getDate() + 1)
+      const day = d.getDay()
+      const isWeekday = day >= 1 && day <= 5
+      if (isWeekday && !this.isHoliday(d)) {
         added++
       }
     }
-    
-    // If lands on PH, move to next day
-    if (this.holidayChecker.isHolidaySync(current)) {
-      current.setDate(current.getDate() + 1)
+    // If final day happens to be PH (shouldn't due to loop), still safeguard
+    while (d.getDay() === 0 || d.getDay() === 6 || this.isHoliday(d)) {
+      d.setDate(d.getDate() + 1)
     }
-    
-    return current
+    return d
   }
 
-  private getLastSaturdayOfMonth(date: Date): Date {
-    const lastDay = new Date(Date.UTC(date.getFullYear(), date.getMonth() + 1, 0))
-    const saturday = new Date(lastDay)
-    
-    while (saturday.getDay() !== 6) {
-      saturday.setDate(saturday.getDate() - 1)
-    }
-    
-    return saturday
-  }
-
-  private findNearestEarlierWeekdayInMonth(date: Date): Date | null {
-    let current = new Date(date)
-    current.setDate(current.getDate() - 1)
-    
-    while (current.getMonth() === date.getMonth()) {
-      if (!this.isWeekend(current) && !this.holidayChecker.isHolidaySync(current)) {
-        return current
+  private countBusinessDays(startDate: Date, endDate: Date): number {
+    let count = 0;
+    let currentDate = new Date(startDate);
+    while (currentDate <= endDate) {
+      if (!this.isSundayOrHoliday(currentDate)) {
+        count++;
       }
-      current.setDate(current.getDate() - 1)
+      currentDate.setDate(currentDate.getDate() + 1);
     }
-    
-    return null
+    return count;
   }
 
-  private findEndOfMonthAppearanceDate(date: Date): Date {
-    const lastSaturday = this.getLastSaturdayOfMonth(date)
-    
-    // Find latest Monday with ≥5 remaining workdays
-    let monday = new Date(lastSaturday)
-    while (monday.getDay() !== 1) {
-      monday.setDate(monday.getDate() - 1)
-    }
-    
-    // Check if this Monday has ≥5 workdays remaining
-    const workdaysRemaining = this.countWorkdaysUntilEndOfMonth(monday)
-    if (workdaysRemaining >= 5) {
-      // Handle PH shifting
-      if (this.holidayChecker.isHolidaySync(monday)) {
-        return this.findNextWeekday(monday)
-      }
-      return monday
-    } else {
-      // Move to previous Monday
-      monday.setDate(monday.getDate() - 7)
-      if (this.holidayChecker.isHolidaySync(monday)) {
-        return this.findNextWeekday(monday)
-      }
-      return monday
-    }
+  private getWeekMonday(date: Date): Date {
+    const day = date.getDay();
+    const diff = date.getDate() - day + (day === 0 ? -6 : 1);
+    return new Date(date.setDate(diff));
   }
 
-  private countWorkdaysUntilEndOfMonth(startDate: Date): number {
-    const endOfMonth = new Date(Date.UTC(startDate.getFullYear(), startDate.getMonth() + 1, 0))
-    let current = new Date(startDate)
-    let count = 0
-    
-    while (current <= endOfMonth) {
-      if (!this.isWeekend(current) && !this.holidayChecker.isHolidaySync(current)) {
-        count++
-      }
-      current.setDate(current.getDate() + 1)
-    }
-    
-    return count
+  private getWeekSaturday(date: Date): Date {
+    const monday = this.getWeekMonday(date);
+    const saturday = new Date(monday);
+    saturday.setDate(monday.getDate() + 5);
+    return saturday;
   }
 
-  private calculateSaturdayCutoff(instance: TaskInstance, freqForCutoff: NewFrequencyType): Date {
-    const instanceDate = new Date(instance.date)
-
-    // For weekday-based and start-of-month frequencies, cutoff is last Saturday of relevant period
-    if (
-      freqForCutoff === NewFrequencyType.MONDAY ||
-      freqForCutoff === NewFrequencyType.TUESDAY ||
-      freqForCutoff === NewFrequencyType.WEDNESDAY ||
-      freqForCutoff === NewFrequencyType.THURSDAY ||
-      freqForCutoff === NewFrequencyType.FRIDAY ||
-      freqForCutoff === NewFrequencyType.SATURDAY ||
-      freqForCutoff === NewFrequencyType.START_OF_EVERY_MONTH ||
-      freqForCutoff === NewFrequencyType.START_OF_MONTH_JAN ||
-      freqForCutoff === NewFrequencyType.START_OF_MONTH_FEB ||
-      freqForCutoff === NewFrequencyType.START_OF_MONTH_MAR ||
-      freqForCutoff === NewFrequencyType.START_OF_MONTH_APR ||
-      freqForCutoff === NewFrequencyType.START_OF_MONTH_MAY ||
-      freqForCutoff === NewFrequencyType.START_OF_MONTH_JUN ||
-      freqForCutoff === NewFrequencyType.START_OF_MONTH_JUL ||
-      freqForCutoff === NewFrequencyType.START_OF_MONTH_AUG ||
-      freqForCutoff === NewFrequencyType.START_OF_MONTH_SEP ||
-      freqForCutoff === NewFrequencyType.START_OF_MONTH_OCT ||
-      freqForCutoff === NewFrequencyType.START_OF_MONTH_NOV ||
-      freqForCutoff === NewFrequencyType.START_OF_MONTH_DEC
-    ) {
-      // Determine weekly vs monthly cutoff
-      if (
-        freqForCutoff === NewFrequencyType.MONDAY ||
-        freqForCutoff === NewFrequencyType.TUESDAY ||
-        freqForCutoff === NewFrequencyType.WEDNESDAY ||
-        freqForCutoff === NewFrequencyType.THURSDAY ||
-        freqForCutoff === NewFrequencyType.FRIDAY ||
-        freqForCutoff === NewFrequencyType.SATURDAY
-      ) {
-        const weekMonday = this.getWeekMonday(instanceDate)
-        let saturday = new Date(weekMonday)
-        saturday.setDate(weekMonday.getDate() + 5)
-        // If Saturday is a PH, move to nearest earlier non-PH weekday in week
-        if (this.holidayChecker.isHolidaySync(saturday)) {
-          const earlier = this.findNearestEarlierWeekdayInWeek(saturday, weekMonday)
-          if (earlier) saturday = earlier
-        }
-        saturday.setHours(23, 59, 59, 999)
-        return saturday
-      }
-
-      // Start-of-month: last Saturday of the month (or earlier non-PH)
-      let lastSat = this.getLastSaturdayOfMonth(instanceDate)
-      if (this.holidayChecker.isHolidaySync(lastSat)) {
-        const earlier = this.findNearestEarlierWeekdayInMonth(lastSat)
-        if (earlier) lastSat = earlier
-      }
-      lastSat.setHours(23, 59, 59, 999)
-      return lastSat
-    }
-
-    // Default: lock at due date 23:59
-    const dueEnd = new Date(`${instance.due_date}T23:59:00`)
-    return dueEnd
-  }
-
-  private getFrequencyFromMasterTasks(masterTaskId: string, masterTasks?: MasterTask[]): NewFrequencyType {
-    if (masterTasks) {
-      const masterTask = masterTasks.find(t => t.id === masterTaskId)
-      if (masterTask && masterTask.frequencies.length > 0) {
-        return masterTask.frequencies[0] // Use first frequency for status calculation
-      }
-    }
-    // Default fallback
-    return NewFrequencyType.EVERY_DAY
-  }
-
-  /**
-   * Helper method to check if a date is Sunday or a public holiday
-   * This ensures consistent checking across all frequency types
-   * Uses Australian timezone for day-of-week calculation
-   */
-  private isSundayOrHoliday(date: Date): boolean {
-    // Convert to Australian timezone for accurate day-of-week calculation
-    const australianDate = toAustralianTime(date)
-    
-    // Check if it's Sunday (day 0) in Australian timezone
-    if (australianDate.getDay() === 0) {
-      return true
-    }
-    
-    // Check if it's a public holiday
-    try {
-      return this.holidayChecker.isHolidaySync(australianDate)
-    } catch (error) {
-      // If holiday checking fails, log the error and assume it's not a holiday
-      console.warn('Holiday checking failed for date:', australianDate, error)
-      return false
-    }
-  }
-
-  /**
-   * Helper method to check if a date is a weekend (Saturday or Sunday)
-   * Uses Australian timezone for accurate day-of-week calculation
-   */
-  private isWeekendDay(date: Date): boolean {
-    const australianDate = toAustralianTime(date)
-    const day = australianDate.getDay()
-    return day === 0 || day === 6 // Sunday or Saturday
-  }
-
-  /**
-   * Helper method to safely check if a date is a public holiday
-   * with proper error handling and Australian timezone
-   */
-  private isPublicHoliday(date: Date): boolean {
-    try {
-      const australianDate = toAustralianTime(date)
-      return this.holidayChecker.isHolidaySync(australianDate)
-    } catch (error) {
-      console.warn('Holiday checking failed for date:', date, error)
-      return false
-    }
+  private getLastMondayOfMonth(date: Date): Date {
+    const lastDay = new Date(date.getFullYear(), date.getMonth() + 1, 0);
+    const day = lastDay.getDay();
+    const diff = lastDay.getDate() - day + (day === 0 ? -6 : 1);
+    return new Date(lastDay.setDate(diff));
   }
 }
-
-// ========================================
-// FACTORY FUNCTIONS
-// ========================================
-
-export function createNewRecurrenceEngine(publicHolidays: any[] = []): NewRecurrenceEngine {
-  const holidayChecker = new HolidayChecker(publicHolidays)
-  return new NewRecurrenceEngine(holidayChecker, 'Australia/Sydney')
-}
-
-export function createNewRecurrenceEngineWithTimezone(
-  publicHolidays: any[] = [], 
-  timezone: string = 'Australia/Sydney'
-): NewRecurrenceEngine {
-  const holidayChecker = new HolidayChecker(publicHolidays)
-  return new NewRecurrenceEngine(holidayChecker, timezone)
-}
+""

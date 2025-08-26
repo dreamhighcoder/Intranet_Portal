@@ -11,7 +11,7 @@
 
 import { NewRecurrenceEngine, TaskStatus, type MasterTask, type TaskInstance, type NewFrequencyType } from './new-recurrence-engine'
 import { TaskDatabaseAdapter } from './task-database-adapter'
-import { HolidayChecker as HolidayCheckerClass } from './holiday-checker'
+import { HolidayChecker, createHolidayChecker } from './holiday-checker'
 import { 
   getAustralianNow, 
   getAustralianToday, 
@@ -121,8 +121,7 @@ export class NewTaskGenerator {
   private adapter: TaskDatabaseAdapter
   private logLevel: 'silent' | 'info' | 'debug'
 
-  constructor(logLevel: 'silent' | 'info' | 'debug' = 'info') {
-    const holidayChecker = new HolidayCheckerClass()
+  constructor(holidayChecker: HolidayChecker, logLevel: 'silent' | 'info' | 'debug' = 'info') {
     this.engine = new NewRecurrenceEngine(holidayChecker)
     this.adapter = new TaskDatabaseAdapter()
     this.logLevel = logLevel
@@ -396,7 +395,7 @@ export class NewTaskGenerator {
           newStatus: TaskStatus.PENDING,
           locked: false,
           updated: false,
-          reason: 'Status update error',
+          reason: 'Update failed',
           error: error instanceof Error ? error.message : 'Unknown error'
         }],
         executionTime,
@@ -406,10 +405,45 @@ export class NewTaskGenerator {
     }
   }
 
-  // ========================================
-  // PRIVATE HELPER METHODS
-  // ========================================
+  /**
+   * Run the task generator for a range of dates
+   */
+  async generateForDateRange(startDate: string, endDate: string, options: Omit<NewGenerationOptions, 'date'> = {}): Promise<NewGenerationResult[]> {
+    const results: NewGenerationResult[] = []
+    let currentDate = parseAustralianDate(startDate)
+    const lastDate = parseAustralianDate(endDate)
 
+    while (currentDate <= lastDate) {
+      const dateStr = formatAustralianDate(currentDate)
+      const result = await this.generateForDate({ ...options, date: dateStr })
+      results.push(result)
+      currentDate.setDate(currentDate.getDate() + 1)
+    }
+
+    return results
+  }
+
+  /**
+   * Run status updates for a range of dates
+   */
+  async updateStatusesForDateRange(startDate: string, endDate: string, options: Omit<NewStatusUpdateOptions, 'date'> = {}): Promise<NewStatusUpdateResult[]> {
+    const results: NewStatusUpdateResult[] = []
+    let currentDate = parseAustralianDate(startDate)
+    const lastDate = parseAustralianDate(endDate)
+
+    while (currentDate <= lastDate) {
+      const dateStr = formatAustralianDate(currentDate)
+      const result = await this.updateStatusesForDate({ ...options, date: dateStr })
+      results.push(result)
+      currentDate.setDate(currentDate.getDate() + 1)
+    }
+
+    return results
+  }
+
+  /**
+   * Create an empty result object for when no tasks are processed
+   */
   private createEmptyResult(
     date: string, 
     testMode: boolean, 
@@ -420,7 +454,7 @@ export class NewTaskGenerator {
     return {
       date,
       totalTasks,
-      tasksProcessed: totalTasks,
+      tasksProcessed: 0,
       newInstances: 0,
       carryInstances: 0,
       totalInstances: 0,
@@ -433,6 +467,9 @@ export class NewTaskGenerator {
     }
   }
 
+  /**
+   * Create an empty status result object
+   */
   private createEmptyStatusResult(
     date: string, 
     testMode: boolean, 
@@ -452,57 +489,40 @@ export class NewTaskGenerator {
     }
   }
 
-  private log(level: 'silent' | 'info' | 'debug', message: string): void {
+  /**
+   * Log messages based on the configured log level
+   */
+  private log(level: 'info' | 'debug', message: string) {
     if (this.logLevel === 'silent') return
-    if (level === 'debug' && this.logLevel !== 'debug') return
-    
-    console.log(`[NewTaskGenerator] ${message}`)
+    if (this.logLevel === 'info' && level === 'info') {
+      console.log(`[INFO] ${message}`)
+    }
+    if (this.logLevel === 'debug') {
+      console.log(`[DEBUG] ${message}`)
+    }
   }
 }
 
-// ========================================
-// FACTORY FUNCTIONS
-// ========================================
-
 /**
- * Create a new task generator instance with engine
- */
-export async function createNewTaskGenerator(
-  logLevel: 'silent' | 'info' | 'debug' = 'info'
-): Promise<NewTaskGenerator> {
-  return new NewTaskGenerator(logLevel)
-}
-
-/**
- * Run daily generation using the new engine
+ * Run the new daily generation job
  */
 export async function runNewDailyGeneration(
   date?: string,
-  options: Partial<NewGenerationOptions> = {}
+  options: Omit<NewGenerationOptions, 'date'> = {}
 ): Promise<NewGenerationResult> {
-  const targetDate = date || getAustralianToday()
-  
-  const generator = await createNewTaskGenerator()
-  
-  return generator.generateForDate({
-    date: targetDate,
-    ...options
-  })
+  const targetDate = date || getAustralianToday();
+  const holidayChecker = await createHolidayChecker();
+  const generator = new NewTaskGenerator(holidayChecker, options.logLevel || 'info');
+
+  return await generator.generateForDate({ ...options, date: targetDate });
 }
 
 /**
- * Run daily status updates using the new engine
+ * Run the new status update job
  */
-export async function runNewDailyStatusUpdate(
-  date?: string,
-  options: Partial<NewStatusUpdateOptions> = {}
+export async function runNewStatusUpdate(
+  options: NewStatusUpdateOptions = {}
 ): Promise<NewStatusUpdateResult> {
-  const targetDate = date || getAustralianToday()
-  
-  const generator = await createNewTaskGenerator()
-  
-  return generator.updateStatusesForDate({
-    date: targetDate,
-    ...options
-  })
+  const generator = new NewTaskGenerator(await createHolidayChecker(), options.logLevel || 'info');
+  return await generator.updateStatusesForDate(options);
 }

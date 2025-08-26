@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { runNewDailyStatusUpdate } from '@/lib/new-task-generator'
+import { runNewStatusUpdate } from '@/lib/new-task-generator'
 import { getAustralianNow } from '@/lib/timezone-utils'
 
 export async function POST(request: NextRequest) {
@@ -17,7 +17,8 @@ export async function POST(request: NextRequest) {
     const { date, testMode = false, dryRun = false } = body
 
     // Run the new status update job
-    const result = await runNewDailyStatusUpdate(date, {
+    const result = await runNewStatusUpdate({
+      date,
       testMode,
       dryRun
     })
@@ -55,7 +56,8 @@ export async function GET(request: NextRequest) {
     const dryRun = searchParams.get('dryRun') === 'true'
 
     // Run the new status update job
-    const result = await runNewDailyStatusUpdate(date, {
+    const result = await runNewStatusUpdate({
+      date,
       testMode,
       dryRun
     })
