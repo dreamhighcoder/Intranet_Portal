@@ -8,7 +8,7 @@ import { Toaster } from "@/components/ui/toaster"
 import "./globals.css"
 
 export const metadata: Metadata = {
-  title: "Pharmacy Intranet Portal",
+  title: "Richmond Pharmacy Portal",
   description: "Internal task management and compliance system for pharmacy staff",
   generator: "v0.dev",
   keywords: ["pharmacy", "task management", "compliance", "intranet", "healthcare"],

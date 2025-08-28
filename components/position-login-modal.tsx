@@ -22,12 +22,12 @@ interface PositionLoginModalProps {
   checklistTitle?: string
 }
 
-export function PositionLoginModal({ 
-  isOpen, 
-  onClose, 
-  modalType, 
+export function PositionLoginModal({
+  isOpen,
+  onClose,
+  modalType,
   checklistPositionId,
-  checklistTitle 
+  checklistTitle
 }: PositionLoginModalProps) {
   const [selectedPosition, setSelectedPosition] = useState("")
   const [password, setPassword] = useState("")
@@ -51,14 +51,14 @@ export function PositionLoginModal({
         })))
 
         // Separate admin and non-admin positions
-        const admins = allPositions.filter(p => 
-          p.role === 'admin' || 
-          p.name.toLowerCase().includes('admin') || 
+        const admins = allPositions.filter(p =>
+          p.role === 'admin' ||
+          p.name.toLowerCase().includes('admin') ||
           p.displayName.toLowerCase().includes('admin')
         )
-        const others = allPositions.filter(p => 
-          p.role !== 'admin' && 
-          !p.name.toLowerCase().includes('admin') && 
+        const others = allPositions.filter(p =>
+          p.role !== 'admin' &&
+          !p.name.toLowerCase().includes('admin') &&
           !p.displayName.toLowerCase().includes('admin')
         )
 
@@ -74,7 +74,7 @@ export function PositionLoginModal({
         if (modalType === "checklist" && checklistPositionId) {
           // For checklist modal: show the specific position first, then consolidated admin
           const specificPosition = allPositions.find(p => p.id === checklistPositionId)
-          
+
           if (specificPosition) {
             const positions = [specificPosition]
             // Only add consolidated admin if it's not the same as the specific position
@@ -94,7 +94,7 @@ export function PositionLoginModal({
             positions.push(consolidatedAdmin)
           }
           positions.push(...others)
-          
+
           setAvailablePositions(positions)
         }
       } catch (error) {
@@ -148,7 +148,7 @@ export function PositionLoginModal({
 
       if (success) {
         onClose()
-        
+
         // Redirect based on authentication result
         const user = await PositionAuthService.getCurrentUser()
         if (user?.role === 'admin') {
@@ -186,16 +186,16 @@ export function PositionLoginModal({
   return (
     <Dialog open={isOpen} onOpenChange={handleClose}>
       <DialogContent className="w-full max-w-sm bg-[var(--color-surface)] border-[var(--color-border)]">
-        <DialogHeader className="text-center space-y-4">
+        <DialogHeader className="text-center space-y-6 gap-0">
           {/* Logo */}
-<div className="mx-auto w-20 h-18 bg-[var(--color-primary)] rounded-lg flex items-center justify-center">            <Image
-              src="/logo.png"
-              alt="Pharmacy Logo"
-              width={64}
-              height={64}
-              priority
-              className="rounded-lg"
-            />
+          <div className="mx-auto w-20 h-18 bg-[var(--color-primary)] rounded-lg flex items-center justify-center">            <Image
+            src="/logo.png"
+            alt="Pharmacy Logo"
+            width={64}
+            height={64}
+            priority
+            className="rounded-lg"
+          />
           </div>
           <DialogTitle className="text-2xl font-semibold text-[var(--color-text)] text-center mb-0">
             {getModalTitle()}
