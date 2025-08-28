@@ -193,7 +193,7 @@ export default function HomePage() {
               <img
                 src="/pharmacist.jpg"
                 alt=""
-                className="h-full w-auto object-contain"
+                className="h-full w-auto"
                 style={{
                   // Softer diagonal fade + wider horizontal assist
                   WebkitMaskImage: "linear-gradient(to top left, rgba(0,0,0,1) 52%, rgba(0,0,0,0.5) 72%, rgba(0,0,0,0) 96%), linear-gradient(to left, rgba(0,0,0,1) 50%, rgba(0,0,0,0) 92%)",
