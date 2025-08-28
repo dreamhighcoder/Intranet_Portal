@@ -65,7 +65,17 @@ export default function HomePage() {
         const iconMap = [Stethoscope, Users, Package, Building]
         const colorMap = ["var(--color-primary)", "#1565c0", "var(--accent-green)", "#2e7d32", "#fb8c00", "#d12c2c"]
 
-        const checklists = positions.map((position, index) => ({
+        // Order strictly by display_order ascending; fallback to name when equal or missing
+        const positionsOrdered = positions
+          .slice()
+          .sort((a: any, b: any) => {
+            const ao = a.display_order ?? Number.MAX_SAFE_INTEGER
+            const bo = b.display_order ?? Number.MAX_SAFE_INTEGER
+            if (ao !== bo) return ao - bo
+            return a.displayName.localeCompare(b.displayName)
+          })
+
+        const checklists = positionsOrdered.map((position, index) => ({
           title: `Checklist – ${position.displayName}`,
           description: getPositionDescription(position.displayName),
           icon: iconMap[index % iconMap.length],

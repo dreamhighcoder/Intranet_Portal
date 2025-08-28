@@ -14,6 +14,7 @@ export interface PositionAuth {
   password: string
   role: 'admin' | 'viewer'
   is_super_admin?: boolean
+  display_order?: number // used for homepage checklist ordering
   last_login?: Date
   login_attempts?: number
   locked_until?: Date
@@ -60,7 +61,9 @@ async function fetchPositionsFromDatabase(): Promise<PositionAuth[]> {
           displayName: pos.name,
           password: decodedPassword,
           role,
-          is_super_admin: pos.is_super_admin || false
+          is_super_admin: pos.is_super_admin || false,
+          // carry through display_order so consumers can sort on client
+          display_order: (pos as any).display_order
         }
       })
     
@@ -119,8 +122,21 @@ export class PositionAuthService {
       
       // Cache the result only if we got valid data
       if (positions.length > 0 && typeof window !== 'undefined') {
+        // Sort non-admins by display_order if provided, fallback to name.
+        const sorted = positions
+          .slice()
+          .sort((a, b) => {
+            const aIsAdmin = a.displayName.toLowerCase().includes('admin')
+            const bIsAdmin = b.displayName.toLowerCase().includes('admin')
+            if (aIsAdmin && !bIsAdmin) return 1
+            if (!aIsAdmin && bIsAdmin) return -1
+            const ao = (a as any).display_order ?? 9999
+            const bo = (b as any).display_order ?? 9999
+            if (ao !== bo) return ao - bo
+            return a.displayName.localeCompare(b.displayName)
+          })
         localStorage.setItem(cacheKey, JSON.stringify({
-          data: positions,
+          data: sorted,
           timestamp: now
         }))
       }

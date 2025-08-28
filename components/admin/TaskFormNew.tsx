@@ -319,7 +319,7 @@ export default function TaskFormNew({ task, onSubmit, onCancel }: TaskFormProps)
                 </div>
                 <div>
                   <p className="text-xs text-muted-foreground mt-1">
-                    Due time is auto-filled based on timing selection.
+                    Due time is auto-filled based on Timing selection. Can be overridden.
                   </p>
                 </div>
               </div>
@@ -600,7 +600,7 @@ export default function TaskFormNew({ task, onSubmit, onCancel }: TaskFormProps)
                 )}
                 <div>
                   <p className="text-xs text-muted-foreground">
-                    For once-off tasks, manually enter the due date. Multiple frequencies can be applied to a single task.
+                    For once off tasks, manually enter the due date. For all other tasks (i.e. recurring tasks), the due dates are system generated.
                   </p>
                 </div>
               </div>
@@ -608,7 +608,7 @@ export default function TaskFormNew({ task, onSubmit, onCancel }: TaskFormProps)
               {/* Show due date field only for once_off frequency */}
               {frequencies?.includes('once_off') && (
                 <div className="space-y-3">
-                  <Label htmlFor="due_date_once_off">Due Date *</Label>
+                  <Label htmlFor="due_date_once_off">Due Date of Once Off Task *</Label>
                   <div className="relative">
                     <Calendar className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                     <Input

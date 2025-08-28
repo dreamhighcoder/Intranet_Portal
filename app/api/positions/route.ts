@@ -19,6 +19,9 @@ export async function GET(request: NextRequest) {
     const { data: positions, error } = await supabaseAdmin
       .from('positions')
       .select(selectFields)
+      // Prefer explicit display order if available, then name
+      // Order by display_order; NULLs (admins) should sort last
+      .order('display_order', { ascending: true, nullsFirst: false })
       .order('name')
 
     console.log('Positions GET - Query result:', {

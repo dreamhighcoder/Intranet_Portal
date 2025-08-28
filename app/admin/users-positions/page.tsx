@@ -20,7 +20,7 @@ import { toastSuccess, toastError } from "@/hooks/use-toast"
 export default function UsersPositionsPage() {
   const { user, isLoading, isAdmin, isSuperAdmin } = usePositionAuth()
   const router = useRouter()
-  const [activeTab, setActiveTab] = useState<"positions" | "users">("positions")
+  const [activeTab, setActiveTab] = useState<"positions" | "users" | "order">("positions")
   const [positions, setPositions] = useState<Position[]>([])
   const [users, setUsers] = useState<UserProfile[]>([])
   const [isLoadingData, setIsLoadingData] = useState(true)
@@ -444,6 +444,18 @@ export default function UsersPositionsPage() {
             <span>Positions</span>
           </button>
           <button
+            onClick={() => setActiveTab("order")}
+            className={`flex items-center space-x-2 px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+              activeTab === "order"
+                ? "bg-white text-[var(--color-primary)] shadow-sm"
+                : "text-gray-600 hover:text-gray-900"
+            }`}
+            title="Reorder positions (excluding Administrator)"
+          >
+            <Briefcase className="w-4 h-4" />
+            <span>Position Order</span>
+          </button>
+          <button
             onClick={() => setActiveTab("users")}
             className={`flex items-center space-x-2 px-4 py-2 rounded-md text-sm font-medium transition-colors ${
               activeTab === "users"
@@ -589,6 +601,84 @@ export default function UsersPositionsPage() {
         )}
 
         {/* Users Tab */}
+        {activeTab === "order" && (
+          <Card className="card-surface">
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <CardTitle>Reorder Positions</CardTitle>
+                <Button 
+                  className="bg-[var(--color-primary)] hover:bg-[var(--color-primary)]/90 text-white"
+                  onClick={async () => {
+                    try {
+                      // Build new order for non-admin positions only
+                      const nonAdmin = positions
+                        .filter(p => !p.name.toLowerCase().includes('administrator') && !p.name.toLowerCase().includes('admin'))
+                        .sort((a, b) => (a.display_order ?? 9999) - (b.display_order ?? 9999) || a.name.localeCompare(b.name))
+
+                      const payload = nonAdmin.map((p, idx) => ({ id: p.id, display_order: idx + 1 }))
+                      await positionsApi.reorder(payload)
+                      toastSuccess('Saved', 'Display order updated successfully')
+                      PositionAuthService.clearCache()
+                      await refreshData()
+                    } catch (e) {
+                      console.error(e)
+                      toastError('Error', 'Failed to save display order')
+                    }
+                  }}
+                >
+                  Save Order
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <p className="text-sm text-gray-600 mb-4">Drag and drop to reorder regular positions. Administrator positions are excluded.</p>
+              {/* Simple drag-and-drop without extra libs */}
+              <ul>
+                {positions
+                  .filter(p => !p.name.toLowerCase().includes('administrator') && !p.name.toLowerCase().includes('admin'))
+                  .sort((a, b) => (a.display_order ?? 9999) - (b.display_order ?? 9999) || a.name.localeCompare(b.name))
+                  .map((p, idx) => (
+                    <li
+                      key={p.id}
+                      draggable
+                      onDragStart={(e) => {
+                        e.dataTransfer.setData('text/plain', p.id)
+                      }}
+                      onDragOver={(e) => e.preventDefault()}
+                      onDrop={(e) => {
+                        e.preventDefault()
+                        const draggedId = e.dataTransfer.getData('text/plain')
+                        if (!draggedId || draggedId === p.id) return
+                        // Reorder positions array in local state
+                        setPositions(prev => {
+                          const nonAdmin = prev.filter(x => !x.name.toLowerCase().includes('administrator') && !x.name.toLowerCase().includes('admin'))
+                          const admins = prev.filter(x => x.name.toLowerCase().includes('administrator') || x.name.toLowerCase().includes('admin'))
+                          const fromIndex = nonAdmin.findIndex(x => x.id === draggedId)
+                          const toIndex = nonAdmin.findIndex(x => x.id === p.id)
+                          if (fromIndex === -1 || toIndex === -1) return prev
+                          const next = nonAdmin.slice()
+                          const [moved] = next.splice(fromIndex, 1)
+                          next.splice(toIndex, 0, moved)
+                          // Reassign display_order locally
+                          const reindexed = next.map((item, i) => ({ ...item, display_order: i + 1 }))
+                          // Merge back admins (unchanged)
+                          return [...reindexed, ...admins]
+                        })
+                      }}
+                      className="flex items-center justify-between p-3 mb-2 bg-white rounded-md border cursor-move"
+                    >
+                      <div className="flex items-center gap-3">
+                        <span className="text-gray-500 w-6 text-right">{idx + 1}</span>
+                        <span className="font-medium">{p.name}</span>
+                      </div>
+                      <span className="text-xs text-gray-400">order: {p.display_order ?? '-'}</span>
+                    </li>
+                  ))}
+              </ul>
+            </CardContent>
+          </Card>
+        )}
+
         {activeTab === "users" && (
           <Card className="card-surface">
             <CardHeader>

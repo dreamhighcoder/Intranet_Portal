@@ -16,7 +16,7 @@ import { Check, X, Eye, LogOut, Settings, ChevronRight, Search, Clock, ChevronUp
 import Link from 'next/link'
 import { toastError, toastSuccess } from '@/hooks/use-toast'
 import { toKebabCase } from '@/lib/responsibility-mapper'
-import { authenticatedGet, authenticatedPost } from '@/lib/api-client'
+import { authenticatedGet, authenticatedPost, positionsApi } from '@/lib/api-client'
 import TaskDetailModal from '@/components/checklist/TaskDetailModal'
 
 interface ChecklistTask {
@@ -544,16 +544,29 @@ export default function RoleChecklistPage() {
     }
   }, [user, isLoading, router])
 
-  // Get unique responsibilities from tasks for admin filter
-  const uniqueResponsibilities = useMemo(() => {
-    if (!isAdmin) return []
-
-    const responsibilities = new Set<string>()
-    tasks.forEach(task => {
-      ; (task.master_task.responsibility || []).forEach(resp => responsibilities.add(resp))
-    })
-    return Array.from(responsibilities).sort()
-  }, [tasks, isAdmin])
+  // Get responsibilities from positions table (ordered by display_order, excluding Administrator)
+  const [responsibilitiesFromDb, setResponsibilitiesFromDb] = useState<string[]>([])
+  useEffect(() => {
+    const loadResponsibilities = async () => {
+      if (!isAdmin) return
+      try {
+        const positions = await positionsApi.getAll()
+        const nonAdmin = (positions || [])
+          .filter((p: any) => !p.name.toLowerCase().includes('administrator') && !p.name.toLowerCase().includes('admin'))
+          .sort((a: any, b: any) => {
+            const ao = a.display_order ?? 9999
+            const bo = b.display_order ?? 9999
+            if (ao !== bo) return ao - bo
+            return a.name.localeCompare(b.name)
+          })
+        setResponsibilitiesFromDb(nonAdmin.map((p: any) => toKebabCase(p.name)))
+      } catch (e) {
+        console.error('Failed to load responsibilities from DB:', e)
+        setResponsibilitiesFromDb([])
+      }
+    }
+    loadResponsibilities()
+  }, [isAdmin])
 
   // Load tasks when date, refresh key, role, or responsibility changes
   useEffect(() => {
@@ -1113,7 +1126,7 @@ export default function RoleChecklistPage() {
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="all">All Responsibilities</SelectItem>
-                      {uniqueResponsibilities.map(responsibility => (
+                      {responsibilitiesFromDb.map(responsibility => (
                         <SelectItem key={responsibility} value={responsibility}>
                           {formatResponsibility(responsibility)}
                         </SelectItem>
@@ -1180,10 +1193,10 @@ export default function RoleChecklistPage() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="25">25</SelectItem>
                     <SelectItem value="50">50</SelectItem>
                     <SelectItem value="100">100</SelectItem>
                     <SelectItem value="150">150</SelectItem>
+                    <SelectItem value="1000000">View All</SelectItem>
                   </SelectContent>
                 </Select>
               </div>

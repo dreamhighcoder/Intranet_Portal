@@ -290,6 +290,10 @@ export const positionsApi = {
     return await authenticatedPut(`/api/positions/${id}`, data)
   },
 
+  async reorder(order: Array<{ id: string; display_order: number }>) {
+    return await authenticatedPost('/api/positions/reorder', { order })
+  },
+
   async delete(id: string) {
     return await authenticatedDelete(`/api/positions/${id}`)
   }
