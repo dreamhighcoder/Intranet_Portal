@@ -112,11 +112,14 @@ export async function GET(request: NextRequest) {
         ? parseAustralianDate(searchParams.get('date')!)
         : new Date(year, month - 1, 1)
       
+      // Calculate Monday as the start of the week
+      const dayOfWeek = weekDate.getDay() // 0=Sun,1=Mon,...
+      const diffToMonday = (dayOfWeek + 6) % 7
       startDate = new Date(weekDate)
-      startDate.setDate(weekDate.getDate() - weekDate.getDay()) // Start of week (Sunday)
+      startDate.setDate(weekDate.getDate() - diffToMonday) // Start of week (Monday)
       
       endDate = new Date(startDate)
-      endDate.setDate(startDate.getDate() + 6) // End of week (Saturday)
+      endDate.setDate(startDate.getDate() + 6) // End of week (Sunday)
     } else {
       // Month view - use Australian timezone
       startDate = new Date(year, month - 1, 1)

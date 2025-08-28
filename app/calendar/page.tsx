@@ -72,7 +72,7 @@ const monthNames = [
   "July", "August", "September", "October", "November", "December"
 ]
 
-const dayNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
+const dayNames = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
 
 export default function CalendarPage() {
   const { user, isLoading: authLoading, isAdmin } = usePositionAuth()
@@ -289,7 +289,10 @@ export default function CalendarPage() {
     // Compute grid using Australian timezone to avoid UTC shifts
     const ausFirst = toAustralianTime(new Date(currentDate.getFullYear(), currentDate.getMonth(), 1))
     const startDate = new Date(ausFirst)
-    startDate.setDate(startDate.getDate() - ausFirst.getDay())
+    // Align month grid to start on Monday
+    const dayOfWeek = ausFirst.getDay() // 0=Sun,1=Mon,...
+    const diffToMonday = (dayOfWeek + 6) % 7
+    startDate.setDate(startDate.getDate() - diffToMonday)
     
     const days = []
     for (let i = 0; i < 42; i++) {
