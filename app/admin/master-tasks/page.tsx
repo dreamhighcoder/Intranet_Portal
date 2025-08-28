@@ -792,7 +792,7 @@ export default function AdminMasterTasksPage() {
 
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1)
-  const tasksPerPage = 50
+  const [tasksPerPage, setTasksPerPage] = useState(100)
 
   // Sorting state
   const [sortField, setSortField] = useState<string>('')
@@ -1749,6 +1749,20 @@ export default function AdminMasterTasksPage() {
                   </span>
                 )}
               </CardTitle>
+              <div className="mt-2 sm:mt-0 sm:ml-4 flex items-center gap-2">
+                <span className="text-sm text-gray-600">Per page:</span>
+                <Select value={String(tasksPerPage)} onValueChange={(v) => { setTasksPerPage(parseInt(v, 10)); setCurrentPage(1); }}>
+                  <SelectTrigger className="h-8 w-[110px]">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="25">25</SelectItem>
+                    <SelectItem value="50">50</SelectItem>
+                    <SelectItem value="100">100</SelectItem>
+                    <SelectItem value="150">150</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
 
             {/* Bulk Actions */}

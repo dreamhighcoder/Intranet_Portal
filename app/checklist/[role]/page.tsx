@@ -521,7 +521,7 @@ export default function RoleChecklistPage() {
 
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1)
-  const tasksPerPage = 50
+  const [tasksPerPage, setTasksPerPage] = useState(100)
 
   // Sorting state
   const [sortField, setSortField] = useState<string>('')
@@ -1164,7 +1164,7 @@ export default function RoleChecklistPage() {
         {/* Task List */}
         <Card className="card-surface mb-6">
           <CardHeader>
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between space-y-2 sm:space-y-0">
+            <div className="flex flex-col sm:flex-row sm:items-center space-y-2 sm:space-y-0">
               <CardTitle className="text-lg lg:text-xl mb-1">
                 Tasks ({Math.min(currentPage * tasksPerPage, filteredAndSortedTasks.length)} of {filteredAndSortedTasks.length})
                 {totalPages > 1 && (
@@ -1173,6 +1173,20 @@ export default function RoleChecklistPage() {
                   </span>
                 )}
               </CardTitle>
+              <div className="mt-2 sm:mt-0 sm:ml-4 flex items-center gap-2">
+                <span className="text-sm text-gray-600">Per page:</span>
+                <Select value={String(tasksPerPage)} onValueChange={(v) => { setTasksPerPage(parseInt(v, 10)); setCurrentPage(1); }}>
+                  <SelectTrigger className="h-8 w-[110px]">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="25">25</SelectItem>
+                    <SelectItem value="50">50</SelectItem>
+                    <SelectItem value="100">100</SelectItem>
+                    <SelectItem value="150">150</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
 
 
             </div>
