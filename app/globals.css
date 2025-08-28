@@ -167,7 +167,7 @@
 
 /* Updated pharmacy gradient with new primary color */
 .pharmacy-gradient {
-  background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-secondary) 100%);
+  background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-secondary) 105%);
 }
 
 /* Updated base styles with new color system */

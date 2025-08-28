@@ -44,14 +44,14 @@ export default function HomePage() {
     iconBg: string
     responsibility: string
   }>>([])
-  
+
   // Helper function to get position descriptions
   const getPositionDescription = (displayName: string): string => {
     // Generate generic description based on position name
     // This removes hardcoded position names and works with any position from database
     return `${displayName} tasks and responsibilities`
   }
-  
+
   // Map position names to responsibility values using our utility
   const getResponsibilityValue = (displayName: string): string => {
     return toKebabCase(displayName)
@@ -64,7 +64,7 @@ export default function HomePage() {
         const positions = await PositionAuthService.getChecklistPositions()
         const iconMap = [Stethoscope, Users, Package, Building]
         const colorMap = ["var(--color-primary)", "#1565c0", "var(--accent-green)", "#2e7d32", "#fb8c00", "#d12c2c"]
-        
+
         const checklists = positions.map((position, index) => ({
           title: `Checklist – ${position.displayName}`,
           description: getPositionDescription(position.displayName),
@@ -73,7 +73,7 @@ export default function HomePage() {
           iconBg: colorMap[index % colorMap.length],
           responsibility: getResponsibilityValue(position.displayName)
         }))
-        
+
         setStaffChecklists(checklists)
       } catch (error) {
         console.error('Error loading positions:', error)
@@ -81,7 +81,7 @@ export default function HomePage() {
         const fallbackPositions = PositionAuthService.getChecklistPositionsFallback()
         const iconMap = [Stethoscope, Users, Package, Building]
         const colorMap = ["var(--color-primary)", "#1565c0", "var(--accent-green)", "#2e7d32", "#fb8c00", "#d12c2c"]
-        
+
         const checklists = fallbackPositions.map((position, index) => ({
           title: `Checklist – ${position.displayName}`,
           description: getPositionDescription(position.displayName),
@@ -90,7 +90,7 @@ export default function HomePage() {
           iconBg: colorMap[index % colorMap.length],
           responsibility: getResponsibilityValue(position.displayName)
         }))
-        
+
         setStaffChecklists(checklists)
       }
     }
@@ -101,7 +101,7 @@ export default function HomePage() {
         loadPositions()
       }
     }
-    
+
     // Listen for the custom event from ChecklistCard
     const handleOpenChecklistLogin = (event: CustomEvent<{ positionId: string; roleDisplayName: string }>) => {
       const { positionId, roleDisplayName } = event.detail;
@@ -110,10 +110,10 @@ export default function HomePage() {
       setSelectedChecklistTitle(roleDisplayName);
       setIsLoginModalOpen(true);
     };
-    
+
     window.addEventListener('positions-updated', onPositionsUpdated);
     window.addEventListener('open-checklist-login', handleOpenChecklistLogin);
-    
+
     if (!isLoading && !user) {
       loadPositions()
     }
@@ -173,23 +173,59 @@ export default function HomePage() {
   }
 
   return (
-    <div className="min-h-screen" style={{ backgroundColor: "var(--color-bg)" }}>
+    <div className="min-h-screen" style={{ backgroundColor: "var(--color-bg)", backgroundImage: 'url("/pharmacy-hero.jpg")', backgroundSize: "cover", backgroundPosition: "center", backgroundRepeat: "no-repeat" }}>
       <PublicNavigation onLoginClick={handleLoginClick} />
 
       <main className="max-w-content-lg mx-auto px-4 sm:px-6 lg:px-18 py-6 sm:py-8">
         {/* Welcome Banner */}
         <div className="mb-8">
-          <div className="pharmacy-gradient rounded-lg p-4 sm:p-6" style={{ color: "var(--color-primary-on)" }}>
-            <h1 className="text-2xl sm:text-3xl font-bold mb-2">Welcome to Richmond Pharmacy</h1>
-            <p className="opacity-90 text-sm sm:text-base">
-              Access your position-specific checklist to manage daily tasks and responsibilities
-            </p>
+          <div
+            className="pharmacy-gradient rounded-lg p-4 sm:p-6 relative overflow-hidden"
+            style={{
+              color: "var(--color-primary-on)",
+            }}
+          >
+            {/* Right-side hero image with smooth left-edge fade */}
+            <div
+              aria-hidden={true}
+              className="absolute inset-y-0 right-0 w-1/3 sm:w-1/4 md:w-1/5 pointer-events-none h-full flex items-center justify-end"
+            >
+              <img
+                src="/pharmacist.jpg"
+                alt=""
+                className="h-full w-auto object-contain"
+                style={{
+                  // Softer diagonal fade + wider horizontal assist
+                  WebkitMaskImage: "linear-gradient(to top left, rgba(0,0,0,1) 52%, rgba(0,0,0,0.5) 72%, rgba(0,0,0,0) 96%), linear-gradient(to left, rgba(0,0,0,1) 50%, rgba(0,0,0,0) 92%)",
+                  maskImage: "linear-gradient(to top left, rgba(0,0,0,1) 52%, rgba(0,0,0,0.5) 72%, rgba(0,0,0,0) 96%), linear-gradient(to left, rgba(0,0,0,1) 50%, rgba(0,0,0,0) 92%)",
+                }}
+              />
+              {/* Blurring overlay near left edge for smoother blend */}
+              <div
+                aria-hidden={true}
+                className="absolute inset-y-0 left-0 w-[55%] pointer-events-none"
+                style={{
+                  // backdropFilter: "blur(10px)",
+                  WebkitBackdropFilter: "blur(10px)",
+                  WebkitMaskImage: "linear-gradient(to right, rgba(0,0,0,1) 0%, rgba(0,0,0,0.75) 50%, rgba(0,0,0,0) 100%), radial-gradient(120% 120% at 0% 50%, rgba(0,0,0,0.9) 0%, rgba(0,0,0,0) 60%)",
+                  maskImage: "linear-gradient(to right, rgba(0,0,0,1) 0%, rgba(0,0,0,0.75) 50%, rgba(0,0,0,0) 100%), radial-gradient(120% 120% at 0% 50%, rgba(0,0,0,0.9) 0%, rgba(0,0,0,0) 60%)",
+                }}
+              />
+            </div>
+
+            {/* Content */}
+            <div className="relative z-10">
+              <h1 className="text-2xl sm:text-3xl font-bold mb-2">Welcome to Richmond Pharmacy</h1>
+              <p className="opacity-90 text-sm sm:text-base">
+                Access your position-specific checklist to manage daily tasks and responsibilities
+              </p>
+            </div>
           </div>
         </div>
 
         {/* Staff Checklists Section */}
         <div className="mb-8">
-          <h2 className="text-xl sm:text-2xl font-bold mb-4 sm:mb-6" style={{ color: "var(--color-text)" }}>
+          <h2 className="text-xl sm:text-2xl font-bold mb-4 sm:mb-6" style={{ color: "white" }}>
             Staff Checklists
           </h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
