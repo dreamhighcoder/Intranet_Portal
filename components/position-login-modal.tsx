@@ -9,6 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { usePositionAuth } from "@/lib/position-auth-context"
 import { PositionAuthService, PositionAuth } from "@/lib/position-auth"
 import { useRouter } from "next/navigation"
+import Image from "next/image"
 import { toastError } from "@/hooks/use-toast"
 import { toKebabCase } from "@/lib/responsibility-mapper"
 
@@ -187,20 +188,14 @@ export function PositionLoginModal({
       <DialogContent className="w-full max-w-sm bg-[var(--color-surface)] border-[var(--color-border)]">
         <DialogHeader className="text-center space-y-4">
           {/* Logo */}
-          <div className="mx-auto w-16 h-16 bg-[var(--color-primary)] rounded-lg flex items-center justify-center">
-            <svg
-              className="w-8 h-8 text-[var(--color-primary-on)]"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 9.172V5L8 4z"
-              />
-            </svg>
+<div className="mx-auto w-20 h-18 bg-[var(--color-primary)] rounded-lg flex items-center justify-center">            <Image
+              src="/logo.png"
+              alt="Pharmacy Logo"
+              width={64}
+              height={64}
+              priority
+              className="rounded-lg"
+            />
           </div>
           <DialogTitle className="text-2xl font-semibold text-[var(--color-text)] text-center mb-0">
             {getModalTitle()}
