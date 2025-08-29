@@ -1059,7 +1059,7 @@ export default function RoleChecklistPage() {
             <div className="min-w-0">
               <div className="flex items-center space-x-4 mb-2">
                 <h1 className="text-xl sm:text-2xl md:text-3xl font-bold text-white">
-                  {isAdmin ? "Daily Checklist Overview" : `${role.charAt(0).toUpperCase() + role.slice(1)} Checklist`} —{" "}
+                  {isAdmin ? "Daily Checklist Overview" : `${formatResponsibility(role)} Checklist`} —{" "}
                   {new Date(currentDate).toLocaleDateString("en-AU", {
                     weekday: "long",
                     year: "numeric",
