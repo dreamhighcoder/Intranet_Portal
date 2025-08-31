@@ -30,32 +30,24 @@ export async function PUT(
     
     // If password is provided, validate and hash it
     if (password) {
-      // Check for duplicate admin passwords if this is an admin position
-      const isAdminPosition = name.toLowerCase().includes('administrator') || name.toLowerCase().includes('admin')
-      
-      if (isAdminPosition) {
-        // Check if password conflicts with other admin positions
-        const { data: existingAdminPositions, error: positionsError } = await supabaseAdmin
-          .from('positions')
-          .select('password_hash, name, id')
-          .or('name.ilike.%administrator%,name.ilike.%admin%')
-          .not('password_hash', 'is', null)
-          .neq('id', params.id) // Exclude the current position being updated
-        
-        if (positionsError) {
-          console.error('Error checking admin positions:', positionsError)
-          return NextResponse.json({ error: 'Failed to validate admin password' }, { status: 500 })
-        }
+      // Enforce unique password across ALL positions (exclude current)
+      const { data: existingPositions, error: positionsError } = await supabaseAdmin
+        .from('positions')
+        .select('password_hash, name, id')
+        .not('password_hash', 'is', null)
+        .neq('id', params.id)
 
-        // Check if password matches any existing admin position password
-        const encodedPassword = Buffer.from(password).toString('base64')
-        const conflictingPosition = existingAdminPositions?.find(pos => pos.password_hash === encodedPassword)
-        
-        if (conflictingPosition) {
-          return NextResponse.json({ 
-            error: `This password is already in use by the "${conflictingPosition.name}" position. Please choose a different password.` 
-          }, { status: 400 })
-        }
+      if (positionsError) {
+        console.error('Error checking positions for password uniqueness:', positionsError)
+        return NextResponse.json({ error: 'Failed to validate password uniqueness' }, { status: 500 })
+      }
+
+      const encodedPassword = Buffer.from(password).toString('base64')
+      const conflictingPosition = existingPositions?.find(pos => pos.password_hash === encodedPassword)
+      if (conflictingPosition) {
+        return NextResponse.json({ 
+          error: `This password is already in use by the "${conflictingPosition.name}" position. Please choose a different password.` 
+        }, { status: 400 })
       }
       
       // Generate a simple hash for position-based authentication

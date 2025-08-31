@@ -13,6 +13,7 @@ import { PositionAuthService } from "@/lib/position-auth"
 import { useRouter } from "next/navigation"
 import { useEffect } from "react"
 import { toKebabCase } from "@/lib/responsibility-mapper"
+import { positionsApi } from "@/lib/api-client"
 
 export default function HomePage() {
   const { user, isLoading } = usePositionAuth()
@@ -61,47 +62,39 @@ export default function HomePage() {
   useEffect(() => {
     const loadPositions = async () => {
       try {
-        const positions = await PositionAuthService.getChecklistPositions()
+        // Fetch all positions from API (public GET). We do NOT filter by password here so new positions appear.
+        const positions = await positionsApi.getAll()
+        const nonAdmin = (positions || [])
+          .filter((p: any) => !p.name?.toLowerCase().includes('administrator') && !p.name?.toLowerCase().includes('admin'))
         const iconMap = [Stethoscope, Users, Package, Building]
         const colorMap = ["var(--color-primary)", "#1565c0", "var(--accent-green)", "#2e7d32", "#fb8c00", "#d12c2c"]
 
         // Order strictly by display_order ascending; fallback to name when equal or missing
-        const positionsOrdered = positions
+        const positionsOrdered = nonAdmin
           .slice()
           .sort((a: any, b: any) => {
             const ao = a.display_order ?? Number.MAX_SAFE_INTEGER
             const bo = b.display_order ?? Number.MAX_SAFE_INTEGER
             if (ao !== bo) return ao - bo
-            return a.displayName.localeCompare(b.displayName)
+            return (a.displayName || a.name).localeCompare(b.displayName || b.name)
           })
 
-        const checklists = positionsOrdered.map((position, index) => ({
-          title: `Checklist – ${position.displayName}`,
-          description: getPositionDescription(position.displayName),
-          icon: iconMap[index % iconMap.length],
-          positionId: position.id,
-          iconBg: colorMap[index % colorMap.length],
-          responsibility: getResponsibilityValue(position.displayName)
-        }))
+        const checklists = positionsOrdered.map((position: any, index: number) => {
+          const display = position.displayName || position.name
+          return ({
+            title: `Checklist – ${display}`,
+            description: getPositionDescription(display),
+            icon: iconMap[index % iconMap.length],
+            positionId: position.id,
+            iconBg: colorMap[index % colorMap.length],
+            responsibility: getResponsibilityValue(display)
+          })
+        })
 
         setStaffChecklists(checklists)
       } catch (error) {
         console.error('Error loading positions:', error)
-        // Fallback to hardcoded positions if database fails
-        const fallbackPositions = PositionAuthService.getChecklistPositionsFallback()
-        const iconMap = [Stethoscope, Users, Package, Building]
-        const colorMap = ["var(--color-primary)", "#1565c0", "var(--accent-green)", "#2e7d32", "#fb8c00", "#d12c2c"]
-
-        const checklists = fallbackPositions.map((position, index) => ({
-          title: `Checklist – ${position.displayName}`,
-          description: getPositionDescription(position.displayName),
-          icon: iconMap[index % iconMap.length],
-          positionId: position.id,
-          iconBg: colorMap[index % colorMap.length],
-          responsibility: getResponsibilityValue(position.displayName)
-        }))
-
-        setStaffChecklists(checklists)
+        setStaffChecklists([])
       }
     }
 
@@ -241,10 +234,16 @@ export default function HomePage() {
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
             {staffChecklists.map((checklist) => {
               const IconComponent = checklist.icon
+              // Ensure non-empty role; fall back to slug from title; if still empty, skip rendering the card
+              const derivedRole = (checklist.responsibility || '').trim() || toKebabCase(checklist.title.replace('Checklist – ', ''))
+              if (!derivedRole) {
+                console.warn('Skipping ChecklistCard due to empty role', { checklist })
+                return null
+              }
               return (
                 <ChecklistCard
                   key={checklist.title}
-                  role={checklist.responsibility}
+                  role={derivedRole}
                   roleDisplayName={checklist.title.replace("Checklist – ", "")}
                   positionId={checklist.positionId}
                   icon={IconComponent}

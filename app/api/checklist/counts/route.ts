@@ -11,12 +11,17 @@ export async function GET(request: NextRequest) {
     const searchParams = request.nextUrl.searchParams
     const role = searchParams.get('role')
     const date = searchParams.get('date')
+
+    // Debug incoming params to help diagnose 400s in client
+    console.log('Checklist counts request params:', { role, date })
     
     // Validate query parameters using Zod schema
     const validationResult = ChecklistQuerySchema.safeParse({ role, date })
     
     if (!validationResult.success) {
+      console.warn('Checklist counts validation failed:', validationResult.error.errors)
       return NextResponse.json({ 
+        success: false,
         error: 'Invalid query parameters',
         details: validationResult.error.errors
       }, { status: 400 })

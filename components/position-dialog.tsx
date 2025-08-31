@@ -26,6 +26,8 @@ export function PositionDialog({ isOpen, onClose, position, onSave }: PositionDi
   const [description, setDescription] = useState("")
   const [password, setPassword] = useState("")
   const [isLoading, setIsLoading] = useState(false)
+  const [nameError, setNameError] = useState<string | null>(null)
+  const [passwordError, setPasswordError] = useState<string | null>(null)
 
   const isEditing = Boolean(position)
   const title = isEditing ? "Edit Position" : "Add Position"
@@ -67,13 +69,30 @@ export function PositionDialog({ isOpen, onClose, position, onSave }: PositionDi
       setDescription("")
     }
     setPassword("") // Always reset password field
+    setNameError(null)
+    setPasswordError(null)
   }, [position])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    
-    if (!name.trim()) {
+
+    // Reset errors
+    setNameError(null)
+    setPasswordError(null)
+
+    // Client-side required validation
+    const trimmedName = name.trim()
+    const trimmedPassword = password.trim()
+
+    if (!trimmedName) {
+      setNameError("Position name is required")
       toastError("Validation Error", "Position name is required")
+      return
+    }
+
+    if (!isEditing && canEditThisPassword && !trimmedPassword) {
+      setPasswordError("Password is required")
+      toastError("Validation Error", "Password is required")
       return
     }
 
@@ -81,9 +100,9 @@ export function PositionDialog({ isOpen, onClose, position, onSave }: PositionDi
 
     try {
       const data = {
-        name: name.trim(),
+        name: trimmedName,
         description: description.trim(),
-        ...(password && canEditThisPassword && { password })
+        ...(password && canEditThisPassword && { password: trimmedPassword })
       }
 
       if (isEditing && position) {
@@ -119,6 +138,11 @@ export function PositionDialog({ isOpen, onClose, position, onSave }: PositionDi
       }
       
       toastError("Save Failed", errorMessage)
+
+      // Inline error rendering hints
+      if (errorMessage.toLowerCase().includes("password") && errorMessage.toLowerCase().includes("already")) {
+        setPasswordError("This password is already in use by another position.")
+      }
     } finally {
       setIsLoading(false)
     }
@@ -137,18 +161,22 @@ export function PositionDialog({ isOpen, onClose, position, onSave }: PositionDi
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
         </DialogHeader>
-        <form onSubmit={handleSubmit} className="space-y-6 pt-4">
+        <form onSubmit={handleSubmit} noValidate className="space-y-6 pt-4">
           <div className="space-y-2">
             <Label htmlFor="name">Position Name *</Label>
             <Input
               id="name"
               type="text"
               value={name}
-              onChange={(e) => setName(e.target.value)}
+              onChange={(e) => { setName(e.target.value); if (nameError) setNameError(null) }}
               placeholder="Enter position name"
-              className="bg-white dark:bg-white"
-              required
+              className={`bg-white dark:bg-white ${nameError ? 'border-red-500 focus-visible:ring-red-500' : ''}`}
+              aria-invalid={!!nameError}
+              aria-describedby={nameError ? 'name-error' : undefined}
             />
+            {nameError && (
+              <p id="name-error" className="text-xs text-red-600 mt-1">{nameError}</p>
+            )}
           </div>
           
           <div className="space-y-2">
@@ -165,16 +193,18 @@ export function PositionDialog({ isOpen, onClose, position, onSave }: PositionDi
 
           <div className="space-y-2">
             <Label htmlFor="password">
-              {isEditing ? "New Password (optional)" : "Password"}
+              {isEditing ? "New Password (optional)" : "Password *"}
             </Label>
             {canEditThisPassword ? (
               <Input
                 id="password"
                 type="password"
                 value={password}
-                onChange={(e) => setPassword(e.target.value)}
+                onChange={(e) => { setPassword(e.target.value); if (passwordError) setPasswordError(null) }}
                 placeholder={isEditing ? "Leave blank to keep current password" : "Enter password for this position"}
-                className="bg-white dark:bg-white"
+                className={`bg-white dark:bg-white ${passwordError ? 'border-red-500 focus-visible:ring-red-500' : ''}`}
+                aria-invalid={!!passwordError}
+                aria-describedby={passwordError ? 'password-error' : undefined}
               />
             ) : (
               <div className="flex items-center space-x-2 p-2 bg-gray-50 border rounded-md">
@@ -182,15 +212,16 @@ export function PositionDialog({ isOpen, onClose, position, onSave }: PositionDi
                 <span className="text-sm text-gray-600">Password protected - cannot be changed</span>
               </div>
             )}
+            {passwordError && (
+              <p id="password-error" className="text-xs text-red-600 mt-1">{passwordError}</p>
+            )}
             <p className="text-xs text-gray-600 mt-1">
               {canEditThisPassword ? (
                 <>
                   This password will be used for position-based authentication
-                  {(name.toLowerCase().includes('admin') || name.toLowerCase().includes('administrator')) && (
-                    <span className="block text-amber-600 mt-1 font-medium">
-                      ⚠️ Admin positions must have unique passwords. Each admin position requires a different password for security.
-                    </span>
-                  )}
+                  <span className="block text-amber-600 mt-1 font-medium">
+                    ⚠️ Position passwords must be unique. Each position requires a different password for security.
+                  </span>
                 </>
               ) : (
                 "Only Super Admins can change passwords for other admin positions"

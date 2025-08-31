@@ -453,8 +453,8 @@ export default function AdminPublicHolidaysPage() {
                   variant="outline"
                   className="bg-white/10 border-white/20 text-white hover:bg-white/20"
                 >
-                  <Download className="w-4 h-4 mr-2" />
-                  Import NSW
+                  <Download className="w-4 h-4" />
+                  Import
                 </Button>
               </div>
             </div>
@@ -668,7 +668,7 @@ export default function AdminPublicHolidaysPage() {
                   <div className="text-center py-8">
                     <p className="text-gray-600">No public holidays found.</p>
                     <p className="text-sm text-gray-500 mt-1">
-                      Click "Import NSW" to automatically import Australian public holidays.
+                      Click "Import" to automatically import Australian public holidays.
                     </p>
                   </div>
                 )}

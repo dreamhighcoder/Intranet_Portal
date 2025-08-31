@@ -169,7 +169,8 @@ export async function authenticatedPost<T = any>(url: string, data: any): Promis
       throw new Error(errorMessage)
     }
   } catch (error) {
-    console.error('API Client - Exception caught:', error)
+    // Downgrade to warning to avoid confusing red error logs when callers handle validation errors
+    console.warn('API Client - Exception caught:', error)
     throw error
   }
 }

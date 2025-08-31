@@ -13,8 +13,12 @@ export const metadata: Metadata = {
   generator: "v0.dev",
   keywords: ["pharmacy", "task management", "compliance", "intranet", "healthcare"],
   authors: [{ name: "Pharmacy Management System" }],
-  viewport: "width=device-width, initial-scale=1",
   robots: "noindex, nofollow", // Internal system
+}
+
+export const viewport = {
+  width: 'device-width',
+  initialScale: 1,
 }
 
 export default function RootLayout({

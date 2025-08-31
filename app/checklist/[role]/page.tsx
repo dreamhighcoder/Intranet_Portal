@@ -274,6 +274,34 @@ const getFrequencyBadgeColor = (frequency: string | null | undefined) => {
   return colorMap[frequency] || 'bg-indigo-100 text-indigo-800 border-indigo-200'
 }
 
+// Helper to render shared responsibilities with +(...) truncation and color badges
+const renderSharedResponsibilities = (
+  responsibilities: string[] = [],
+  currentRoleKebab: string,
+  maxVisible: number = 2
+) => {
+  const others = (responsibilities || []).filter(r => toKebabCase(r) !== currentRoleKebab)
+  if (others.length === 0) {
+    return <span className="text-xs text-gray-400">None</span>
+  }
+  const visible = others.slice(0, maxVisible)
+  const hidden = Math.max(others.length - maxVisible, 0)
+  return (
+    <>
+      {visible.map((item, index) => (
+        <Badge key={index} className={`text-xs ${getResponsibilityColor(item)}`}>
+          {formatResponsibility(item)}
+        </Badge>
+      ))}
+      {hidden > 0 && (
+        <Badge variant="outline" className="text-xs bg-gray-50 text-gray-600">
+          + {hidden}
+        </Badge>
+      )}
+    </>
+  )
+}
+
 // Helper function to render frequency with additional details
 const renderFrequencyWithDetails = (task: ChecklistTask) => {
   // Use frequencies array
@@ -488,6 +516,9 @@ export default function RoleChecklistPage() {
     )
   }
 
+  // Kebab-case form of current role for comparisons
+  const currentRoleKebab = useMemo(() => toKebabCase(role), [role])
+
   const [currentDate, setCurrentDate] = useState(() => {
     // Use URL date if present, otherwise default to local today (avoid UTC off-by-one)
     const urlDate = searchParams.get("date")
@@ -552,14 +583,17 @@ export default function RoleChecklistPage() {
       try {
         const positions = await positionsApi.getAll()
         const nonAdmin = (positions || [])
-          .filter((p: any) => !p.name.toLowerCase().includes('administrator') && !p.name.toLowerCase().includes('admin'))
+          .filter((p: any) => !p.name?.toLowerCase().includes('administrator') && !p.name?.toLowerCase().includes('admin'))
           .sort((a: any, b: any) => {
             const ao = a.display_order ?? 9999
             const bo = b.display_order ?? 9999
             if (ao !== bo) return ao - bo
-            return a.name.localeCompare(b.name)
+            return (a.displayName || a.name).localeCompare(b.displayName || b.name)
           })
-        setResponsibilitiesFromDb(nonAdmin.map((p: any) => toKebabCase(p.name)))
+        const mapped = nonAdmin
+          .map((p: any) => toKebabCase(p.displayName || p.name))
+          .filter((v: string) => !!v && v.trim() !== '')
+        setResponsibilitiesFromDb(mapped)
       } catch (e) {
         console.error('Failed to load responsibilities from DB:', e)
         setResponsibilitiesFromDb([])
@@ -916,6 +950,13 @@ export default function RoleChecklistPage() {
           aValue = a.master_task.responsibility?.[0] || ''
           bValue = b.master_task.responsibility?.[0] || ''
           break
+        case 'shared_responsibilities': {
+          const aOthers = (a.master_task.responsibility || []).filter(r => toKebabCase(r) !== currentRoleKebab)
+          const bOthers = (b.master_task.responsibility || []).filter(r => toKebabCase(r) !== currentRoleKebab)
+          aValue = aOthers[0] || ''
+          bValue = bOthers[0] || ''
+          break
+        }
         case 'category':
           aValue = a.master_task.categories?.[0] || ''
           bValue = b.master_task.categories?.[0] || ''
@@ -957,7 +998,9 @@ export default function RoleChecklistPage() {
   const uniqueCategories = useMemo(() => {
     const categories = new Set<string>()
     tasks.forEach(task => {
-      ; (task.master_task.categories || []).forEach(cat => categories.add(cat))
+      ; (task.master_task.categories || [])
+        .filter(cat => !!cat && String(cat).trim() !== '')
+        .forEach(cat => categories.add(cat))
     })
     const list = Array.from(categories)
     if (list.length === 0) {
@@ -1126,11 +1169,13 @@ export default function RoleChecklistPage() {
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="all">All Responsibilities</SelectItem>
-                      {responsibilitiesFromDb.map(responsibility => (
-                        <SelectItem key={responsibility} value={responsibility}>
-                          {formatResponsibility(responsibility)}
-                        </SelectItem>
-                      ))}
+                      {responsibilitiesFromDb
+                        .filter((responsibility) => !!responsibility && responsibility.trim() !== "")
+                        .map(responsibility => (
+                          <SelectItem key={responsibility} value={responsibility}>
+                            {formatResponsibility(responsibility)}
+                          </SelectItem>
+                        ))}
                     </SelectContent>
                   </Select>
                 </div>
@@ -1237,12 +1282,26 @@ export default function RoleChecklistPage() {
                             Responsibility
                           </SortableHeader>
                         )}
+                        {!isAdmin && (
+                          <>
+                            {/* Shared Responsibilities column (new) */}
+                            <SortableHeader
+                              field="shared_responsibilities"
+                              sortField={sortField}
+                              sortDirection={sortDirection}
+                              onSort={handleSort}
+                              className="w-[18%] py-3 bg-gray-50"
+                            >
+                              Shared Responsibilities
+                            </SortableHeader>
+                          </>
+                        )}
                         <SortableHeader
                           field="category"
                           sortField={sortField}
                           sortDirection={sortDirection}
                           onSort={handleSort}
-                          className="w-[19%] py-3 bg-gray-50"
+                          className="w-[17%] py-3 bg-gray-50"
                         >
                           Category
                         </SortableHeader>
@@ -1297,6 +1356,16 @@ export default function RoleChecklistPage() {
                               <div className="max-w-full overflow-hidden">
                                 <div className="flex flex-wrap gap-1">
                                   {renderBadgesWithTruncation(task.master_task.responsibility, 2, 'responsibility')}
+                                </div>
+                              </div>
+                            </TableCell>
+                          )}
+                          {/* Shared Responsibilities cell */}
+                          {!isAdmin && (
+                            <TableCell className="py-3">
+                              <div className="max-w-full overflow-hidden">
+                                <div className="flex flex-wrap gap-1">
+                                  {renderSharedResponsibilities(task.master_task.responsibility, currentRoleKebab, 2)}
                                 </div>
                               </div>
                             </TableCell>
@@ -1396,6 +1465,14 @@ export default function RoleChecklistPage() {
                                 <span className="text-gray-500">Responsibility:</span>
                                 <div className="flex flex-wrap gap-1 mt-1">
                                   {renderBadgesWithTruncation(task.master_task.responsibility, 3, 'responsibility')}
+                                </div>
+                              </div>
+                            )}
+                            {!isAdmin && (
+                              <div>
+                                <span className="text-gray-500">Shared Responsibilities:</span>
+                                <div className="flex flex-wrap gap-1 mt-1">
+                                  {renderSharedResponsibilities(task.master_task.responsibility, currentRoleKebab, 3)}
                                 </div>
                               </div>
                             )}

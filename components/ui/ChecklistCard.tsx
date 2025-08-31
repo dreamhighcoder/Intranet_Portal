@@ -8,6 +8,7 @@ import { AlertTriangle, CheckCircle, Clock, Calendar } from 'lucide-react'
 import { usePositionAuth } from '@/lib/position-auth-context'
 import { useRouter } from 'next/navigation'
 import { toKebabCase } from '@/lib/responsibility-mapper'
+import { getAustralianToday } from '@/lib/timezone-utils'
 
 interface ChecklistCardProps {
   role: string
@@ -50,26 +51,44 @@ export default function ChecklistCard({
         setLoading(true)
         setError(null)
 
-        // Use Australian timezone for date calculation
-        const today = new Date().toLocaleDateString('en-CA', { 
-          timeZone: 'Australia/Sydney' 
-        }); // en-CA gives YYYY-MM-DD format
+        // Use Australian timezone utility to ensure strict YYYY-MM-DD format
+        const today = getAustralianToday()
+
+        // Prepare role slug; bail out if invalid
+        const roleSlug = toKebabCase(role)
+        if (!roleSlug) {
+          console.warn('ChecklistCard: empty role slug, skipping fetch', { role })
+          setLoading(false)
+          setError('Missing role')
+          return
+        }
 
         // Use checklist counts API for task counts (no authentication required)
         const queryParams = new URLSearchParams({
           date: today,
-          role: toKebabCase(role)
+          role: roleSlug
         })
 
-        const response = await fetch(`/api/checklist/counts?${queryParams.toString()}`)
+        const url = `/api/checklist/counts?${queryParams.toString()}`
+        const response = await fetch(url)
 
+        // Try to extract server error details when not OK
         if (!response.ok) {
-          throw new Error(`API request failed: ${response.status} ${response.statusText}`)
+          let serverMessage = ''
+          try {
+            const errBody = await response.json()
+            serverMessage = errBody?.error || JSON.stringify(errBody)
+          } catch {
+            // ignore JSON parse error
+          }
+          console.error('ChecklistCard request failed', { url, status: response.status, statusText: response.statusText, serverMessage })
+          throw new Error(`API request failed: ${response.status} ${response.statusText}${serverMessage ? ' - ' + serverMessage : ''}`)
         }
 
         const result = await response.json()
 
         if (!result.success) {
+          console.error('ChecklistCard response not successful', { url, result })
           throw new Error(result.error || 'Failed to fetch task counts')
         }
 
@@ -197,8 +216,6 @@ export default function ChecklistCard({
                     <span className="mr-1">🆕</span> New task(s)!
                   </span>
                   <Badge  className="bg-blue-600 text-white font-medium">{taskCounts.newSinceNine}</Badge>
-{/* 
-                  <span className="text-blue-600 font-semibold">{taskCounts.newSinceNine}</span> */}
                 </div>
               )}
 
