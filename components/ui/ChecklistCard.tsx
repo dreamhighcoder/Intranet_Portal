@@ -46,12 +46,13 @@ export default function ChecklistCard({
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    const fetchTaskCounts = async () => {
+    const fetchTaskCounts = async (effectiveDate?: string) => {
       try {
         setLoading(true)
         setError(null)
 
         const today = getAustralianToday()
+        const dateToUse = effectiveDate || today
         const roleSlug = toKebabCase(role)
         if (!roleSlug) {
           console.warn('ChecklistCard: empty role slug, skipping fetch', { role })
@@ -60,7 +61,7 @@ export default function ChecklistCard({
           return
         }
 
-        const queryParams = new URLSearchParams({ date: today, role: roleSlug })
+        const queryParams = new URLSearchParams({ date: dateToUse, role: roleSlug })
         const url = `/api/checklist/counts?${queryParams.toString()}`
         const response = await fetch(url, { cache: 'no-store' })
 
@@ -98,9 +99,13 @@ export default function ChecklistCard({
 
     // Refresh when any checklist update event fires
     const onPositionsUpdated = () => fetchTaskCounts()
-    const onTasksChanged = () => fetchTaskCounts()
+    const onTasksChanged = (e: Event) => {
+      const detail = (e as CustomEvent).detail as { role?: string; date?: string; action?: string } | undefined
+      // Refresh all cards whenever any task changes; use provided date if present
+      fetchTaskCounts(detail?.date)
+    }
     window.addEventListener('positions-updated', onPositionsUpdated)
-    window.addEventListener('tasks-changed', onTasksChanged)
+    window.addEventListener('tasks-changed', onTasksChanged as EventListener)
 
     return () => {
       window.removeEventListener('focus', onFocus)
@@ -154,7 +159,7 @@ export default function ChecklistCard({
     switch (level) {
       case 'high': return `${taskCounts.overdue} tasks overdue`
       case 'medium': return `${taskCounts.dueToday} tasks due today`
-      case 'low': return `New task(s)!`
+      case 'low': return taskCounts.newSinceNine === 1 ? 'New task!' : 'New tasks!'
       default: return 'All caught up!'
     }
   }
@@ -218,7 +223,7 @@ export default function ChecklistCard({
               {taskCounts.newSinceNine > 0 && (
                 <div className="flex items-center justify-between text-sm px-2 py-1 bg-blue-50 rounded border-l-4 border-blue-400">
                   <span className="text-blue-700 font-medium flex items-center">
-                    <span className="mr-1">🆕</span> New task(s)!
+                    <span className="mr-1">🆕</span> {taskCounts.newSinceNine === 1 ? 'New task!' : 'New tasks!'}
                   </span>
                   <Badge  className="bg-blue-600 text-white font-medium">{taskCounts.newSinceNine}</Badge>
                 </div>
@@ -254,7 +259,7 @@ export default function ChecklistCard({
 
               {/* Completed tasks (if any) */}
               {taskCounts.completed > 0 && (
-                <div className="flex items-center justify-between text-sm p-2 bg-green-50 rounded">
+                <div className="flex items-center justify-between text-sm px-2 py-1 bg-green-50 rounded">
                   <span className="text-green-700 font-medium flex items-center">
                     <span className="mr-1">✅</span> Completed
                   </span>

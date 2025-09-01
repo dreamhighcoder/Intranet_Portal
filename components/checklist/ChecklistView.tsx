@@ -89,15 +89,11 @@ export default function ChecklistView({
 
   const handleTaskComplete = async (taskId: string) => {
     try {
-      const response = await fetch(`/api/task-instances/${taskId}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          status: 'completed',
-          completed_at: new Date().toISOString()
-        })
+      // Use the checklist completion endpoint which accepts virtual IDs (master_task_id:date)
+      const response = await fetch(`/api/checklist/complete`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ taskId, action: 'complete' })
       })
 
       if (!response.ok) {
@@ -112,6 +108,10 @@ export default function ChecklistView({
       ))
 
       toastSuccess("Task Completed", "Task has been marked as complete.")
+      // Notify other parts of the app (e.g., homepage cards) to refresh counts
+      try {
+        window.dispatchEvent(new CustomEvent('tasks-changed', { detail: { role, date, action: 'complete' } }))
+      } catch {}
       onTaskUpdate?.()
     } catch (error) {
       console.error('Error completing task:', error)
@@ -121,16 +121,11 @@ export default function ChecklistView({
 
   const handleTaskUndo = async (taskId: string) => {
     try {
-      const response = await fetch(`/api/task-instances/${taskId}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          status: 'pending',
-          completed_by: null,
-          completed_at: null
-        })
+      // Use the checklist completion endpoint to undo using the same virtual ID
+      const response = await fetch(`/api/checklist/complete`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ taskId, action: 'undo' })
       })
 
       if (!response.ok) {
@@ -145,6 +140,10 @@ export default function ChecklistView({
       ))
 
       toastSuccess("Task Reopened", "Task has been reopened.")
+      // Notify other parts of the app (e.g., homepage cards) to refresh counts
+      try {
+        window.dispatchEvent(new CustomEvent('tasks-changed', { detail: { role, date, action: 'undo' } }))
+      } catch {}
       onTaskUpdate?.()
     } catch (error) {
       console.error('Error undoing task:', error)

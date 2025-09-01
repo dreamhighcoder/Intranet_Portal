@@ -72,7 +72,14 @@ export function getAllVariants(responsibility: string): string[] {
  * Get all responsibility search options for a given role
  */
 export function getSearchOptions(role: string): string[] {
-  return getAllVariants(role)
+  const variants = new Set<string>(getAllVariants(role))
+  const kebab = toKebabCase(role)
+  if (kebab) {
+    // Add plural/singular swap for trailing -s marker used in DB like 'pharmacy-assistant-s'
+    if (kebab.endsWith('-s')) variants.add(kebab.slice(0, -2))
+    else variants.add(`${kebab}-s`)
+  }
+  return Array.from(variants)
 }
 
 /**

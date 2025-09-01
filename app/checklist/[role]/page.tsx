@@ -866,6 +866,11 @@ export default function RoleChecklistPage() {
       // Refresh to ensure synchronization with database
       setRefreshKey((prev) => prev + 1)
       toastSuccess("Task Completed", "Task has been marked as complete.")
+
+      // Broadcast event so homepage cards refresh their counts
+      try {
+        window.dispatchEvent(new CustomEvent('tasks-changed', { detail: { date: currentDate, role } }))
+      } catch {}
     } catch (error) {
       console.error('Error completing task:', error)
       // Revert optimistic update on error
@@ -910,6 +915,11 @@ export default function RoleChecklistPage() {
       // Refresh to ensure synchronization with database
       setRefreshKey((prev) => prev + 1)
       toastSuccess("Task Reopened", "Task has been reopened.")
+
+      // Broadcast event so homepage cards refresh their counts
+      try {
+        window.dispatchEvent(new CustomEvent('tasks-changed', { detail: { date: currentDate, role } }))
+      } catch {}
     } catch (error) {
       console.error('Error undoing task:', error)
       // Revert optimistic update on error
