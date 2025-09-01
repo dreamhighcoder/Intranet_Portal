@@ -71,6 +71,36 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Name is required' }, { status: 400 })
     }
 
+    // If attempting to create the Administrator position, require Super Admin
+    if (name.trim() === 'Administrator') {
+      // Support position-based auth: trust super admin header flag if present
+      const posAuth = request.headers.get('x-position-auth') === 'true'
+      const posIsSuperAdmin = request.headers.get('x-position-is-super-admin') === 'true'
+      if (posAuth) {
+        if (!posIsSuperAdmin) {
+          return NextResponse.json({ error: 'Only Super Administrator can create Administrator' }, { status: 403 })
+        }
+      } else {
+        // Supabase auth path: determine if current user is Super Admin via their position
+        const { data: profile } = await supabaseAdmin
+          .from('user_profiles')
+          .select('position_id')
+          .eq('id', user.id)
+          .single()
+        if (!profile?.position_id) {
+          return NextResponse.json({ error: 'Only Super Administrator can create Administrator' }, { status: 403 })
+        }
+        const { data: currentPos } = await supabaseAdmin
+          .from('positions')
+          .select('is_super_admin')
+          .eq('id', profile.position_id)
+          .single()
+        if (!currentPos?.is_super_admin) {
+          return NextResponse.json({ error: 'Only Super Administrator can create Administrator' }, { status: 403 })
+        }
+      }
+    }
+
     // Generate UUID for the new position
     const positionId = randomUUID()
     

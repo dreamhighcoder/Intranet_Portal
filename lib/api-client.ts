@@ -37,6 +37,8 @@ export async function authenticatedFetch(url: string, options: RequestInit = {})
     headers['X-Position-User-Id'] = positionUser.id
     headers['X-Position-User-Role'] = positionUser.role
     headers['X-Position-Display-Name'] = positionUser.displayName
+    // Include super admin flag so server can authorize correctly
+    headers['X-Position-Is-Super-Admin'] = positionUser.isSuperAdmin ? 'true' : 'false'
     console.log('API Client - Using position-based auth for:', positionUser.displayName)
   }
   

@@ -41,12 +41,8 @@ export function PositionDialog({ isOpen, onClose, position, onSave }: PositionDi
       return true
     }
     
-    // Regular admins cannot edit other admin passwords
-    if (pos.password_hash && (
-        pos.name.toLowerCase().includes('administrator') || 
-        pos.name.toLowerCase().includes('admin')
-      )) {
-      // Check if this is their own position by comparing the password
+    // Regular admins cannot edit Administrator password (unless it's their own)
+    if (pos.name === 'Administrator') {
       if (user?.position?.password && pos.password_hash) {
         const decodedPassword = atob(pos.password_hash)
         return user.position.password === decodedPassword
@@ -93,6 +89,13 @@ export function PositionDialog({ isOpen, onClose, position, onSave }: PositionDi
     if (!isEditing && canEditThisPassword && !trimmedPassword) {
       setPasswordError("Password is required")
       toastError("Validation Error", "Password is required")
+      return
+    }
+
+    // Enforce that only Super Administrator can create an Administrator position
+    if (!isEditing && trimmedName === 'Administrator' && !isSuperAdmin) {
+      setNameError("Only the Super Administrator can create the Administrator position")
+      toastError("Permission Denied", "Only the Super Administrator can create the Administrator position")
       return
     }
 

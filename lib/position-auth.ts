@@ -47,13 +47,8 @@ async function fetchPositionsFromDatabase(): Promise<PositionAuth[]> {
         const decodedPassword = atob(pos.password_hash!)
         
 
-        // Determine role based on position name
-        let role: 'admin' | 'viewer' = 'viewer'
-        const nameCheck = pos.name.toLowerCase()
-        
-        if (nameCheck.includes('administrator') || nameCheck.includes('admin')) {
-          role = 'admin'
-        }
+        // Determine role based on exact position name
+        const role: 'admin' | 'viewer' = pos.name === 'Administrator' ? 'admin' : 'viewer'
 
         return {
           id: pos.id,
@@ -126,8 +121,8 @@ export class PositionAuthService {
         const sorted = positions
           .slice()
           .sort((a, b) => {
-            const aIsAdmin = a.displayName.toLowerCase().includes('admin')
-            const bIsAdmin = b.displayName.toLowerCase().includes('admin')
+            const aIsAdmin = a.displayName === 'Administrator'
+            const bIsAdmin = b.displayName === 'Administrator'
             if (aIsAdmin && !bIsAdmin) return 1
             if (!aIsAdmin && bIsAdmin) return -1
             const ao = (a as any).display_order ?? 9999
@@ -184,9 +179,7 @@ export class PositionAuthService {
         
         // Find all admin positions and check if any has the matching password
         const adminPositions = positions.filter(p => 
-          p.role === 'admin' || 
-          p.name.toLowerCase().includes('admin') || 
-          p.displayName.toLowerCase().includes('admin')
+          p.role === 'admin' || p.displayName === 'Administrator'
         )
         
         console.log('👑 Found admin positions for consolidated login:', adminPositions.map(p => ({

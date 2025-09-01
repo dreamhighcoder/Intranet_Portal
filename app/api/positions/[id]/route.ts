@@ -27,6 +27,32 @@ export async function PUT(
 
     // Prepare update data
     const updateData: any = { name, description }
+
+    // If renaming to Administrator, require Super Admin
+    if (name.trim() === 'Administrator') {
+      // Support position-based auth via header flag
+      const posAuth = request.headers.get('x-position-auth') === 'true'
+      const posIsSuperAdmin = request.headers.get('x-position-is-super-admin') === 'true'
+      if (posAuth) {
+        if (!posIsSuperAdmin) {
+          return NextResponse.json({ error: 'Only Super Administrator can assign the name "Administrator"' }, { status: 403 })
+        }
+      } else {
+        const { data: profile } = await supabaseAdmin
+          .from('user_profiles')
+          .select('position_id')
+          .eq('id', user.id)
+          .single()
+        const { data: currentPos } = await supabaseAdmin
+          .from('positions')
+          .select('is_super_admin')
+          .eq('id', profile?.position_id)
+          .single()
+        if (!currentPos?.is_super_admin) {
+          return NextResponse.json({ error: 'Only Super Administrator can assign the name "Administrator"' }, { status: 403 })
+        }
+      }
+    }
     
     // If password is provided, validate and hash it
     if (password) {
@@ -100,31 +126,39 @@ export async function DELETE(
       return NextResponse.json({ error: 'Position not found' }, { status: 404 })
     }
 
-    const isAdminPosition = positionToDelete.password_hash && (
-      positionToDelete.name.toLowerCase().includes('administrator') || 
-      positionToDelete.name.toLowerCase().includes('admin')
-    )
+    const isAdminPosition = positionToDelete.name === 'Administrator'
 
     if (isAdminPosition) {
       // Only super admins can delete admin positions
-      // Check if the current user is a super admin by checking their position
-      const { data: currentUserProfile } = await supabaseAdmin
-        .from('user_profiles')
-        .select('position_id')
-        .eq('id', user.id)
-        .single()
-      
-      if (currentUserProfile?.position_id) {
-        const { data: currentUserPositionData } = await supabaseAdmin
-          .from('positions')
-          .select('is_super_admin')
-          .eq('id', currentUserProfile.position_id)
-          .single()
-        
-        if (!currentUserPositionData?.is_super_admin) {
+      // Support position-based auth via header flag
+      const posAuth = request.headers.get('x-position-auth') === 'true'
+      const posIsSuperAdmin = request.headers.get('x-position-is-super-admin') === 'true'
+      if (posAuth) {
+        if (!posIsSuperAdmin) {
           return NextResponse.json({ 
             error: 'Only Super Admins can delete admin positions' 
           }, { status: 403 })
+        }
+      } else {
+        // Check if the current user is a super admin by checking their position
+        const { data: currentUserProfile } = await supabaseAdmin
+          .from('user_profiles')
+          .select('position_id')
+          .eq('id', user.id)
+          .single()
+        
+        if (currentUserProfile?.position_id) {
+          const { data: currentUserPositionData } = await supabaseAdmin
+            .from('positions')
+            .select('is_super_admin')
+            .eq('id', currentUserProfile.position_id)
+            .single()
+          
+          if (!currentUserPositionData?.is_super_admin) {
+            return NextResponse.json({ 
+              error: 'Only Super Admins can delete admin positions' 
+            }, { status: 403 })
+          }
         }
       }
 

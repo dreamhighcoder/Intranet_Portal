@@ -124,8 +124,7 @@ export default function UsersPositionsPage() {
   // Count total admins for delete protection (both user profiles and position-based)
   const adminUserCount = users.filter((user: UserProfile) => user.role === "admin").length
   const adminPositionCount = positions.filter((position: Position) => 
-    position.password_hash && 
-    (position.name.toLowerCase().includes('administrator') || position.name.toLowerCase().includes('admin'))
+    position.name === 'Administrator'
   ).length
   
   const totalAdminCount = adminUserCount + adminPositionCount
@@ -165,11 +164,8 @@ export default function UsersPositionsPage() {
       return true
     }
     
-    // Regular admins cannot delete admin positions
-    if (position.password_hash && (
-        position.name.toLowerCase().includes('administrator') || 
-        position.name.toLowerCase().includes('admin')
-      )) {
+    // Regular admins cannot delete Administrator position
+    if (position.name === 'Administrator') {
       return false
     }
     
@@ -225,12 +221,8 @@ export default function UsersPositionsPage() {
       return true
     }
     
-    // Regular admins cannot view other admin passwords
-    if (position.password_hash && (
-        position.name.toLowerCase().includes('administrator') || 
-        position.name.toLowerCase().includes('admin')
-      )) {
-      // Check if this is their own position by comparing the password
+    // Regular admins cannot view Administrator password (unless it's their own by password match)
+    if (position.name === 'Administrator') {
       if (user?.position?.password && position.password_hash) {
         const decodedPassword = atob(position.password_hash)
         return user.position.password === decodedPassword
@@ -249,11 +241,8 @@ export default function UsersPositionsPage() {
       return true
     }
     
-    // Regular admins cannot edit other admin positions
-    if (position.password_hash && (
-        position.name.toLowerCase().includes('administrator') || 
-        position.name.toLowerCase().includes('admin')
-      )) {
+    // Regular admins cannot edit Administrator position (unless it's their own by password match)
+    if (position.name === 'Administrator') {
       // Check if this is their own position by comparing the password
       if (user?.position?.password && position.password_hash) {
         const decodedPassword = atob(position.password_hash)
@@ -512,18 +501,12 @@ export default function UsersPositionsPage() {
                       <TableCell>
                         <Badge
                           className={
-                            position.password_hash && (
-                              position.name.toLowerCase().includes('administrator') || 
-                              position.name.toLowerCase().includes('admin')
-                            )
+                            position.name === 'Administrator'
                               ? "bg-purple-100 text-purple-800 border-purple-200"
                               : "bg-blue-100 text-blue-800 border-blue-200"
                           }
                         >
-                          {position.password_hash && (
-                            position.name.toLowerCase().includes('administrator') || 
-                            position.name.toLowerCase().includes('admin')
-                          )
+                          {position.name === 'Administrator'
                             ? (position.is_super_admin ? "Super Admin" : "Admin")
                             : "Position"
                           }
@@ -635,7 +618,7 @@ export default function UsersPositionsPage() {
               {/* Simple drag-and-drop without extra libs */}
               <ul>
                 {positions
-                  .filter(p => !p.name.toLowerCase().includes('administrator') && !p.name.toLowerCase().includes('admin'))
+                  .filter(p => p.name !== 'Administrator')
                   .sort((a, b) => (a.display_order ?? 9999) - (b.display_order ?? 9999) || a.name.localeCompare(b.name))
                   .map((p, idx) => (
                     <li
@@ -651,8 +634,8 @@ export default function UsersPositionsPage() {
                         if (!draggedId || draggedId === p.id) return
                         // Reorder positions array in local state
                         setPositions(prev => {
-                          const nonAdmin = prev.filter(x => !x.name.toLowerCase().includes('administrator') && !x.name.toLowerCase().includes('admin'))
-                          const admins = prev.filter(x => x.name.toLowerCase().includes('administrator') || x.name.toLowerCase().includes('admin'))
+                          const nonAdmin = prev.filter(x => x.name !== 'Administrator')
+                          const admins = prev.filter(x => x.name === 'Administrator')
                           const fromIndex = nonAdmin.findIndex(x => x.id === draggedId)
                           const toIndex = nonAdmin.findIndex(x => x.id === p.id)
                           if (fromIndex === -1 || toIndex === -1) return prev
