@@ -865,13 +865,8 @@ export default function AdminMasterTasksPage() {
 
       setTasks(tasksData)
 
-      // Filter out administrator positions from the dropdown
-      const filteredPositions = positionsData.filter((position: any) => {
-        const isAdmin = position.role === 'admin' ||
-          position.name.toLowerCase().includes('admin') ||
-          position.displayName?.toLowerCase().includes('admin')
-        return !isAdmin
-      })
+      // Filter out only exact 'Administrator' from the dropdown
+      const filteredPositions = positionsData.filter((position: any) => position.name !== 'Administrator')
       setPositions(filteredPositions)
     } catch (error) {
       console.error('Error loading data:', error)

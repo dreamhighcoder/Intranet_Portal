@@ -42,13 +42,8 @@ export function TaskFilters({
       try {
         const data = await positionsApi.getAll()
         if (data) {
-          // Filter out administrator positions from the dropdown
-          const filteredPositions = data.filter(position => {
-            const isAdmin = position.role === 'admin' || 
-                           position.name.toLowerCase().includes('admin') || 
-                           position.displayName?.toLowerCase().includes('admin')
-            return !isAdmin
-          })
+          // Filter out only exact 'Administrator' from the dropdown
+          const filteredPositions = data.filter(position => position.name !== 'Administrator')
           setPositions(filteredPositions)
         }
       } catch (error) {

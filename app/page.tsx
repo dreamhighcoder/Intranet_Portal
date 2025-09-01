@@ -65,7 +65,7 @@ export default function HomePage() {
         // Fetch all positions from API (public GET). We do NOT filter by password here so new positions appear.
         const positions = await positionsApi.getAll()
         const nonAdmin = (positions || [])
-          .filter((p: any) => !p.name?.toLowerCase().includes('administrator') && !p.name?.toLowerCase().includes('admin'))
+          .filter((p: any) => p.name !== 'Administrator')
         const iconMap = [Stethoscope, Users, Package, Building]
         const colorMap = ["var(--color-primary)", "#1565c0", "var(--accent-green)", "#2e7d32", "#fb8c00", "#d12c2c"]
 

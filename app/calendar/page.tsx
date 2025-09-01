@@ -112,13 +112,8 @@ export default function CalendarPage() {
     
     try {
       const positionsData = await positionsApi.getAll()
-      // Filter out administrator positions
-      const filteredPositions = positionsData.filter(position => {
-        const isAdminPosition = position.role === 'admin' || 
-                               position.name.toLowerCase().includes('admin') || 
-                               position.displayName?.toLowerCase().includes('admin')
-        return !isAdminPosition
-      })
+      // Filter out only exact 'Administrator'
+      const filteredPositions = positionsData.filter(position => position.name !== 'Administrator')
       setPositions(filteredPositions)
     } catch (error) {
       console.error('Error loading positions:', error)

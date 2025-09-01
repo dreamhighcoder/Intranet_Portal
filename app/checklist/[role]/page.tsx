@@ -702,7 +702,7 @@ export default function RoleChecklistPage() {
       try {
         const positions = await positionsApi.getAll()
         const nonAdmin = (positions || [])
-          .filter((p: any) => !p.name?.toLowerCase().includes('administrator') && !p.name?.toLowerCase().includes('admin'))
+          .filter((p: any) => p.name !== 'Administrator')
           .sort((a: any, b: any) => {
             const ao = a.display_order ?? 9999
             const bo = b.display_order ?? 9999

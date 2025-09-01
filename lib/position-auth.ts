@@ -363,10 +363,10 @@ export class PositionAuthService {
     return this.getPositions()
   }
   
-  // Get checklist positions (all except administrator)
+  // Get checklist positions (all except exact 'Administrator')
   static async getChecklistPositions(): Promise<PositionAuth[]> {
     const positions = await this.getPositions()
-    return positions.filter(p => p.name !== 'administrator' && !p.displayName.toLowerCase().includes('administrator'))
+    return positions.filter(p => p.displayName !== 'Administrator')
   }
 
   // Synchronous fallback methods for backward compatibility - return cache only
@@ -376,7 +376,7 @@ export class PositionAuthService {
   
   static getChecklistPositionsFallback(): PositionAuth[] {
     const positions = positionsCache || []
-    return positions.filter(p => p.name !== 'administrator' && !p.displayName.toLowerCase().includes('administrator'))
+    return positions.filter(p => p.displayName !== 'Administrator')
   }
 
   // ========================================

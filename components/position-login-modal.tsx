@@ -52,14 +52,10 @@ export function PositionLoginModal({
 
         // Separate admin and non-admin positions
         const admins = allPositions.filter(p =>
-          p.role === 'admin' ||
-          p.name.toLowerCase().includes('admin') ||
-          p.displayName.toLowerCase().includes('admin')
+          p.role === 'admin' || p.displayName === 'Administrator'
         )
         const others = allPositions.filter(p =>
-          p.role !== 'admin' &&
-          !p.name.toLowerCase().includes('admin') &&
-          !p.displayName.toLowerCase().includes('admin')
+          !(p.role === 'admin' || p.displayName === 'Administrator')
         )
 
         // Create consolidated administrator entry if any admin positions exist

@@ -33,9 +33,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Failed to validate positions' }, { status: 500 })
     }
 
-    const invalid = (namesMap || []).find(p =>
-      p.name && (p.name.toLowerCase().includes('administrator') || p.name.toLowerCase().includes('admin'))
-    )
+    const invalid = (namesMap || []).find(p => p.name === 'Administrator')
     if (invalid) {
       return NextResponse.json({ error: 'Administrator positions cannot be reordered' }, { status: 400 })
     }

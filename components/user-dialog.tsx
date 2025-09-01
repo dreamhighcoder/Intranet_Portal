@@ -49,18 +49,12 @@ export function UserDialog({ isOpen, onClose, user, positions, onSave }: UserDia
   // Filter and consolidate positions for the dropdown
   const getFilteredPositions = () => {
     const nonAdminPositions = positions.filter(position => 
-      !position.password_hash || (
-        !position.name.toLowerCase().includes('administrator') && 
-        !position.name.toLowerCase().includes('admin')
-      )
+      !position.password_hash || position.name !== 'Administrator'
     )
     
     // Check if there are any admin positions
     const hasAdminPositions = positions.some(position => 
-      position.password_hash && (
-        position.name.toLowerCase().includes('administrator') || 
-        position.name.toLowerCase().includes('admin')
-      )
+      position.password_hash && position.name === 'Administrator'
     )
     
     // Add a consolidated "Administrator" option if admin positions exist
