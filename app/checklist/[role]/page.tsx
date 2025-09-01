@@ -12,7 +12,7 @@ import { Badge } from '@/components/ui/badge'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Input } from '@/components/ui/input'
-import { Check, X, Eye, LogOut, Settings, ChevronRight, Search, Clock, ChevronUp, ChevronDown } from 'lucide-react'
+import { Check, X, Eye, LogOut, Settings, ChevronRight, Search, Clock } from 'lucide-react'
 import Link from 'next/link'
 import { toastError, toastSuccess } from '@/hooks/use-toast'
 import { toKebabCase } from '@/lib/responsibility-mapper'
@@ -40,6 +40,7 @@ interface ChecklistTask {
     responsibility: string[]
     categories: string[]
     frequencies: string[] // Using frequencies from database
+    custom_order?: Record<string, number> // role -> custom index
   }
 }
 
@@ -347,40 +348,65 @@ const renderFrequencyWithDetails = (task: ChecklistTask) => {
   )
 }
 
-// Sortable Header Component
+// Helpers for sorting by Due Time then Frequency
+const parseDueTimeToMinutes = (time?: string | null) => {
+  if (!time || typeof time !== 'string') return 23 * 60 + 59 // push undefined to end
+  const parts = time.split(':')
+  if (parts.length < 2) return 23 * 60 + 59
+  const h = Number(parts[0])
+  const m = Number(parts[1])
+  if (Number.isNaN(h) || Number.isNaN(m)) return 23 * 60 + 59
+  return h * 60 + m
+}
+
+const getFrequencyRankForDay = (frequencies: string[] = [], dateStr: string) => {
+  if (!frequencies || frequencies.length === 0) return 9999
+  const lower = frequencies.map(f => (f || '').toLowerCase())
+
+  const date = new Date(dateStr)
+  const dowNames = ['sunday','monday','tuesday','wednesday','thursday','friday','saturday']
+  const dow = date.getDay() // 0-6
+  const monthKeys = ['jan','feb','mar','apr','may','jun','jul','aug','sep','oct','nov','dec']
+  const monKey = monthKeys[date.getMonth()]
+
+  let rank = 9999
+  const update = (r: number) => { if (r < rank) rank = r }
+
+  // 1) Once Off
+  if (lower.includes('once_off') || lower.includes('once_off_sticky')) update(1)
+  // 2) Every Day
+  if (lower.includes('every_day')) update(2)
+  // 3) Once Weekly
+  if (lower.includes('once_weekly') || lower.includes('weekly')) update(3)
+  // 4) Specific weekday (for the current day) or specific_weekdays hint
+  if (lower.includes(dowNames[dow]) || lower.includes('specific_weekdays')) update(4)
+  // 5) Once Monthly
+  if (lower.includes('once_monthly')) update(5)
+  // 6) Start of Every Month
+  if (lower.includes('start_of_every_month') || lower.includes('start_every_month')) update(6)
+  // 7) Start of Month (Jan..Dec) for current month
+  if (lower.includes(`start_of_month_${monKey}`)) update(7)
+  // 8) End of Every Month
+  if (lower.includes('end_of_every_month') || lower.includes('end_every_month')) update(8)
+  // 9) End of Month (Jan..Dec) for current month
+  if (lower.includes(`end_of_month_${monKey}`)) update(9)
+
+  return rank
+}
+
+// Simple Header Component (sorting disabled)
 const SortableHeader = ({
-  field,
   children,
-  sortField,
-  sortDirection,
-  onSort,
   className = ""
 }: {
-  field: string
   children: React.ReactNode
-  sortField: string
-  sortDirection: 'asc' | 'desc'
-  onSort: (field: string) => void
   className?: string
 }) => {
-  const isActive = sortField === field
   const isCentered = className.includes('text-center')
-
   return (
-    <TableHead
-      className={`cursor-pointer hover:bg-gray-100 transition-colors ${className}`}
-      onClick={() => onSort(field)}
-    >
+    <TableHead className={`transition-colors ${className}`}>
       <div className={`flex items-center ${isCentered ? 'justify-center' : 'justify-left'}`}>
         <span>{children}</span>
-        <div className={`flex flex-col ${isCentered ? 'ml-1' : 'ml-1'}`}>
-          <ChevronUp
-            className={`h-3 w-3 ${isActive && sortDirection === 'asc' ? 'text-blue-600' : 'text-gray-400'}`}
-          />
-          <ChevronDown
-            className={`h-3 w-3 -mt-1 ${isActive && sortDirection === 'desc' ? 'text-blue-600' : 'text-gray-400'}`}
-          />
-        </div>
       </div>
     </TableHead>
   )
@@ -548,25 +574,118 @@ export default function RoleChecklistPage() {
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false)
   const [processingTasks, setProcessingTasks] = useState<Set<string>>(new Set())
 
+  // Custom order state
+  const [roleOrderMap, setRoleOrderMap] = useState<Record<string, number>>({}) // master_task_id -> index
+  const [isSavingOrder, setIsSavingOrder] = useState(false)
+  const [isOrderDirty, setIsOrderDirty] = useState(false)
+  const [dragIndex, setDragIndex] = useState<number | null>(null)
+  const isReorderActive = isAdmin && selectedResponsibility !== 'all'
+  const currentOrderResponsibility = useMemo(() => (isAdmin ? selectedResponsibility : currentRoleKebab), [isAdmin, selectedResponsibility, currentRoleKebab])
+  
+  // Detect if any task has a saved custom order for the current responsibility
+  const hasCustomOrderForRole = useMemo(() => {
+    if (!currentOrderResponsibility) return false
+    return tasks.some(t => typeof (t.master_task as any).custom_order?.[currentOrderResponsibility] === 'number')
+  }, [tasks, currentOrderResponsibility])
 
+  // Initialize order map when tasks load or responsibility changes
+  useEffect(() => {
+    if (!isReorderActive || !currentOrderResponsibility) {
+      setRoleOrderMap({})
+      setIsOrderDirty(false)
+      return
+    }
+    // Build order map from saved custom order if present; otherwise seed from base default order
+    const order: Record<string, number> = {}
+
+    // Tasks for selected responsibility
+    const subset = tasks.filter(t => (t.master_task.responsibility || []).includes(currentOrderResponsibility))
+
+    // Base sort (Due Time -> Frequency -> Description)
+    const seedList = [...subset].sort((a, b) => {
+      const aMin = parseDueTimeToMinutes(a.master_task.due_time)
+      const bMin = parseDueTimeToMinutes(b.master_task.due_time)
+      if (aMin !== bMin) return aMin - bMin
+      const aRank = getFrequencyRankForDay(a.master_task.frequencies || [], currentDate)
+      const bRank = getFrequencyRankForDay(b.master_task.frequencies || [], currentDate)
+      if (aRank !== bRank) return aRank - bRank
+      const aDesc = a.master_task.description?.toLowerCase() || ''
+      const bDesc = b.master_task.description?.toLowerCase() || ''
+      if (aDesc < bDesc) return -1
+      if (aDesc > bDesc) return 1
+      return 0
+    })
+
+    // Prefer saved indices; otherwise use base order indices
+    seedList.forEach((t, idx) => {
+      const val = (t.master_task as any).custom_order?.[currentOrderResponsibility]
+      order[t.master_task.id] = typeof val === 'number' ? val : idx
+    })
+
+    setRoleOrderMap(order)
+    setIsOrderDirty(false)
+  }, [tasks, isReorderActive, currentOrderResponsibility])
+
+  // Drag handlers for desktop rows
+  const handleRowDragStart = (index: number) => {
+    if (!isReorderActive) return
+    setDragIndex(index)
+  }
+
+  const handleRowDragOver = (e: React.DragEvent, overIndex: number) => {
+    if (!isReorderActive) return
+    e.preventDefault()
+  }
+
+  const handleRowDrop = (overIndex: number) => {
+    if (!isReorderActive) return
+    if (dragIndex === null || dragIndex === overIndex) return
+
+    // Reorder only the current page slice to reflect UI drag; then rebuild roleOrderMap based on new order
+    const current = [...filteredAndSortedTasks]
+    const [moved] = current.splice(dragIndex, 1)
+    current.splice(overIndex, 0, moved)
+
+    // Rebuild map for tasks of selected responsibility only
+    const newMap: Record<string, number> = { ...roleOrderMap }
+    let seq = 0
+    current.forEach(task => {
+      if ((task.master_task.responsibility || []).includes(currentOrderResponsibility)) {
+        newMap[task.master_task.id] = seq++
+      }
+    })
+    setRoleOrderMap(newMap)
+    setIsOrderDirty(true)
+    setDragIndex(null)
+  }
+
+  const handleSaveOrder = async () => {
+    if (!isReorderActive || isSavingOrder) return
+    try {
+      setIsSavingOrder(true)
+      const payload = {
+        responsibility: currentOrderResponsibility,
+        order: Object.entries(roleOrderMap).map(([master_task_id, index]) => ({ master_task_id, index })),
+      }
+      const result = await authenticatedPost('/api/checklist/custom-order', payload)
+      if (result) {
+        toastSuccess('Order Saved', 'Custom order has been saved successfully.')
+        setIsOrderDirty(false)
+        setRefreshKey(prev => prev + 1)
+      }
+    } catch (e) {
+      console.error('Failed to save custom order', e)
+      toastError('Save Failed', e instanceof Error ? e.message : 'Unknown error')
+    } finally {
+      setIsSavingOrder(false)
+    }
+  }
 
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1)
   const [tasksPerPage, setTasksPerPage] = useState(100)
 
-  // Sorting state
-  const [sortField, setSortField] = useState<string>('')
-  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc')
-
-  // Sorting function
-  const handleSort = (field: string) => {
-    if (sortField === field) {
-      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc')
-    } else {
-      setSortField(field)
-      setSortDirection('asc')
-    }
-  }
+  // Sorting disabled: rely on default due_time + frequency or custom order
 
   // Handle auth redirect
   useEffect(() => {
@@ -934,54 +1053,53 @@ export default function RoleChecklistPage() {
       return true
     })
 
-    // Apply sorting
-    if (!sortField) return filtered
-
-    return filtered.sort((a, b) => {
-      let aValue: any = ''
-      let bValue: any = ''
-
-      switch (sortField) {
-        case 'title':
-          aValue = a.master_task.description?.toLowerCase() || ''
-          bValue = b.master_task.description?.toLowerCase() || ''
-          break
-        case 'responsibility':
-          aValue = a.master_task.responsibility?.[0] || ''
-          bValue = b.master_task.responsibility?.[0] || ''
-          break
-        case 'shared_responsibilities': {
-          const aOthers = (a.master_task.responsibility || []).filter(r => toKebabCase(r) !== currentRoleKebab)
-          const bOthers = (b.master_task.responsibility || []).filter(r => toKebabCase(r) !== currentRoleKebab)
-          aValue = aOthers[0] || ''
-          bValue = bOthers[0] || ''
-          break
-        }
-        case 'category':
-          aValue = a.master_task.categories?.[0] || ''
-          bValue = b.master_task.categories?.[0] || ''
-          break
-        case 'frequency':
-          aValue = a.master_task.frequencies?.[0] || ''
-          bValue = b.master_task.frequencies?.[0] || ''
-          break
-        case 'due_time':
-          aValue = a.master_task.due_time || '17:00'
-          bValue = b.master_task.due_time || '17:00'
-          break
-        case 'status':
-          aValue = a.status || ''
-          bValue = b.status || ''
-          break
-        default:
-          return 0
-      }
-
-      if (aValue < bValue) return sortDirection === 'asc' ? -1 : 1
-      if (aValue > bValue) return sortDirection === 'asc' ? 1 : -1
+    // Base ordering: due_time then frequency rank for the day, then description for stability
+    const baseSorted = [...filtered].sort((a, b) => {
+      const aMin = parseDueTimeToMinutes(a.master_task.due_time)
+      const bMin = parseDueTimeToMinutes(b.master_task.due_time)
+      if (aMin !== bMin) return aMin - bMin
+      const aRank = getFrequencyRankForDay(a.master_task.frequencies || [], currentDate)
+      const bRank = getFrequencyRankForDay(b.master_task.frequencies || [], currentDate)
+      if (aRank !== bRank) return aRank - bRank
+      const aDesc = a.master_task.description?.toLowerCase() || ''
+      const bDesc = b.master_task.description?.toLowerCase() || ''
+      if (aDesc < bDesc) return -1
+      if (aDesc > bDesc) return 1
       return 0
     })
-  }, [tasks, searchTerm, selectedResponsibility, selectedCategory, selectedStatus, currentDate, isAdmin, sortField, sortDirection])
+
+    // Apply custom order OVER the base order for:
+    // - Admin viewing a specific responsibility (not "all"): use local drag order if present, else saved order
+    // - Employees viewing their responsibility: use saved order if present
+    if (currentOrderResponsibility) {
+      const applyForAdmin = isAdmin && selectedResponsibility !== 'all'
+      const applyForEmployee = !isAdmin
+      if (applyForAdmin || applyForEmployee) {
+        const orderSource: Record<string, number> = {}
+        baseSorted.forEach((t, idx) => {
+          const saved = (t.master_task as any).custom_order?.[currentOrderResponsibility]
+          const local = roleOrderMap[t.master_task.id]
+          if (applyForAdmin) {
+            // Admin: prefer local (unsaved) > saved > base index
+            orderSource[t.master_task.id] = typeof local === 'number' ? local : (typeof saved === 'number' ? saved : idx)
+          } else {
+            // Employee: use saved if available, else base index
+            orderSource[t.master_task.id] = typeof saved === 'number' ? saved : idx
+          }
+        })
+
+        return [...baseSorted].sort((a, b) => {
+          const ai = orderSource[a.master_task.id]
+          const bi = orderSource[b.master_task.id]
+          if (ai !== bi) return ai - bi
+          return 0
+        })
+      }
+    }
+
+    // Default: return the base order
+    return baseSorted
+  }, [tasks, searchTerm, selectedResponsibility, selectedCategory, selectedStatus, currentDate, isAdmin, roleOrderMap, isReorderActive, currentOrderResponsibility])
 
   // Pagination calculations
   const totalPages = Math.ceil(filteredAndSortedTasks.length / tasksPerPage)
@@ -1244,6 +1362,18 @@ export default function RoleChecklistPage() {
                     <SelectItem value="1000000">View All</SelectItem>
                   </SelectContent>
                 </Select>
+
+                {isAdmin && isReorderActive && (
+                  <Button
+                    size="sm"
+                    onClick={handleSaveOrder}
+                    disabled={!isOrderDirty || isSavingOrder}
+                    className="ml-2 bg-emerald-600 text-white hover:bg-emerald-700 border-emerald-600 hover:border-emerald-700 disabled:opacity-50"
+                    title={selectedResponsibility === 'all' ? 'Select a responsibility to reorder' : 'Save custom order for this role'}
+                  >
+                    {isSavingOrder ? 'Saving...' : 'Save Order'}
+                  </Button>
+                )}
               </div>
 
 
@@ -1262,82 +1392,43 @@ export default function RoleChecklistPage() {
                     <TableHeader>
                       <TableRow>
 
-                        <SortableHeader
-                          field="title"
-                          sortField={sortField}
-                          sortDirection={sortDirection}
-                          onSort={handleSort}
-                          className={isAdmin ? "w-[23%] py-3 bg-gray-50" : "w-[30%] py-3 bg-gray-50"}
-                        >
+                        <TableHead className={isAdmin ? "w-[23%] py-3 bg-gray-50" : "w-[30%] py-3 bg-gray-50"}>
                           Title & Description
-                        </SortableHeader>
+                        </TableHead>
                         {isAdmin && (
-                          <SortableHeader
-                            field="responsibility"
-                            sortField={sortField}
-                            sortDirection={sortDirection}
-                            onSort={handleSort}
-                            className="w-[16%] py-3 bg-gray-50"
-                          >
+                          <TableHead className="w-[16%] py-3 bg-gray-50">
                             Responsibility
-                          </SortableHeader>
+                          </TableHead>
                         )}
                         {!isAdmin && (
-                          <>
-                            {/* Shared Responsibilities column (new) */}
-                            <SortableHeader
-                              field="shared_responsibilities"
-                              sortField={sortField}
-                              sortDirection={sortDirection}
-                              onSort={handleSort}
-                              className="w-[18%] py-3 bg-gray-50"
-                            >
-                              Shared Responsibilities
-                            </SortableHeader>
-                          </>
+                          <TableHead className="w-[18%] py-3 bg-gray-50">
+                            Shared Responsibilities
+                          </TableHead>
                         )}
-                        <SortableHeader
-                          field="category"
-                          sortField={sortField}
-                          sortDirection={sortDirection}
-                          onSort={handleSort}
-                          className="w-[17%] py-3 bg-gray-50"
-                        >
+                        <TableHead className="w-[17%] py-3 bg-gray-50">
                           Category
-                        </SortableHeader>
-                        <SortableHeader
-                          field="frequency"
-                          sortField={sortField}
-                          sortDirection={sortDirection}
-                          onSort={handleSort}
-                          className="w-[15%] py-3 bg-gray-50"
-                        >
+                        </TableHead>
+                        <TableHead className="w-[15%] py-3 bg-gray-50">
                           Frequencies & Timing
-                        </SortableHeader>
-                        <SortableHeader
-                          field="due_time"
-                          sortField={sortField}
-                          sortDirection={sortDirection}
-                          onSort={handleSort}
-                          className="w-[7%] py-3 bg-gray-50 text-left"
-                        >
+                        </TableHead>
+                        <TableHead className="w-[7%] py-3 bg-gray-50 text-left">
                           Due Time
-                        </SortableHeader>
-                        <SortableHeader
-                          field="status"
-                          sortField={sortField}
-                          sortDirection={sortDirection}
-                          onSort={handleSort}
-                          className="w-[10%] py-3 bg-gray-50"
-                        >
-                          Status
-                        </SortableHeader>
+                        </TableHead>
+                        <TableHead className="w-[10%] py-3 bg-gray-50">Status</TableHead>
                         <TableHead className="w-[10%] py-3 bg-gray-50">Actions</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {paginatedTasks.map((task) => (
-                        <TableRow key={`${task.id}-${refreshKey}`}>
+                      {paginatedTasks.map((task, index) => (
+                        <TableRow
+                          key={`${task.id}-${refreshKey}`}
+                          draggable={isAdmin && isReorderActive}
+                          onDragStart={() => handleRowDragStart(index)}
+                          onDragOver={(e) => handleRowDragOver(e, index)}
+                          onDrop={() => handleRowDrop(index)}
+                          className={isAdmin && isReorderActive ? 'cursor-move' : ''}
+                          title={isAdmin && isReorderActive ? 'Drag to reorder' : undefined}
+                        >
 
                           <TableCell className="py-3">
                             <div className="max-w-full">

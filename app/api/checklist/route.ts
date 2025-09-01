@@ -60,6 +60,7 @@ export async function GET(request: NextRequest) {
         frequencies,
         responsibility,
         categories,
+        custom_order,
         created_at
       `)
       .eq('publish_status', 'active')
@@ -179,6 +180,7 @@ export async function GET(request: NextRequest) {
           responsibility: task.responsibility || [],
           categories: task.categories || ['general'],
           frequencies: task.frequencies || [], // Using frequencies from database
+          custom_order: (task as any).custom_order || {},
         },
       }
     })
