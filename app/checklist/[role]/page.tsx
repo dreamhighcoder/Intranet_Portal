@@ -1481,50 +1481,66 @@ export default function RoleChecklistPage() {
                           <TableCell className="py-3">{getStatusBadge(task)}</TableCell>
                           <TableCell className="py-3">
                             <div className="flex items-center space-x-2">
-                              {task.status === "completed" ? (
+                              {/* Hide Done/Undo buttons for admins; show only details */}
+                              {isAdmin ? (
                                 <Button
                                   size="sm"
-                                  variant="outline"
-                                  onClick={() => handleTaskUndo(task.id)}
-                                  disabled={processingTasks.has(task.id)}
-                                  className="border-green-300 bg-green-100 text-green-800 hover:bg-green-200 hover:border-green-400 font-medium disabled:opacity-50"
+                                  variant="ghost"
+                                  onClick={() => handleViewDetails(task)}
+                                  title="View Details"
+                                  className="hover:bg-gray-100"
                                 >
-                                  {processingTasks.has(task.id) ? (
-                                    <span className="flex items-center">
-                                      <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-green-800 mr-1"></div>
-                                      Processing...
-                                    </span>
-                                  ) : (
-                                    <span>✓ Done</span>
-                                  )}
+                                  <Eye className="h-4 w-4" />
+                                  <span className="ml-1">Details</span>
                                 </Button>
                               ) : (
-                                <Button
-                                  size="sm"
-                                  onClick={() => handleTaskComplete(task.id)}
-                                  disabled={processingTasks.has(task.id)}
-                                  className="bg-blue-600 text-white hover:bg-blue-700 border-blue-600 hover:border-blue-700 font-medium disabled:opacity-50"
-                                >
-                                  {processingTasks.has(task.id) ? (
-                                    <span className="flex items-center">
-                                      <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-white mr-1"></div>
-                                      Processing...
-                                    </span>
+                                <>
+                                  {task.status === "completed" ? (
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      onClick={() => handleTaskUndo(task.id)}
+                                      disabled={processingTasks.has(task.id)}
+                                      className="border-green-300 bg-green-100 text-green-800 hover:bg-green-200 hover:border-green-400 font-medium disabled:opacity-50"
+                                    >
+                                      {processingTasks.has(task.id) ? (
+                                        <span className="flex items-center">
+                                          <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-green-800 mr-1"></div>
+                                          Processing...
+                                        </span>
+                                      ) : (
+                                        <span>✓ Done</span>
+                                      )}
+                                    </Button>
                                   ) : (
-                                    <span>Done ?</span>
+                                    <Button
+                                      size="sm"
+                                      onClick={() => handleTaskComplete(task.id)}
+                                      disabled={processingTasks.has(task.id)}
+                                      className="bg-blue-600 text-white hover:bg-blue-700 border-blue-600 hover:border-blue-700 font-medium disabled:opacity-50"
+                                    >
+                                      {processingTasks.has(task.id) ? (
+                                        <span className="flex items-center">
+                                          <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-white mr-1"></div>
+                                          Processing...
+                                        </span>
+                                      ) : (
+                                        <span>Done ?</span>
+                                      )}
+                                    </Button>
                                   )}
-                                </Button>
+                                  <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    onClick={() => handleViewDetails(task)}
+                                    title="View Details"
+                                    className="hover:bg-gray-100"
+                                  >
+                                    <Eye className="h-4 w-4" />
+                                    <span className="ml-1"></span>
+                                  </Button>
+                                </>
                               )}
-                              <Button
-                                size="sm"
-                                variant="ghost"
-                                onClick={() => handleViewDetails(task)}
-                                title="View Details"
-                                className="hover:bg-gray-100"
-                              >
-                                <Eye className="h-4 w-4" />
-                                <span className="ml-1"></span>
-                              </Button>
                             </div>
                           </TableCell>
                         </TableRow>
@@ -1606,50 +1622,66 @@ export default function RoleChecklistPage() {
 
                           {/* Actions */}
                           <div className="flex space-x-2 grid grid-cols-2 gap-2">
-                            {task.status === "completed" ? (
+                            {isAdmin ? (
+                              // Admin: only show details
                               <Button
                                 size="sm"
                                 variant="outline"
-                                onClick={() => handleTaskUndo(task.id)}
-                                disabled={processingTasks.has(task.id)}
-                                className="flex-1 border-green-300 bg-green-100 text-green-800 hover:bg-green-200 hover:border-green-400 font-medium disabled:opacity-50"
+                                onClick={() => handleViewDetails(task)}
+                                title="View Details"
+                                className="hover:bg-gray-100"
                               >
-                                {processingTasks.has(task.id) ? (
-                                  <span className="flex items-center justify-center">
-                                    <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-green-800 mr-1"></div>
-                                    Processing...
-                                  </span>
-                                ) : (
-                                  <span>✓ Done</span>
-                                )}
+                                <Eye className="h-4 w-4" />
+                                <span className="ml-1">Details</span>
                               </Button>
                             ) : (
-                              <Button
-                                size="sm"
-                                onClick={() => handleTaskComplete(task.id)}
-                                disabled={processingTasks.has(task.id)}
-                                className="bg-blue-600 text-white hover:bg-blue-700 border-blue-600 hover:border-blue-700 font-medium disabled:opacity-50"
-                              >
-                                {processingTasks.has(task.id) ? (
-                                  <span className="flex items-center justify-center">
-                                    <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-white mr-1"></div>
-                                    Processing...
-                                  </span>
+                              <>
+                                {task.status === "completed" ? (
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => handleTaskUndo(task.id)}
+                                    disabled={processingTasks.has(task.id)}
+                                    className="flex-1 border-green-300 bg-green-100 text-green-800 hover:bg-green-200 hover:border-green-400 font-medium disabled:opacity-50"
+                                  >
+                                    {processingTasks.has(task.id) ? (
+                                      <span className="flex items-center justify-center">
+                                        <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-green-800 mr-1"></div>
+                                        Processing...
+                                      </span>
+                                    ) : (
+                                      <span>✓ Done</span>
+                                    )}
+                                  </Button>
                                 ) : (
-                                  <span>Done ?</span>
+                                  <Button
+                                    size="sm"
+                                    onClick={() => handleTaskComplete(task.id)}
+                                    disabled={processingTasks.has(task.id)}
+                                    className="bg-blue-600 text-white hover:bg-blue-700 border-blue-600 hover:border-blue-700 font-medium disabled:opacity-50"
+                                  >
+                                    {processingTasks.has(task.id) ? (
+                                      <span className="flex items-center justify-center">
+                                        <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-white mr-1"></div>
+                                        Processing...
+                                      </span>
+                                    ) : (
+                                      <span>Done ?</span>
+                                    )}
+                                  </Button>
                                 )}
-                              </Button>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => handleViewDetails(task)}
+                                  title="View Details"
+                                  className="hover:bg-gray-100"
+                                >
+                                  <Eye className="h-4 w-4" />
+                                  <span className="ml-1">Details</span>
+                                </Button>
+                              </>
                             )}
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => handleViewDetails(task)}
-                              title="View Details"
-                              className="hover:bg-gray-100"
-                            >
-                              <Eye className="h-4 w-4" />
-                              <span className="ml-1">Details</span>
-                            </Button>
                           </div>
                         </div>
                       </CardContent>
