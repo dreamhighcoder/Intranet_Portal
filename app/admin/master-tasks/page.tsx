@@ -962,6 +962,8 @@ export default function AdminMasterTasksPage() {
         ))
 
         showToast('success', 'Task Updated', 'Task was updated successfully')
+        // Notify homepage cards to refresh counts immediately
+        try { window.dispatchEvent(new Event('tasks-changed')) } catch {}
       } else {
         // Create new task
         const newTask = await masterTasksApi.create(taskData)
@@ -971,6 +973,8 @@ export default function AdminMasterTasksPage() {
         setTasks([newTask, ...tasks])
 
         showToast('success', 'Task Created', 'New task was created successfully')
+        // Notify homepage cards to refresh counts immediately
+        try { window.dispatchEvent(new Event('tasks-changed')) } catch {}
       }
 
       // Close dialog and reset state

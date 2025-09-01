@@ -493,7 +493,8 @@ export async function getTasksForRoleOnDate(
       .select('*')
       .overlaps('responsibility', searchRoles)
       .eq('publish_status', 'active')
-      .or(`publish_delay.is.null,publish_delay.lte.${date}`)
+      // NOTE: publish_delay governs when a Draft becomes Active (via scheduled job),
+      // not visibility once Active. Do not gate visibility here.
 
     if (error) {
       console.error('Error getting tasks for role on date:', error)

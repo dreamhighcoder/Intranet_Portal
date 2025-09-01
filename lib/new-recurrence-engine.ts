@@ -353,25 +353,21 @@ export class NewRecurrenceEngine {
     dueDate: string
     originalAppearanceDate?: string
   } {
+    // Once-off behavior:
+    // - When task is Active, it should appear immediately and remain visible until its Due Date
+    // - publish_delay is used only to schedule activation (handled elsewhere), not to offset appearance
     if (!task.due_date) {
       return { shouldAppear: false, isCarryOver: false, dueDate: '' }
     }
 
     const dueDate = parseAustralianDate(task.due_date)
-    const publishDate = new Date(dueDate)
-    if (task.publish_delay) {
-      const delayMatch = task.publish_delay.match(/^(\d+)([d])$/)
-      if (delayMatch) {
-        const amount = parseInt(delayMatch[1], 10)
-        publishDate.setDate(dueDate.getDate() - amount)
-      }
-    }
 
-    // The task appears on the publish date and every day after until the due date
-    if (date >= publishDate && date <= dueDate) {
+    // Appear on any eligible day up to and including the due date
+    if (date <= dueDate) {
       return {
         shouldAppear: true,
-        isCarryOver: date > publishDate,
+        // If the appearance date is before due date, treat as carry-over until due date
+        isCarryOver: date < dueDate,
         dueDate: formatAustralianDate(dueDate),
       }
     }

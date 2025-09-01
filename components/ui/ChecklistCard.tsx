@@ -51,10 +51,7 @@ export default function ChecklistCard({
         setLoading(true)
         setError(null)
 
-        // Use Australian timezone utility to ensure strict YYYY-MM-DD format
         const today = getAustralianToday()
-
-        // Prepare role slug; bail out if invalid
         const roleSlug = toKebabCase(role)
         if (!roleSlug) {
           console.warn('ChecklistCard: empty role slug, skipping fetch', { role })
@@ -63,30 +60,21 @@ export default function ChecklistCard({
           return
         }
 
-        // Use checklist counts API for task counts (no authentication required)
-        const queryParams = new URLSearchParams({
-          date: today,
-          role: roleSlug
-        })
-
+        const queryParams = new URLSearchParams({ date: today, role: roleSlug })
         const url = `/api/checklist/counts?${queryParams.toString()}`
-        const response = await fetch(url)
+        const response = await fetch(url, { cache: 'no-store' })
 
-        // Try to extract server error details when not OK
         if (!response.ok) {
           let serverMessage = ''
           try {
             const errBody = await response.json()
             serverMessage = errBody?.error || JSON.stringify(errBody)
-          } catch {
-            // ignore JSON parse error
-          }
+          } catch {}
           console.error('ChecklistCard request failed', { url, status: response.status, statusText: response.statusText, serverMessage })
           throw new Error(`API request failed: ${response.status} ${response.statusText}${serverMessage ? ' - ' + serverMessage : ''}`)
         }
 
         const result = await response.json()
-
         if (!result.success) {
           console.error('ChecklistCard response not successful', { url, result })
           throw new Error(result.error || 'Failed to fetch task counts')
@@ -101,8 +89,24 @@ export default function ChecklistCard({
       }
     }
 
-    // Always fetch task counts for the homepage cards
+    // Initial fetch
     fetchTaskCounts()
+
+    // Refresh when window regains focus (admin may have just activated a task)
+    const onFocus = () => fetchTaskCounts()
+    window.addEventListener('focus', onFocus)
+
+    // Refresh when any checklist update event fires
+    const onPositionsUpdated = () => fetchTaskCounts()
+    const onTasksChanged = () => fetchTaskCounts()
+    window.addEventListener('positions-updated', onPositionsUpdated)
+    window.addEventListener('tasks-changed', onTasksChanged)
+
+    return () => {
+      window.removeEventListener('focus', onFocus)
+      window.removeEventListener('positions-updated', onPositionsUpdated)
+      window.removeEventListener('tasks-changed', onTasksChanged)
+    }
   }, [role, positionId])
 
   const handleOpenChecklist = () => {
@@ -117,13 +121,14 @@ export default function ChecklistCard({
     window.dispatchEvent(event);
   }
 
-  // Always show card, but make it inactive if no tasks
-  const hasNoTasks = !loading && taskCounts.total === 0
+  // Always show card, but make it inactive if no tasks and no new tasks
+  const hasNoTasks = !loading && taskCounts.total === 0 && taskCounts.newSinceNine === 0
 
   const getAlertLevel = () => {
+    // New tasks take priority over all other alerts
+    if (taskCounts.newSinceNine > 0) return 'low'
     if (taskCounts.overdue > 0) return 'high'
     if (taskCounts.dueToday > 0) return 'medium'
-    if (taskCounts.newSinceNine > 0) return 'low'
     return 'none'
   }
 

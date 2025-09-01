@@ -1,10 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabaseServer } from '@/lib/supabase-server'
-import { getTasksForRoleOnDate } from '@/lib/db'
-import { TaskRecurrenceEngine } from '@/lib/task-recurrence-engine'
-import { getHolidayChecker } from '@/lib/holiday-checker-adapter'
+import { createClient } from '@supabase/supabase-js'
+import { NewRecurrenceEngine, type MasterTask as NewMasterTask } from '@/lib/new-recurrence-engine'
+import { createHolidayChecker } from '@/lib/holiday-checker'
 import { ChecklistQuerySchema } from '@/lib/validation-schemas'
+import { toKebabCase, getSearchOptions } from '@/lib/responsibility-mapper'
 import { getAustralianNow, getAustralianToday, createAustralianDateTime } from '@/lib/timezone-utils'
+
+// Use service role key to bypass RLS for server-side reads (match checklist API)
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
+const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
+const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey)
 
 export async function GET(request: NextRequest) {
   try {
@@ -29,138 +34,151 @@ export async function GET(request: NextRequest) {
     
     const { role: validatedRole, date: validatedDate } = validationResult.data
     
-    // Get tasks for the role on the specified date
-    const { data: tasks, error } = await getTasksForRoleOnDate(validatedRole, validatedDate)
-    
-    if (error) {
-      console.error('Error fetching tasks for role:', error)
+    // Align with Checklist API: fetch active tasks filtered by role using service client
+    const searchRoles = getSearchOptions(validatedRole)
+
+    const { data: masterTasks, error: tasksError } = await supabaseAdmin
+      .from('master_tasks')
+      .select(`
+        id,
+        title,
+        description,
+        timing,
+        due_time,
+        publish_status,
+        publish_delay,
+        due_date,
+        frequencies,
+        responsibility,
+        categories,
+        created_at,
+        updated_at
+      `)
+      .eq('publish_status', 'active')
+      .overlaps('responsibility', searchRoles)
+
+    if (tasksError) {
+      console.error('Error fetching master tasks:', tasksError)
       return NextResponse.json({ error: 'Failed to fetch tasks' }, { status: 500 })
     }
-    
-    console.log(`DEBUG: Found ${tasks.length} tasks for role '${validatedRole}' on date '${validatedDate}'`)
-    
-    // Get holiday checker and create recurrence engine
-    const holidayChecker = await getHolidayChecker()
-    const recurrenceEngine = new TaskRecurrenceEngine({ holidayChecker })
-    
-    // Filter tasks that should appear on this date using the comprehensive recurrence engine
-    const filteredTasks = tasks.filter(task => {
+
+    // Filter tasks by recurrence on the requested date using the same engine as checklist
+    const holidayChecker = await createHolidayChecker()
+    const recurrenceEngine = new NewRecurrenceEngine(holidayChecker)
+
+    const filteredTasks = (masterTasks || []).filter(task => {
       try {
-        // Convert task to the format expected by recurrence engine
-        const masterTask = {
+        const mt: NewMasterTask = {
           id: task.id,
-          title: task.title,
+          title: task.title || '',
+          description: task.description || '',
           responsibility: task.responsibility || [],
-          frequencies: task.frequencies || [],
           categories: task.categories || [],
-          timing: task.timing as any || 'anytime_during_day',
-          due_time: task.due_time,
-          publish_delay_date: task.publish_delay_date,
-          publish_status: task.publish_status as any || 'active',
-          due_date: task.due_date
+          frequencies: (task.frequencies || []) as any,
+          timing: task.timing || 'anytime_during_day',
+          active: task.publish_status === 'active',
+          publish_delay: task.publish_delay || undefined,
+          due_date: task.due_date || undefined,
         }
-        
-        return recurrenceEngine.shouldTaskAppear(masterTask, validatedDate)
-      } catch (error) {
-        console.error('Error checking task recurrence:', error)
-        // If there's an error with recurrence calculation, include the task
+        return recurrenceEngine.shouldTaskAppearOnDate(mt, validatedDate)
+      } catch (err) {
+        console.error('Error checking task recurrence:', err)
         return true
       }
     })
-    
-    console.log(`DEBUG: After recurrence filtering: ${filteredTasks.length} tasks should appear`)
-    
-    // Get existing checklist instances for this role and date
-    const { data: instances, error: instancesError } = await supabaseServer
-      .from('checklist_instances')
-      .select('*')
-      .eq('role', validatedRole)
-      .eq('date', validatedDate)
+
+    // Fetch existing task instances (same table as checklist API)
+    const masterTaskIds = filteredTasks.map(t => t.id)
+    const { data: instances, error: instancesError } = masterTaskIds.length > 0
+      ? await supabaseAdmin
+          .from('task_instances')
+          .select('master_task_id, status, created_at, instance_date')
+          .in('master_task_id', masterTaskIds)
+          .eq('instance_date', validatedDate)
+      : { data: [], error: null as any }
+
+    if (instancesError) {
+      console.error('Error fetching task instances:', instancesError)
+    }
+
+    const instanceMap = new Map<string, any>()
+    ;(instances || []).forEach(inst => instanceMap.set(inst.master_task_id, inst))
     
     if (instancesError) {
       console.error('Error fetching checklist instances:', instancesError)
     }
     
-    // Create a map of existing instances by master_task_id
-    const instanceMap = new Map()
-    if (instances) {
-      instances.forEach(instance => {
-        instanceMap.set(instance.master_task_id, instance)
-      })
-    }
-    
     // Calculate task counts using Australian timezone
-    const now = getAustralianNow()
-    const nineAM = createAustralianDateTime(validatedDate, '09:00')
-    
     const counts = {
       total: 0,           // pending tasks to do today
-      newSinceNine: 0,    // pending and created since 9:00am today
+      newSinceNine: 0,    // tasks that appeared today (instance created today OR once_off activated today)
       dueToday: 0,        // pending and scheduled for today
       overdue: 0,         // pending and past due time
       completed: 0        // completed today
     }
-    
+
+    const now = getAustralianNow()
+
     filteredTasks.forEach(task => {
       const instance = instanceMap.get(task.id)
-      const isCompleted = instance?.status === 'completed'
-      
+      const isCompleted = instance?.status === 'done' || instance?.status === 'completed'
       if (isCompleted) {
         counts.completed++
         return
       }
 
-      // Only count pending tasks as "to do"
+      // Pending tasks to do today
       counts.total++
 
-      // Convert task to master task format for due time calculation
-      const masterTask = {
-        id: task.id,
-        title: task.title,
-        responsibility: task.responsibility || [],
-        frequencies: task.frequencies || [],
-        categories: task.categories || [],
-        timing: task.timing as any || 'anytime_during_day',
-        due_time: task.due_time,
-        publish_delay_date: task.publish_delay_date,
-        publish_status: task.publish_status as any || 'active',
-        due_date: task.due_date
-      }
-      
-      // Calculate due time using recurrence engine
-      const dueTime = recurrenceEngine.calculateDueTime(masterTask)
-      const dueDateTime = createAustralianDateTime(validatedDate, dueTime)
-      
-      // Count tasks specifically due today (pending)
-      const australianToday = getAustralianToday()
-      if (validatedDate === australianToday) {
+      // Due time calculation: use task.due_time or treat as end-of-day
+      const due = task.due_time ? task.due_time : '23:59'
+      const dueDateTime = createAustralianDateTime(validatedDate, due)
+
+      // Only compute due/overdue for today
+      if (validatedDate === getAustralianToday()) {
         counts.dueToday++
-        
-        // Check if overdue using Australian-local time
-        if (now > dueDateTime) {
-          counts.overdue++
-        }
+        if (now > dueDateTime) counts.overdue++
       }
-      
-      // Count new tasks since 9:00am only when an instance exists and was created after 9:00
+
+      // New since 9:00am logic (Australian time):
+      // A task is "new" if it was assigned/instanced at or after the 9:00am baseline,
+      // and is not completed yet. Baseline is 9:00am today; if current time is before 9:00am,
+      // baseline is 9:00am of the previous day.
+      const nineAmToday = createAustralianDateTime(getAustralianToday(), '09:00')
+      const baseline = now >= nineAmToday
+        ? nineAmToday
+        : new Date(nineAmToday.getTime() - 24 * 60 * 60 * 1000)
+
+      // If we have an instance for today, use its creation time
       if (instance?.created_at) {
-        const taskCreatedAt = new Date(instance.created_at)
-        if (taskCreatedAt > nineAM) {
-          counts.newSinceNine++
+        const instanceCreated = new Date(instance.created_at)
+        if (instanceCreated >= baseline) counts.newSinceNine++
+      }
+
+      // If no instance exists yet but the task appears today (e.g., Once Off just activated),
+      // treat activation/creation as "new" if it happened after the baseline. Restrict this
+      // heuristic to once_off to avoid noise on recurring tasks.
+      if (!instance) {
+        const isOnceOff = Array.isArray(task.frequencies) && (task.frequencies as any[]).includes('once_off')
+        if (isOnceOff) {
+          const createdAt = task.created_at ? new Date(task.created_at) : null
+          const updatedAt = task.updated_at ? new Date(task.updated_at) : null
+          if ((createdAt && createdAt >= baseline) || (updatedAt && updatedAt >= baseline)) {
+            counts.newSinceNine++
+          }
         }
       }
     })
     
-    // Get total master tasks count for metadata
-    const { count: totalMasterTasks } = await supabaseServer
+    // Metadata (optional)
+    const { count: totalMasterTasks } = await supabaseAdmin
       .from('master_tasks')
       .select('*', { count: 'exact', head: true })
-      .overlaps('responsibility', [validatedRole])
+      .overlaps('responsibility', searchRoles)
       .eq('publish_status', 'active')
-    
-    // Check if today is a holiday
-    const isHoliday = holidayChecker.isHoliday(validatedDate)
-    
+
+    const isHoliday = (await createHolidayChecker()).isHoliday(validatedDate)
+
     return NextResponse.json({
       success: true,
       data: counts,
