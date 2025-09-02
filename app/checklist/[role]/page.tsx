@@ -374,9 +374,9 @@ const getFrequencyRankForDay = (frequencies: string[] = [], dateStr: string) => 
   const lower = frequencies.map(f => (f || '').toLowerCase())
 
   const date = new Date(dateStr)
-  const dowNames = ['sunday','monday','tuesday','wednesday','thursday','friday','saturday']
+  const dowNames = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday']
   const dow = date.getDay() // 0-6
-  const monthKeys = ['jan','feb','mar','apr','may','jun','jul','aug','sep','oct','nov','dec']
+  const monthKeys = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec']
   const monKey = monthKeys[date.getMonth()]
 
   let rank = 9999
@@ -591,7 +591,7 @@ export default function RoleChecklistPage() {
   const [dragIndex, setDragIndex] = useState<number | null>(null)
   const isReorderActive = isAdmin && selectedResponsibility !== 'all'
   const currentOrderResponsibility = useMemo(() => (isAdmin ? selectedResponsibility : currentRoleKebab), [isAdmin, selectedResponsibility, currentRoleKebab])
-  
+
   // Detect if any task has a saved custom order for the current responsibility
   const hasCustomOrderForRole = useMemo(() => {
     if (!currentOrderResponsibility) return false
@@ -881,7 +881,7 @@ export default function RoleChecklistPage() {
       // Broadcast event so homepage cards refresh their counts
       try {
         window.dispatchEvent(new CustomEvent('tasks-changed', { detail: { date: currentDate, role } }))
-      } catch {}
+      } catch { }
     } catch (error) {
       console.error('Error completing task:', error)
       // Revert optimistic update on error
@@ -930,7 +930,7 @@ export default function RoleChecklistPage() {
       // Broadcast event so homepage cards refresh their counts
       try {
         window.dispatchEvent(new CustomEvent('tasks-changed', { detail: { date: currentDate, role } }))
-      } catch {}
+      } catch { }
     } catch (error) {
       console.error('Error undoing task:', error)
       // Revert optimistic update on error
@@ -1203,7 +1203,7 @@ export default function RoleChecklistPage() {
     // For admin view with "All Responsibilities" filter
     if (isAdmin && selectedResponsibility === 'all') {
       const completions = task.position_completions || []
-      
+
       if (completions.length === 0) {
         // No completions - check if overdue
         if (task.master_task?.due_time) {
@@ -1223,12 +1223,12 @@ export default function RoleChecklistPage() {
           </Badge>
         )
       }
-      
+
       // Show position completion badges with truncation
       const maxVisible = 2
       const visibleCompletions = completions.slice(0, maxVisible)
       const hiddenCount = completions.length - maxVisible
-      
+
       return (
         <div className="flex flex-wrap gap-1">
           {visibleCompletions.map((completion, index) => (
@@ -1244,10 +1244,10 @@ export default function RoleChecklistPage() {
         </div>
       )
     }
-    
+
     // For specific position view (admin with specific filter or regular user)
     const isCompletedForPosition = task.is_completed_for_position || task.status === "completed"
-    
+
     if (isCompletedForPosition) {
       return (
         <Badge className="bg-green-100 text-green-800 border-green-200">
@@ -1276,7 +1276,7 @@ export default function RoleChecklistPage() {
     )
   }
 
-  const allTasksCompleted = filteredAndSortedTasks.length > 0 && filteredAndSortedTasks.every((task) => 
+  const allTasksCompleted = filteredAndSortedTasks.length > 0 && filteredAndSortedTasks.every((task) =>
     task.is_completed_for_position || task.status === "completed"
   )
 
@@ -1413,7 +1413,7 @@ export default function RoleChecklistPage() {
           <CardHeader>
             <div className="flex flex-col sm:flex-row sm:items-center space-y-2 sm:space-y-0">
               <CardTitle className="text-lg lg:text-xl mb-1">
-                Tasks ({Math.min(currentPage * tasksPerPage, filteredAndSortedTasks.length)} of {filteredAndSortedTasks.length})
+                Tasks ({filteredAndSortedTasks.length === 0 ? '0' : `${startIndex + 1}-${Math.min(endIndex, filteredAndSortedTasks.length)}`} of {filteredAndSortedTasks.length})
                 {totalPages > 1 && (
                   <span className="text-sm font-normal text-gray-600 ml-2">
                     - Page {currentPage} of {totalPages}
@@ -1446,8 +1446,6 @@ export default function RoleChecklistPage() {
                   </Button>
                 )}
               </div>
-
-
             </div>
           </CardHeader>
           <CardContent className="p-0">

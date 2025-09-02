@@ -322,14 +322,14 @@ const renderFrequencyWithDetails = (task: MasterTask) => {
 }
 
 // Sortable Header Component
-const SortableHeader = ({ 
-  field, 
-  children, 
-  sortField, 
-  sortDirection, 
-  onSort, 
-  className = "" 
-}: { 
+const SortableHeader = ({
+  field,
+  children,
+  sortField,
+  sortDirection,
+  onSort,
+  className = ""
+}: {
   field: string
   children: React.ReactNode
   sortField: string
@@ -339,20 +339,20 @@ const SortableHeader = ({
 }) => {
   const isActive = sortField === field
   const isCentered = className.includes('text-center')
-  
+
   return (
-    <TableHead 
+    <TableHead
       className={`cursor-pointer hover:bg-gray-100 transition-colors ${className}`}
       onClick={() => onSort(field)}
     >
       <div className={`flex items-center ${isCentered ? 'justify-center' : 'justify-left'}`}>
         <span>{children}</span>
         <div className={`flex flex-col ${isCentered ? 'ml-1' : 'ml-1'}`}>
-          <ChevronUp 
-            className={`h-3 w-3 ${isActive && sortDirection === 'asc' ? 'text-blue-600' : 'text-gray-400'}`} 
+          <ChevronUp
+            className={`h-3 w-3 ${isActive && sortDirection === 'asc' ? 'text-blue-600' : 'text-gray-400'}`}
           />
-          <ChevronDown 
-            className={`h-3 w-3 -mt-1 ${isActive && sortDirection === 'desc' ? 'text-blue-600' : 'text-gray-400'}`} 
+          <ChevronDown
+            className={`h-3 w-3 -mt-1 ${isActive && sortDirection === 'desc' ? 'text-blue-600' : 'text-gray-400'}`}
           />
         </div>
       </div>
@@ -963,7 +963,7 @@ export default function AdminMasterTasksPage() {
 
         showToast('success', 'Task Updated', 'Task was updated successfully')
         // Notify homepage cards to refresh counts immediately
-        try { window.dispatchEvent(new Event('tasks-changed')) } catch {}
+        try { window.dispatchEvent(new Event('tasks-changed')) } catch { }
       } else {
         // Create new task
         const newTask = await masterTasksApi.create(taskData)
@@ -974,7 +974,7 @@ export default function AdminMasterTasksPage() {
 
         showToast('success', 'Task Created', 'New task was created successfully')
         // Notify homepage cards to refresh counts immediately
-        try { window.dispatchEvent(new Event('tasks-changed')) } catch {}
+        try { window.dispatchEvent(new Event('tasks-changed')) } catch { }
       }
 
       // Close dialog and reset state
@@ -1741,7 +1741,7 @@ export default function AdminMasterTasksPage() {
           <CardHeader className="flex flex-col lg:flex-row lg:items-center lg:justify-between space-y-4 lg:space-y-0">
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between space-y-2 sm:space-y-0">
               <CardTitle className="text-lg lg:text-xl mb-1">
-                Master Tasks ({Math.min(currentPage * tasksPerPage, filteredAndSortedTasks.length)} of {filteredAndSortedTasks.length})
+                Master Tasks ({filteredAndSortedTasks.length === 0 ? '0' : `${startIndex + 1}-${Math.min(endIndex, filteredAndSortedTasks.length)}`} of {filteredAndSortedTasks.length})
                 {totalPages > 1 && (
                   <span className="text-sm font-normal text-gray-600 ml-2">
                     - Page {currentPage} of {totalPages}
@@ -1817,55 +1817,55 @@ export default function AdminMasterTasksPage() {
                             className="data-[state=checked]:bg-blue-500 data-[state=checked]:text-white data-[state=checked]:border-blue-500"
                           />
                         </TableHead>
-                        <SortableHeader 
-                          field="title" 
-                          sortField={sortField} 
-                          sortDirection={sortDirection} 
+                        <SortableHeader
+                          field="title"
+                          sortField={sortField}
+                          sortDirection={sortDirection}
                           onSort={handleSort}
                           className="w-[23%] py-3 bg-gray-50"
                         >
                           Title & Description
                         </SortableHeader>
-                        <SortableHeader 
-                          field="responsibility" 
-                          sortField={sortField} 
-                          sortDirection={sortDirection} 
+                        <SortableHeader
+                          field="responsibility"
+                          sortField={sortField}
+                          sortDirection={sortDirection}
                           onSort={handleSort}
                           className="w-[14%] py-3 bg-gray-50"
                         >
                           Responsibilities
                         </SortableHeader>
-                        <SortableHeader 
-                          field="category" 
-                          sortField={sortField} 
-                          sortDirection={sortDirection} 
+                        <SortableHeader
+                          field="category"
+                          sortField={sortField}
+                          sortDirection={sortDirection}
                           onSort={handleSort}
                           className="w-[14%] py-3 bg-gray-50"
                         >
                           Categories
                         </SortableHeader>
-                        <SortableHeader 
-                          field="frequency" 
-                          sortField={sortField} 
-                          sortDirection={sortDirection} 
+                        <SortableHeader
+                          field="frequency"
+                          sortField={sortField}
+                          sortDirection={sortDirection}
                           onSort={handleSort}
                           className="w-[14%] py-3 bg-gray-50"
                         >
                           Frequencies & Timing
                         </SortableHeader>
-                        <SortableHeader 
-                          field="status" 
-                          sortField={sortField} 
-                          sortDirection={sortDirection} 
+                        <SortableHeader
+                          field="status"
+                          sortField={sortField}
+                          sortDirection={sortDirection}
                           onSort={handleSort}
                           className="w-[10%] py-3 bg-gray-50 text-center"
                         >
                           Status
                         </SortableHeader>
-                        <SortableHeader 
-                          field="due_time" 
-                          sortField={sortField} 
-                          sortDirection={sortDirection} 
+                        <SortableHeader
+                          field="due_time"
+                          sortField={sortField}
+                          sortDirection={sortDirection}
                           onSort={handleSort}
                           className="w-[10%] py-3 bg-gray-50 text-center"
                         >

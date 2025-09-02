@@ -11,10 +11,12 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Checkbox } from "@/components/ui/checkbox"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { ConfirmDeleteDialog } from "@/components/confirm-delete-dialog"
 
 import { publicHolidaysApi, authenticatedPost } from "@/lib/api-client"
-import { Plus, Trash2, Edit, Download, Upload, Calendar, RefreshCw } from "lucide-react"
+import { supabase } from "@/lib/supabase"
+import { Plus, Trash2, Edit, Download, Upload, Calendar, Search, X } from "lucide-react"
 import { toastError, toastSuccess } from "@/hooks/use-toast"
 
 interface PublicHoliday {
@@ -26,21 +28,21 @@ interface PublicHoliday {
 }
 
 // Pagination Component
-const Pagination = ({ 
-  currentPage, 
-  totalPages, 
-  onPageChange 
-}: { 
+const Pagination = ({
+  currentPage,
+  totalPages,
+  onPageChange
+}: {
   currentPage: number
   totalPages: number
-  onPageChange: (page: number) => void 
+  onPageChange: (page: number) => void
 }) => {
   if (totalPages <= 1) return null
 
   const getVisiblePages = () => {
     const pages = []
     const maxVisible = 5
-    
+
     if (totalPages <= maxVisible) {
       for (let i = 1; i <= totalPages; i++) {
         pages.push(i)
@@ -68,7 +70,7 @@ const Pagination = ({
         pages.push(totalPages)
       }
     }
-    
+
     return pages
   }
 
@@ -83,7 +85,7 @@ const Pagination = ({
       >
         Prev
       </Button>
-      
+
       {getVisiblePages().map((page, index) => (
         <div key={index}>
           {page === '...' ? (
@@ -93,16 +95,15 @@ const Pagination = ({
               variant={currentPage === page ? "default" : "outline"}
               size="sm"
               onClick={() => onPageChange(page as number)}
-              className={`px-3 py-1 min-w-[40px] ${
-                currentPage === page ? "bg-blue-500 text-white" : ""
-              }`}
+              className={`px-3 py-1 min-w-[40px] ${currentPage === page ? "bg-blue-500 text-white" : ""
+                }`}
             >
               {page}
             </Button>
           )}
         </div>
       ))}
-      
+
       <Button
         variant="outline"
         size="sm"
@@ -122,29 +123,43 @@ export default function AdminPublicHolidaysPage() {
   const [loading, setLoading] = useState(true)
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [editingHoliday, setEditingHoliday] = useState<PublicHoliday | null>(null)
-  
+
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1)
-  const holidaysPerPage = 50
 
   const [newHoliday, setNewHoliday] = useState({
     date: '',
     name: '',
-    region: 'NSW',
-    source: 'manual'
+    region: 'National',
+    source: 'Manual'
   })
-  
+
   // Delete confirmation dialog state
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
   const [holidayToDelete, setHolidayToDelete] = useState<PublicHoliday | null>(null)
   const [isDeleting, setIsDeleting] = useState(false)
-  
+
   // Bulk action state
   const [selectedHolidays, setSelectedHolidays] = useState<Set<string>>(new Set())
   const [bulkDeleteConfirmModal, setBulkDeleteConfirmModal] = useState(false)
   const [bulkActionLoading, setBulkActionLoading] = useState(false)
-  
+
+  // Import loading state
+  const [isImporting, setIsImporting] = useState(false)
+
+  // Pagination state - updated to support different page sizes
+  const [holidaysPerPage, setHolidaysPerPage] = useState(50)
+
+  // Search state
+  const [searchTerm, setSearchTerm] = useState('')
+
   const [alert, setAlert] = useState<{ type: 'success' | 'error'; message: string } | null>(null)
+
+  // Form validation errors
+  const [formErrors, setFormErrors] = useState<{
+    date?: string
+    name?: string
+  }>({})
 
   useEffect(() => {
     console.log('Public Holidays Page - useEffect triggered:', { authLoading, user: !!user })
@@ -184,8 +199,23 @@ export default function AdminPublicHolidaysPage() {
 
 
   const handleSaveHoliday = async () => {
-    if (!newHoliday.date || !newHoliday.name) {
-      toastError('Validation Error', 'Date and name are required')
+    // Clear previous errors
+    setFormErrors({})
+
+    // Validate form fields
+    const errors: { date?: string; name?: string } = {}
+
+    if (!newHoliday.date || newHoliday.date.trim() === '') {
+      errors.date = 'Date is required'
+    }
+
+    if (!newHoliday.name || newHoliday.name.trim() === '') {
+      errors.name = 'Holiday name is required'
+    }
+
+    // If there are validation errors, show them and return
+    if (Object.keys(errors).length > 0) {
+      setFormErrors(errors)
       return
     }
 
@@ -194,8 +224,8 @@ export default function AdminPublicHolidaysPage() {
         // Update existing holiday - pass original region for precise identification
         console.log('Updating holiday:', { editingHoliday, newHoliday })
         const updatedHoliday = await publicHolidaysApi.update(
-          editingHoliday.date, 
-          newHoliday, 
+          editingHoliday.date,
+          newHoliday,
           editingHoliday.region
         )
         if (updatedHoliday) {
@@ -220,7 +250,8 @@ export default function AdminPublicHolidaysPage() {
 
       setIsDialogOpen(false)
       setEditingHoliday(null)
-      setNewHoliday({ date: '', name: '', region: 'NSW', source: 'manual' })
+      setNewHoliday({ date: '', name: '', region: 'National', source: 'Manual' })
+      setFormErrors({}) // Clear errors on successful save
     } catch (error) {
       console.error('Error saving holiday:', error)
       toastError('Save Failed', 'Failed to save holiday')
@@ -238,13 +269,13 @@ export default function AdminPublicHolidaysPage() {
     setIsDeleting(true)
     try {
       console.log('Deleting holiday:', holidayToDelete)
-      
+
       // Use the API client which handles authentication properly
       const success = await publicHolidaysApi.delete(holidayToDelete.date, holidayToDelete.region)
-      
+
       if (success) {
         // Filter out the deleted holiday using both date and region for precision
-        setHolidays(holidays.filter(h => 
+        setHolidays(holidays.filter(h =>
           !(h.date === holidayToDelete.date && h.region === holidayToDelete.region)
         ))
         toastSuccess('Holiday Deleted', 'Holiday deleted successfully')
@@ -255,7 +286,7 @@ export default function AdminPublicHolidaysPage() {
     } catch (error) {
       console.error('Error deleting holiday:', error)
       const errorMessage = error.message || 'Unknown error'
-      
+
       // Check if it's the audit constraint error and show helpful message
       if (errorMessage.includes('audit_log_action_check') || errorMessage.includes('Fix Audit')) {
         toastError('Database Fix Required', 'Please visit Admin > Fix Audit to resolve this issue')
@@ -274,45 +305,98 @@ export default function AdminPublicHolidaysPage() {
     setNewHoliday({
       date: holiday.date,
       name: holiday.name,
-      region: holiday.region || 'NSW',
-      source: holiday.source || 'manual'
+      region: holiday.region || 'National',
+      source: holiday.source || 'Manual'
     })
+    setFormErrors({}) // Clear any existing errors
     setIsDialogOpen(true)
   }
 
-  const handleImportHolidays = async () => {
-    try {
-      const result = await authenticatedPost('/api/public-holidays/import', {
-        year: new Date().getFullYear(),
-        region: 'NSW'
-      })
-      
-      if (result && result.success) {
-        await loadHolidays()
-        toastSuccess('Import Successful', `Imported ${result.imported} holidays`)
-      } else {
-        toastError('Import Failed', result?.message || 'Failed to import holidays')
+
+
+  const handleImportHolidays = () => {
+    // Create a hidden file input element
+    const fileInput = document.createElement('input')
+    fileInput.type = 'file'
+    fileInput.accept = '.xlsx,.xls'
+    fileInput.style.display = 'none'
+
+    fileInput.onchange = async (event) => {
+      const file = (event.target as HTMLInputElement).files?.[0]
+      if (!file) return
+
+      setIsImporting(true)
+
+      try {
+        const formData = new FormData()
+        formData.append('file', file)
+
+        // Create authenticated headers for file upload
+        const headers: HeadersInit = {}
+
+        // Get authentication from Supabase
+        const { data: { session } } = await supabase.auth.getSession()
+        if (session?.access_token) {
+          headers.Authorization = `Bearer ${session.access_token}`
+        }
+
+        const response = await fetch('/api/public-holidays/import', {
+          method: 'POST',
+          body: formData,
+          headers
+        })
+
+        const result = await response.json()
+
+        if (result && result.success) {
+          // Reload holidays immediately to show new records
+          await loadHolidays()
+          toastSuccess('Import Successful', `Imported ${result.imported} holidays`)
+        } else {
+          toastError('Import Failed', result?.message || 'Failed to import holidays')
+        }
+      } catch (error) {
+        console.error('Error importing holidays:', error)
+        const errorMessage = error instanceof Error ? error.message : 'Failed to import holidays'
+        toastError('Import Failed', errorMessage)
+      } finally {
+        setIsImporting(false)
       }
-    } catch (error) {
-      console.error('Error importing holidays:', error)
-      const errorMessage = error instanceof Error ? error.message : 'Failed to import holidays'
-      toastError('Import Failed', errorMessage)
     }
+
+    // Trigger file selection
+    document.body.appendChild(fileInput)
+    fileInput.click()
+    document.body.removeChild(fileInput)
   }
 
-  const exportHolidays = () => {
-    const csv = [
-      'Date,Name,Region,Source',
-      ...holidays.map(h => `${h.date},"${h.name}",${h.region || ''},${h.source || ''}`)
-    ].join('\n')
-    
-    const blob = new Blob([csv], { type: 'text/csv' })
-    const url = window.URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `public-holidays-${new Date().toISOString().split('T')[0]}.csv`
-    a.click()
-    window.URL.revokeObjectURL(url)
+  const exportHolidays = async () => {
+    try {
+      // Import the XLSX library dynamically
+      const XLSX = await import('xlsx')
+
+      // Prepare data for Excel export
+      const exportData = holidays.map(h => ({
+        Date: h.date,
+        Name: h.name,
+        Region: h.region || '',
+        Source: h.source || ''
+      }))
+
+      // Create workbook and worksheet
+      const workbook = XLSX.utils.book_new()
+      const worksheet = XLSX.utils.json_to_sheet(exportData)
+
+      // Add the worksheet to the workbook
+      XLSX.utils.book_append_sheet(workbook, worksheet, 'Public Holidays')
+
+      // Generate Excel file and download
+      const fileName = `public-holidays-${new Date().toISOString().split('T')[0]}.xlsx`
+      XLSX.writeFile(workbook, fileName)
+    } catch (error) {
+      console.error('Error exporting to Excel:', error)
+      toastError('Export Failed', 'Failed to export holidays to Excel')
+    }
   }
 
   // Bulk action functions
@@ -352,9 +436,9 @@ export default function AdminPublicHolidaysPage() {
     try {
       const selectedHolidayKeys = Array.from(selectedHolidays)
       const holidaysToDelete = holidays.filter(h => selectedHolidayKeys.includes(getHolidayKey(h)))
-      
+
       // Delete all selected holidays
-      await Promise.all(holidaysToDelete.map(holiday => 
+      await Promise.all(holidaysToDelete.map(holiday =>
         publicHolidaysApi.delete(holiday.date, holiday.region)
       ))
 
@@ -366,14 +450,14 @@ export default function AdminPublicHolidaysPage() {
     } catch (error) {
       console.error('Error in bulk delete:', error)
       const errorMessage = error instanceof Error ? error.message : 'Unknown error'
-      
+
       // Check if it's the audit constraint error and show helpful message
       if (errorMessage.includes('audit_log_action_check') || errorMessage.includes('Fix Audit')) {
         toastError('Database Fix Required', 'Please visit Admin > Fix Audit to resolve this issue')
       } else {
         toastError('Bulk Delete Failed', `Failed to delete holidays: ${errorMessage}`)
       }
-      
+
       // Refresh data to ensure consistency
       await loadHolidays()
     } finally {
@@ -381,16 +465,29 @@ export default function AdminPublicHolidaysPage() {
     }
   }
 
-  // Pagination calculations
-  const totalPages = Math.ceil(holidays.length / holidaysPerPage)
+  // Search and filter logic
+  const filteredHolidays = holidays.filter(holiday => {
+    if (!searchTerm.trim()) return true
+
+    const searchLower = searchTerm.toLowerCase()
+    return (
+      holiday.name.toLowerCase().includes(searchLower) ||
+      holiday.date.includes(searchTerm) ||
+      (holiday.region && holiday.region.toLowerCase().includes(searchLower)) ||
+      (holiday.source && holiday.source.toLowerCase().includes(searchLower))
+    )
+  })
+
+  // Pagination calculations based on filtered results
+  const totalPages = Math.ceil(filteredHolidays.length / holidaysPerPage)
   const startIndex = (currentPage - 1) * holidaysPerPage
   const endIndex = startIndex + holidaysPerPage
-  const paginatedHolidays = holidays.slice(startIndex, endIndex)
+  const paginatedHolidays = filteredHolidays.slice(startIndex, endIndex)
 
-  // Reset to first page when holidays change
+  // Reset to first page when holidays change, page size changes, or search term changes
   useEffect(() => {
     setCurrentPage(1)
-  }, [holidays.length])
+  }, [holidays.length, holidaysPerPage, searchTerm])
 
   // Group holidays by year for display
   const holidaysByYear = holidays.reduce((acc, holiday) => {
@@ -429,32 +526,25 @@ export default function AdminPublicHolidaysPage() {
 
       <main className="max-w-content-lg mx-auto px-4 sm:px-6 lg:px-18 py-6 sm:py-8">
         {/* Header */}
-        <div className="mb-8">
-          <div className="pharmacy-gradient rounded-lg p-6 text-white">
-            <div className="flex items-center justify-between">
-              <div>
-                <h1 className="text-3xl font-bold mb-2">Public Holidays Management</h1>
-                <p className="text-white/90">Manage public holidays that affect task scheduling</p>
+        <div className="mb-6 sm:mb-8">
+          <div className="pharmacy-gradient rounded-lg p-4 sm:p-6 text-white">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+              <div className="min-w-0">
+                <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold mb-2">Public Holidays Management</h1>
+                <p className="text-white/90 text-sm sm:text-base">Manage public holidays that affect task scheduling</p>
               </div>
-              <div className="flex space-x-3">
+              <div className="flex-shrink-0">
                 <Button
                   onClick={() => {
                     setEditingHoliday(null)
-                    setNewHoliday({ date: '', name: '', region: 'NSW', source: 'manual' })
+                    setNewHoliday({ date: '', name: '', region: 'National', source: 'Manual' })
+                    setFormErrors({}) // Clear any existing errors
                     setIsDialogOpen(true)
                   }}
-                  className="bg-white text-blue-600 hover:bg-gray-100"
+                  className="bg-white text-blue-600 hover:bg-gray-100 w-full sm:w-auto"
                 >
                   <Plus className="w-4 h-4 mr-2" />
                   Add Holiday
-                </Button>
-                <Button
-                  onClick={handleImportHolidays}
-                  variant="outline"
-                  className="bg-white/10 border-white/20 text-white hover:bg-white/20"
-                >
-                  <Download className="w-4 h-4" />
-                  Import
                 </Button>
               </div>
             </div>
@@ -470,215 +560,384 @@ export default function AdminPublicHolidaysPage() {
           </Alert>
         )}
 
-        {/* Stats */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-          <Card className="card-surface py-5 h-22">
-            <CardContent className="px-8">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-gray-600">Total Holidays</p>
-                  <p className="text-2xl font-bold">{holidays.length}</p>
+        {/* Stats and Actions */}
+        <div className="w-full grid grid-cols-1 lg:grid-cols-2 gap-3 mb-6">
+          {/* Stats Cards */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            <Card className="card-surface py-5 h-22">
+              <CardContent className="px-4 sm:px-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm text-gray-600">Total Holidays</p>
+                    <p className="text-xl sm:text-2xl font-bold">{holidays.length}</p>
+                  </div>
+                  <Calendar className="w-6 h-6 sm:w-8 sm:h-8 text-blue-600" />
                 </div>
-                <Calendar className="w-8 h-8 text-blue-600 mb-2" />
-              </div>
-            </CardContent>
-          </Card>
-          
-          <Card className="card-surface py-5 h-22">
-            <CardContent className="px-8">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-gray-600">This Year</p>
-                  <p className="text-2xl font-bold">
-                    {holidaysByYear[new Date().getFullYear()]?.length || 0}
-                  </p>
+              </CardContent>
+            </Card>
+
+            <Card className="card-surface py-5 h-22">
+              <CardContent className="px-4 sm:px-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm text-gray-600">This Year</p>
+                    <p className="text-xl sm:text-2xl font-bold">
+                      {holidaysByYear[new Date().getFullYear()]?.length || 0}
+                    </p>
+                  </div>
+                  <Calendar className="w-6 h-6 sm:w-8 sm:h-8 text-green-600" />
                 </div>
-                <Calendar className="w-8 h-8 text-green-600 mb-2" />
-              </div>
-            </CardContent>
-          </Card>
-          
-          <Card className="card-surface py-5 h-22">
-            <CardContent className="px-8">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-gray-600">Next Year</p>
-                  <p className="text-2xl font-bold">
-                    {holidaysByYear[new Date().getFullYear() + 1]?.length || 0}
-                  </p>
+              </CardContent>
+            </Card>
+
+            <Card className="card-surface py-5 h-22">
+              <CardContent className="px-4 sm:px-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm text-gray-600">Next Year</p>
+                    <p className="text-xl sm:text-2xl font-bold">
+                      {holidaysByYear[new Date().getFullYear() + 1]?.length || 0}
+                    </p>
+                  </div>
+                  <Calendar className="w-6 h-6 sm:w-8 sm:h-8 text-orange-600" />
                 </div>
-                <Calendar className="w-8 h-8 text-orange-600 mb-2" />
+              </CardContent>
+            </Card>
+          </div>
+          {/* Search and Actions */}
+          <Card className="card-surface py-6 h-full">
+            <CardContent className="px-4 sm:px-6">
+              <div className="space-y-3 sm:space-y-0 sm:grid sm:grid-cols-1 lg:grid-cols-6 sm:gap-3">
+                {/* Search Field */}
+                <div className="relative lg:col-span-4">
+                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+                  <Input
+                    placeholder="Search holidays (name, date, region, source)..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="pl-10 pr-10"
+                  />
+                  {searchTerm && (
+                    <button
+                      onClick={() => setSearchTerm('')}
+                      className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors"
+                      aria-label="Clear search"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  )}
+                </div>
+
+                {/* Action Buttons */}
+                <div className="grid grid-cols-2 gap-2 lg:col-span-2 lg:grid-cols-2">
+                  <Button variant="outline" onClick={exportHolidays} className="w-full">
+                    <Download className="w-4 h-4 mr-2" />
+                    <span className="hidden sm:inline">Export</span>
+                  </Button>
+                  <Button
+                    onClick={handleImportHolidays}
+                    variant="outline"
+                    className="w-full"
+                    disabled={isImporting}
+                  >
+                    {isImporting ? (
+                      <span className="flex items-center justify-center">
+                        <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-green-800 mr-2"></div>
+                        <span className="hidden sm:inline">Importing...</span>
+                        <span className="sm:hidden">...</span>
+                      </span>
+                    ) : (
+                      <span className="flex items-center justify-center">
+                        <Upload className="w-4 h-4 mr-2" />
+                        <span className="hidden sm:inline">Import</span>
+                      </span>
+                    )}
+                  </Button>
+                </div>
               </div>
             </CardContent>
           </Card>
         </div>
 
-        {/* Actions */}
-        <Card className="card-surface mb-6">
-          <CardContent>
-            <div className="flex justify-between items-center">
-              <div className="flex space-x-2">
-                <Button variant="outline" onClick={exportHolidays}>
-                  <Download className="w-4 h-4 mr-2" />
-                  Export CSV
-                </Button>
-                <Button variant="outline" onClick={loadHolidays}>
-                  <RefreshCw className="w-4 h-4 mr-2" />
-                  Refresh
-                </Button>
-              </div>
-              
-              <p className="text-sm text-gray-600">
-                Holidays affect task scheduling and recurrence rules
-              </p>
-            </div>
-          </CardContent>
-        </Card>
-
         {/* Holidays Table */}
-        <Card className="card-surface">
-            <CardHeader>
+        <Card className="card-surface w-full">
+          <CardHeader>
+            {/* <div className="flex flex-col space-y-4"> */}
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between space-y-2 sm:space-y-0">
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between space-y-2 sm:space-y-0">
-                <CardTitle className="text-lg lg:text-xl mb-1">
-                  Holidays ({Math.min(currentPage * 15, holidays.length)} of {holidays.length})
+
+                <CardTitle className="text-lg lg:text-xl mb-1 mr-2">
+                  Holidays ({filteredHolidays.length === 0 ? '0' : `${startIndex + 1}-${Math.min(endIndex, filteredHolidays.length)}`} of {filteredHolidays.length})
+                  {searchTerm && filteredHolidays.length !== holidays.length && (
+                    <span className="text-sm font-normal text-gray-600 ml-2">
+                      (filtered from {holidays.length} total)
+                    </span>
+                  )}
                   {totalPages > 1 && (
                     <span className="text-sm font-normal text-gray-600 ml-2">
                       - Page {currentPage} of {totalPages}
                     </span>
                   )}
                 </CardTitle>
-
-                {/* Bulk Actions */}
-                {selectedHolidays.size > 0 && (
-                  <div className="flex items-center space-x-3">
-                    <span className="text-sm font-medium text-gray-700">
-                      {selectedHolidays.size} holiday{selectedHolidays.size !== 1 ? 's' : ''} selected
-                    </span>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={handleBulkDelete}
-                      disabled={bulkActionLoading}
-                      className="flex items-center space-x-1 text-red-600 hover:text-red-700 border-red-200 hover:border-red-300"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                      <span>Delete Selected</span>
-                    </Button>
-                  </div>
-                )}
+                <div className="flex items-center gap-2">
+                  <span className="text-sm text-gray-600">Per page:</span>
+                  <Select value={String(holidaysPerPage)} onValueChange={(v) => { setHolidaysPerPage(parseInt(v, 10)); setCurrentPage(1); }}>
+                    <SelectTrigger className="h-8 w-[110px]">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="25">25</SelectItem>
+                      <SelectItem value="50">50</SelectItem>
+                      <SelectItem value="100">100</SelectItem>
+                      <SelectItem value="1000000">View All</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
-            </CardHeader>
+              {/* Bulk Actions */}
+              {selectedHolidays.size > 0 && (
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between space-y-2 sm:space-y-0 px-3">
+                  <span className="text-sm font-medium text-gray-700 mr-2">
+                    {selectedHolidays.size} holiday{selectedHolidays.size !== 1 ? 's' : ''} selected
+                  </span>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleBulkDelete}
+                    disabled={bulkActionLoading}
+                    className="flex items-center space-x-1 text-red-600 hover:text-red-700 border-red-200 hover:border-red-300 w-full sm:w-auto"
+                  >
+                    {bulkActionLoading ? (
+                      <>
+                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-red-600"></div>
+                        <span>Deleting...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Trash2 className="w-4 h-4" />
+                        <span>Delete Selected</span>
+                      </>
+                    )}
+                  </Button>
+                </div>
+              )}
+            </div>
 
-          <CardContent>
+
+            {/* </div> */}
+          </CardHeader>
+
+          <CardContent className="p-0">
             {loading ? (
               <div className="text-center py-8">
                 <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
                 <p className="mt-2 text-gray-600">Loading holidays...</p>
               </div>
+            ) : paginatedHolidays.length === 0 ? (
+              <div className="text-center py-8 px-4">
+                {searchTerm ? (
+                  <div className="text-gray-600">
+                    <Search className="w-8 h-8 mx-auto mb-2 text-gray-400" />
+                    <p>No holidays found matching "{searchTerm}"</p>
+                    <p className="text-sm text-gray-500 mt-1">
+                      Try adjusting your search terms or clear the search to see all holidays.
+                    </p>
+                  </div>
+                ) : holidays.length === 0 ? (
+                  <div className="text-gray-600">
+                    <Calendar className="w-8 h-8 mx-auto mb-2 text-gray-400" />
+                    <p>No public holidays found.</p>
+                    <p className="text-sm text-gray-500 mt-1">
+                      Click "Import" to automatically import Australian public holidays.
+                    </p>
+                  </div>
+                ) : null}
+              </div>
             ) : (
-              <div className="overflow-x-auto">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead className="w-[5%] py-3 bg-gray-50 text-center">
-                        <Checkbox
-                          checked={selectedHolidays.size === paginatedHolidays.length && paginatedHolidays.length > 0}
-                          onCheckedChange={handleSelectAll}
-                          aria-label="Select all holidays"
-                          className="data-[state=checked]:bg-blue-500 data-[state=checked]:text-white data-[state=checked]:border-blue-500"
-                        />
-                      </TableHead>
-                      <TableHead className="w-[15%] py-3 bg-gray-50 text-center">Date</TableHead>
-                      <TableHead className="w-[10%] py-3 bg-gray-50 text-center">Day</TableHead>
-                      <TableHead className="w-[20%] py-3 bg-gray-50 text-center">Holiday Name</TableHead>
-                      <TableHead className="w-[15%] py-3 bg-gray-50 text-center">Region</TableHead>
-                      <TableHead className="w-[15%] py-3 bg-gray-50 text-center">Source</TableHead>
-                      <TableHead className="w-[15%] py-3 bg-gray-50 text-center">Actions</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {paginatedHolidays.map((holiday) => {
-                      const date = new Date(holiday.date)
-                      const dayOfWeek = date.toLocaleDateString('en-AU', { weekday: 'short' })
-                      const isUpcoming = date > new Date()
-                      const isPast = date < new Date()
-                      
-                      return (
-                        <TableRow key={holiday.date} className={isPast ? 'opacity-60' : ''}>
-                          <TableCell className="text-center">
-                            <Checkbox
-                              checked={selectedHolidays.has(getHolidayKey(holiday))}
-                              onCheckedChange={(checked) => handleSelectHoliday(holiday, checked as boolean)}
-                              aria-label={`Select holiday ${holiday.name}`}
-                              className="data-[state=checked]:bg-blue-500 data-[state=checked]:text-white data-[state=checked]:border-blue-500"
-                            />
-                          </TableCell>
-                          <TableCell>
-                            <div className={`font-mono ${isUpcoming ? 'flex justify-center text-blue-600 font-medium' : 'flex justify-center'}`}>
-                              {date.toLocaleDateString('en-AU')}
+              <>
+                {/* Desktop Table */}
+                <div className="hidden lg:block overflow-x-auto px-4">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead className="w-[5%] py-3 bg-gray-50 text-center">
+                          <Checkbox
+                            checked={selectedHolidays.size === paginatedHolidays.length && paginatedHolidays.length > 0}
+                            onCheckedChange={handleSelectAll}
+                            aria-label="Select all holidays"
+                            className="data-[state=checked]:bg-blue-500 data-[state=checked]:text-white data-[state=checked]:border-blue-500"
+                          />
+                        </TableHead>
+                        <TableHead className="w-[15%] py-3 bg-gray-50 text-center">Date</TableHead>
+                        <TableHead className="w-[10%] py-3 bg-gray-50 text-center">Day</TableHead>
+                        <TableHead className="w-[25%] py-3 bg-gray-50 text-center">Holiday Name</TableHead>
+                        <TableHead className="w-[15%] py-3 bg-gray-50 text-center">Region</TableHead>
+                        <TableHead className="w-[15%] py-3 bg-gray-50 text-center">Source</TableHead>
+                        <TableHead className="w-[15%] py-3 bg-gray-50 text-center">Actions</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {paginatedHolidays.map((holiday) => {
+                        const date = new Date(holiday.date)
+                        const dayOfWeek = date.toLocaleDateString('en-AU', { weekday: 'short' })
+                        const isUpcoming = date > new Date()
+                        const isPast = date < new Date()
+
+                        return (
+                          <TableRow key={holiday.date} className={isPast ? 'opacity-60' : ''}>
+                            <TableCell className="text-center">
+                              <Checkbox
+                                checked={selectedHolidays.has(getHolidayKey(holiday))}
+                                onCheckedChange={(checked) => handleSelectHoliday(holiday, checked as boolean)}
+                                aria-label={`Select holiday ${holiday.name}`}
+                                className="data-[state=checked]:bg-blue-500 data-[state=checked]:text-white data-[state=checked]:border-blue-500"
+                              />
+                            </TableCell>
+                            <TableCell>
+                              <div className={`font-mono ${isUpcoming ? 'flex justify-center text-blue-600 font-medium' : 'flex justify-center'}`}>
+                                {date.toLocaleDateString('en-AU')}
+                              </div>
+                            </TableCell>
+                            <TableCell>
+                              <span className="flex justify-center text-sm">{dayOfWeek}</span>
+                            </TableCell>
+                            <TableCell>
+                              <span className="flex justify-center font-medium">{holiday.name}</span>
+                            </TableCell>
+                            <TableCell>
+                              <span className="flex justify-center text-sm">{holiday.region || '-'}</span>
+                            </TableCell>
+                            <TableCell>
+                              <span className="flex justify-center text-sm text-gray-600">
+                                {holiday.source === 'excel_import' ? 'Excel Import' : (holiday.source || 'Manual')}
+                              </span>
+                            </TableCell>
+                            <TableCell>
+                              <div className="flex justify-center space-x-1">
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => handleEditHoliday(holiday)}
+                                  title="Edit holiday"
+                                >
+                                  <Edit className="w-3 h-3" />
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => handleDeleteHoliday(holiday)}
+                                  className="text-red-600 hover:text-red-700"
+                                  title="Delete holiday"
+                                >
+                                  <Trash2 className="w-3 h-3" />
+                                </Button>
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        )
+                      })}
+                    </TableBody>
+                  </Table>
+                </div>
+
+                {/* Mobile/Tablet Card Layout */}
+                <div className="lg:hidden space-y-4 p-4">
+                  {paginatedHolidays.map((holiday) => {
+                    const date = new Date(holiday.date)
+                    const dayOfWeek = date.toLocaleDateString('en-AU', { weekday: 'long' })
+                    const isUpcoming = date > new Date()
+                    const isPast = date < new Date()
+
+                    return (
+                      <Card key={holiday.date} className={`border border-gray-200 ${isPast ? 'opacity-60' : ''}`}>
+                        <CardContent className="p-4">
+                          <div className="space-y-3">
+                            {/* Header with checkbox and name */}
+                            <div className="flex items-start justify-between">
+                              <div className="flex items-center space-x-3">
+                                <Checkbox
+                                  checked={selectedHolidays.has(getHolidayKey(holiday))}
+                                  onCheckedChange={(checked) => handleSelectHoliday(holiday, checked as boolean)}
+                                  aria-label={`Select holiday ${holiday.name}`}
+                                  className="data-[state=checked]:bg-blue-500 data-[state=checked]:text-white data-[state=checked]:border-blue-500 mt-1"
+                                />
+                                <div>
+                                  <h3 className="font-medium text-base">{holiday.name}</h3>
+                                  <p className="text-sm text-gray-600">{dayOfWeek}</p>
+                                </div>
+                              </div>
                             </div>
-                          </TableCell>
-                          <TableCell>
-                            <span className="flex justify-center text-sm">{dayOfWeek}</span>
-                          </TableCell>
-                          <TableCell>
-                            <span className="flex justify-center font-medium">{holiday.name}</span>
-                          </TableCell>
-                          <TableCell>
-                            <span className="flex justify-center text-sm">{holiday.region || '-'}</span>
-                          </TableCell>
-                          <TableCell>
-                            <span className="flex justify-center text-sm text-gray-600">{holiday.source || 'manual'}</span>
-                          </TableCell>
-                          <TableCell>
-                            <div className="flex justify-center space-x-1">
+
+                            {/* Details Grid */}
+                            <div className="grid grid-cols-2 gap-4 text-sm">
+                              <div>
+                                <span className="text-gray-500">Date:</span>
+                                <div className={`font-mono mt-1 ${isUpcoming ? 'text-blue-600 font-medium' : ''}`}>
+                                  {date.toLocaleDateString('en-AU')}
+                                </div>
+                              </div>
+                              <div>
+                                <span className="text-gray-500">Region:</span>
+                                <div className="mt-1">{holiday.region || '-'}</div>
+                              </div>
+                              <div className="col-span-2">
+                                <span className="text-gray-500">Source:</span>
+                                <div className="mt-1 text-gray-600">
+                                  {holiday.source === 'excel_import' ? 'Excel Import' : (holiday.source || 'Manual')}
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Actions */}
+                            <div className="flex space-x-2 pt-2">
                               <Button
                                 size="sm"
                                 variant="outline"
                                 onClick={() => handleEditHoliday(holiday)}
+                                className="flex-1"
                               >
-                                <Edit className="w-3 h-3" />
+                                <Edit className="w-4 h-4 mr-2" />
+                                Edit
                               </Button>
                               <Button
                                 size="sm"
                                 variant="outline"
                                 onClick={() => handleDeleteHoliday(holiday)}
-                                className="text-red-600 hover:text-red-700"
+                                className="flex-1 text-red-600 hover:text-red-700 border-red-200 hover:border-red-300"
                               >
-                                <Trash2 className="w-3 h-3" />
+                                <Trash2 className="w-4 h-4 mr-2" />
+                                Delete
                               </Button>
                             </div>
-                          </TableCell>
-                        </TableRow>
-                      )
-                    })}
-                  </TableBody>
-                </Table>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    )
+                  })}
+                </div>
 
                 {/* Pagination */}
-                {holidays.length > 0 && (
-                  <Pagination
-                    currentPage={currentPage}
-                    totalPages={totalPages}
-                    onPageChange={setCurrentPage}
-                  />
-                )}
-
-                {holidays.length === 0 && (
-                  <div className="text-center py-8">
-                    <p className="text-gray-600">No public holidays found.</p>
-                    <p className="text-sm text-gray-500 mt-1">
-                      Click "Import" to automatically import Australian public holidays.
-                    </p>
+                {filteredHolidays.length > 0 && totalPages > 1 && (
+                  <div className="px-4 pb-4">
+                    <Pagination
+                      currentPage={currentPage}
+                      totalPages={totalPages}
+                      onPageChange={setCurrentPage}
+                    />
                   </div>
                 )}
-              </div>
+              </>
             )}
           </CardContent>
         </Card>
 
         {/* Add/Edit Holiday Dialog */}
-        <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+        <Dialog open={isDialogOpen} onOpenChange={(open) => {
+          setIsDialogOpen(open)
+          if (!open) {
+            setFormErrors({}) // Clear errors when dialog is closed
+          }
+        }}>
           <DialogContent>
             <DialogHeader>
               <DialogTitle>
@@ -687,27 +946,47 @@ export default function AdminPublicHolidaysPage() {
             </DialogHeader>
             <div className="space-y-4">
               <div>
-                <Label htmlFor="date" className="p-1">Date</Label>
+                <Label htmlFor="date" className="p-1">Date *</Label>
                 <Input
                   id="date"
                   type="date"
                   value={newHoliday.date}
-                  onChange={(e) => setNewHoliday({ ...newHoliday, date: e.target.value })}
+                  onChange={(e) => {
+                    setNewHoliday({ ...newHoliday, date: e.target.value })
+                    // Clear error when user starts typing
+                    if (formErrors.date) {
+                      setFormErrors({ ...formErrors, date: undefined })
+                    }
+                  }}
+                  className={formErrors.date ? 'border-red-500 focus:border-red-500' : ''}
                   required
                 />
+                {formErrors.date && (
+                  <p className="text-red-500 text-sm mt-1">{formErrors.date}</p>
+                )}
               </div>
-              
+
               <div>
-                <Label htmlFor="name" className="p-1">Holiday Name</Label>
+                <Label htmlFor="name" className="p-1">Holiday Name *</Label>
                 <Input
                   id="name"
                   value={newHoliday.name}
-                  onChange={(e) => setNewHoliday({ ...newHoliday, name: e.target.value })}
+                  onChange={(e) => {
+                    setNewHoliday({ ...newHoliday, name: e.target.value })
+                    // Clear error when user starts typing
+                    if (formErrors.name) {
+                      setFormErrors({ ...formErrors, name: undefined })
+                    }
+                  }}
                   placeholder="e.g., Christmas Day"
+                  className={formErrors.name ? 'border-red-500 focus:border-red-500' : ''}
                   required
                 />
+                {formErrors.name && (
+                  <p className="text-red-500 text-sm mt-1">{formErrors.name}</p>
+                )}
               </div>
-              
+
               <div className="mb-6">
                 <Label htmlFor="region" className="p-1">Region</Label>
                 <Input
@@ -717,7 +996,7 @@ export default function AdminPublicHolidaysPage() {
                   placeholder="e.g., NSW"
                 />
               </div>
-              
+
               <div className="flex justify-end space-x-2">
                 <Button variant="outline" onClick={() => setIsDialogOpen(false)}>
                   Cancel

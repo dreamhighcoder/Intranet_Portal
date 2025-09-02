@@ -237,7 +237,7 @@
 /* Responsive design improvements */
 @media (max-width: 768px) {
   .card-surface {
-    @apply mx-2;
+    @apply mx-0;
   }
 
   .pharmacy-gradient {
