@@ -416,7 +416,7 @@ export default function TaskDetailModal({
               <CardHeader>
                 <CardTitle className="text-lg flex items-center space-x-2">
                   <Clock className="h-5 w-5 text-indigo-600" />
-                  <span>Completion History</span>
+                  <span>Completion Status</span>
                 </CardTitle>
               </CardHeader>
               <CardContent>
@@ -438,41 +438,9 @@ export default function TaskDetailModal({
                   </div>
 
                   {task.status === 'completed' && task.completed_at && (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
-                      <div>
-                        <span className="text-green-600 font-medium">Completed At:</span>
-                        <p className="text-green-700 font-semibold">
-                          {formatTimestamp(task.completed_at)}
-                        </p>
-                      </div>
-                      {task.completed_by && (
-                        <div>
-                          <span className="text-green-600 font-medium">Completed By:</span>
-                          <p className="text-green-700 font-semibold">
-                            {task.completed_by}
-                          </p>
-                        </div>
-                      )}
-                    </div>
-                  )}
-
-                  {task.status !== 'completed' && (
-                    <p className="text-orange-700 text-sm">
-                      This task is currently pending completion.
-                    </p>
-                  )}
-                </div>
-
-                {/* Position-Specific Completion Status */}
-                {task.position_completions && task.position_completions.length > 0 && (
-                  <div>
-                    <h4 className="font-medium text-gray-700 mb-4 flex items-center space-x-2">
-                      <CheckCircle className="h-4 w-4" />
-                      <span>Position Completion Status</span>
-                    </h4>
-                    <div className="space-y-3">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                       {task.position_completions.map((completion: any, index: number) => (
-                        <div key={index} className="bg-green-50 p-4 rounded-lg border border-green-200">
+                        <div key={index} className="bg-white p-4 rounded-lg border border-green-200">
                           <div className="flex items-start justify-between">
                             <div className="flex-1">
                               <div className="flex items-center space-x-2 mb-2">
@@ -503,75 +471,17 @@ export default function TaskDetailModal({
                         </div>
                       ))}
                     </div>
-                  </div>
-                )}
+                  )}
 
-                {/* Task Completion History */}
-                {loading ? (
-                  <div className="flex items-center justify-center py-8">
-                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600"></div>
-                    <span className="ml-3 text-gray-600">Loading completion history...</span>
-                  </div>
-                ) : completionLog.length > 0 ? (
-                  <div>
-                    <h4 className="font-medium text-gray-700 mb-4 flex items-center space-x-2">
-                      <Clock className="h-4 w-4" />
-                      <span>Task Completion History</span>
-                    </h4>
-                    <div className="space-y-4">
-                      {completionLog.map((entry, index) => (
-                        <div key={entry.id} className="bg-gray-50 p-4 rounded-lg border">
-                          <div className="flex items-start space-x-3">
-                            <div className="flex-shrink-0 mt-1">
-                              {getActionIcon(entry.action)}
-                            </div>
-                            <div className="flex-1 min-w-0">
-                              <div className="flex flex-col sm:flex-row sm:items-center sm:space-x-2 mb-2">
-                                <Badge className={`text-xs ${getActionColor(entry.action)} mb-1 sm:mb-0`}>
-                                  {entry.action === 'completed' ? 'Task Completed' : 'Task Reopened'}
-                                </Badge>
-                                <span className="text-sm font-medium text-gray-700">
-                                  by {entry.user_profiles?.display_name || 'Unknown User'}
-                                </span>
-                              </div>
-                              <p className="text-sm text-gray-600 mb-1">
-                                {formatTimestamp(entry.completion_time)}
-                              </p>
-                              {entry.time_to_complete && (
-                                <div className="flex items-center space-x-2 text-xs text-gray-500 mb-2">
-                                  <Clock className="h-3 w-3" />
-                                  <span>Time to complete: {entry.time_to_complete}</span>
-                                </div>
-                              )}
-                              {entry.notes && (
-                                <div className="mt-2 p-2 bg-white rounded border">
-                                  <span className="text-xs text-gray-500 font-medium">Notes:</span>
-                                  <p className="text-xs text-gray-600 mt-1">{entry.notes}</p>
-                                </div>
-                              )}
-                            </div>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                ) : (
-                  <div>
-                    <h4 className="font-medium text-gray-700 mb-4 flex items-center space-x-2">
-                      <Clock className="h-4 w-4" />
-                      <span>Task Completion History</span>
-                    </h4>
-                    <div className="text-center py-8">
-                      <Clock className="h-12 w-12 text-gray-300 mx-auto mb-3" />
-                      <p className="text-gray-500">No completion history available.</p>
-                      <p className="text-sm text-gray-400 mt-1">Task completion and reopening actions will appear here once the task is marked as completed.</p>
-                    </div>
-                  </div>
-                )}
+                  {task.status !== 'completed' && (
+                    <p className="text-orange-700 text-sm">
+                      This task is currently pending completion.
+                    </p>
+                  )}
+                </div>
               </CardContent>
             </Card>
           </div>
-
           <div className="flex justify-end space-x-3 pt-6 border-t bg-gray-50 -mx-4 sm:-mx-6 -mb-4 sm:-mb-6 px-4 sm:px-6 py-4 rounded-b-lg">
             <Button variant="outline" onClick={onClose} className="px-6">
               Close
