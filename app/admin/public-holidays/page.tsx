@@ -18,6 +18,7 @@ import { publicHolidaysApi, authenticatedPost } from "@/lib/api-client"
 import { supabase } from "@/lib/supabase"
 import { Plus, Trash2, Edit, Download, Upload, Calendar, Search, X } from "lucide-react"
 import { toastError, toastSuccess } from "@/hooks/use-toast"
+import { getAustralianToday, getAustralianNow, parseAustralianDate, formatAustralianDate } from "@/lib/timezone-utils"
 
 interface PublicHoliday {
   date: string
@@ -181,7 +182,11 @@ export default function AdminPublicHolidaysPage() {
       console.log('Public Holidays Page - Received data:', data)
       if (data && Array.isArray(data)) {
         console.log('Public Holidays Page - Data is valid array with', data.length, 'items')
-        setHolidays(data.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()))
+        setHolidays(
+          data.sort(
+            (a, b) => parseAustralianDate(a.date).getTime() - parseAustralianDate(b.date).getTime()
+          )
+        )
       } else {
         console.warn('Public Holidays Page - No holidays data received or data is not an array:', data)
         setHolidays([])
@@ -390,8 +395,8 @@ export default function AdminPublicHolidaysPage() {
       // Add the worksheet to the workbook
       XLSX.utils.book_append_sheet(workbook, worksheet, 'Public Holidays')
 
-      // Generate Excel file and download
-      const fileName = `public-holidays-${new Date().toISOString().split('T')[0]}.xlsx`
+      // Generate Excel file and download (use Australian date)
+      const fileName = `public-holidays-${formatAustralianDate(getAustralianNow())}.xlsx`
       XLSX.writeFile(workbook, fileName)
     } catch (error) {
       console.error('Error exporting to Excel:', error)
@@ -596,7 +601,7 @@ export default function AdminPublicHolidaysPage() {
                   <div>
                     <p className="text-sm text-gray-600">Next Year</p>
                     <p className="text-xl sm:text-2xl font-bold">
-                      {holidaysByYear[new Date().getFullYear() + 1]?.length || 0}
+                      {holidaysByYear[getAustralianNow().getFullYear() + 1]?.length || 0}
                     </p>
                   </div>
                   <Calendar className="w-6 h-6 sm:w-8 sm:h-8 text-orange-600" />
@@ -778,10 +783,11 @@ export default function AdminPublicHolidaysPage() {
                     </TableHeader>
                     <TableBody>
                       {paginatedHolidays.map((holiday) => {
-                        const date = new Date(holiday.date)
+                        const date = parseAustralianDate(holiday.date)
                         const dayOfWeek = date.toLocaleDateString('en-AU', { weekday: 'short' })
-                        const isUpcoming = date > new Date()
-                        const isPast = date < new Date()
+                        const australianNow = getAustralianNow()
+                        const isUpcoming = date > australianNow
+                        const isPast = date < australianNow
 
                         return (
                           <TableRow key={holiday.date} className={isPast ? 'opacity-60' : ''}>
@@ -843,10 +849,11 @@ export default function AdminPublicHolidaysPage() {
                 {/* Mobile/Tablet Card Layout */}
                 <div className="lg:hidden space-y-4 p-4">
                   {paginatedHolidays.map((holiday) => {
-                    const date = new Date(holiday.date)
+                    const date = parseAustralianDate(holiday.date)
                     const dayOfWeek = date.toLocaleDateString('en-AU', { weekday: 'long' })
-                    const isUpcoming = date > new Date()
-                    const isPast = date < new Date()
+                    const australianNow = getAustralianNow()
+                    const isUpcoming = date > australianNow
+                    const isPast = date < australianNow
 
                     return (
                       <Card key={holiday.date} className={`border border-gray-200 ${isPast ? 'opacity-60' : ''}`}>
@@ -1019,7 +1026,7 @@ export default function AdminPublicHolidaysPage() {
           onConfirm={confirmDeleteHoliday}
           title="Delete Public Holiday"
           description="Are you sure you want to delete this public holiday? This action cannot be undone and may affect task scheduling."
-          itemName={holidayToDelete ? `${holidayToDelete.name} (${new Date(holidayToDelete.date).toLocaleDateString('en-AU')})` : ''}
+          itemName={holidayToDelete ? `${holidayToDelete.name} (${parseAustralianDate(holidayToDelete.date).toLocaleDateString('en-AU')})` : ''}
           isLoading={isDeleting}
         />
 

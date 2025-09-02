@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { getSearchOptions, filterTasksByResponsibility } from '@/lib/responsibility-mapper'
+import { getAustralianToday, createAustralianDateTime, fromAustralianTime } from '@/lib/timezone-utils'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
@@ -9,7 +10,7 @@ const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey)
 export async function GET(request: NextRequest) {
   try {
     const searchParams = request.nextUrl.searchParams
-    const date = searchParams.get('date') || new Date().toISOString().split('T')[0]
+    const date = searchParams.get('date') || getAustralianToday()
     const positionId = searchParams.get('position_id')
     const responsibility = searchParams.get('responsibility')
 
@@ -108,8 +109,10 @@ export async function GET(request: NextRequest) {
       : (taskInstances || [])
 
     // Calculate counts from actual task instances
-    const now = new Date()
-    const nineAM = new Date(`${date}T09:00:00`)
+    // Compute boundaries in Australia/Sydney but compare in UTC (DB stores UTC)
+    const nineAmAus = createAustralianDateTime(date, '09:00')
+    const nineAmUtc = fromAustralianTime(nineAmAus)
+    const nowUtc = new Date()
 
     const counts = {
       total: roleFiltered.length,
@@ -129,15 +132,16 @@ export async function GET(request: NextRequest) {
 
       // Count overdue tasks: has due_time and now past due time
       if (instance.due_time && instance.status !== 'completed') {
-        const dueTime = new Date(`${date}T${instance.due_time}`)
-        if (now > dueTime) {
+        const dueAus = createAustralianDateTime(date, instance.due_time)
+        const dueUtc = fromAustralianTime(dueAus)
+        if (nowUtc > dueUtc) {
           counts.overdue++
         }
       }
 
-      // Count new tasks since 9AM: created after 9AM today
-      const createdAt = instance.created_at ? new Date(instance.created_at) : null
-      if (createdAt && createdAt >= nineAM && instance.status !== 'completed') {
+      // Count new tasks since 9AM: created after 9AM today (created_at stored UTC)
+      const createdUtc = instance.created_at ? new Date(instance.created_at) : null
+      if (createdUtc && createdUtc >= nineAmUtc && instance.status !== 'completed') {
         counts.newSinceNine++
       }
     })

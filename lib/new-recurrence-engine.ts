@@ -21,7 +21,8 @@ import {
   getAustralianDayOfWeek,
   createAustralianDateTime,
   isAustralianTimePast,
-  toAustralianTime
+  toAustralianTime,
+  australianNowUtcISOString
 } from './timezone-utils'
 
 // ========================================
@@ -189,8 +190,8 @@ export class NewRecurrenceEngine {
             due_time: task.timing,
             status: TaskStatus.PENDING,
             locked: false,
-            created_at: getAustralianNow().toISOString(),
-            updated_at: getAustralianNow().toISOString(),
+            created_at: australianNowUtcISOString(),
+            updated_at: australianNowUtcISOString(),
             is_carry_instance: result.isCarryOver,
             original_appearance_date: result.isCarryOver ? result.originalAppearanceDate : date
           }

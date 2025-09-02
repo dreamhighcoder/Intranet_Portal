@@ -10,6 +10,7 @@
 import { supabase } from './db'
 import type { MasterTask, TaskInstance } from './new-recurrence-engine'
 import { NewFrequencyType, TaskStatus } from './new-recurrence-engine'
+import { australianNowUtcISOString } from './timezone-utils'
 
 // ========================================
 // DATABASE SCHEMA INTERFACES
@@ -236,7 +237,7 @@ export class TaskDatabaseAdapter {
         .update({
           status: REVERSE_STATUS_MAP[update.status],
           locked: update.locked,
-          updated_at: new Date().toISOString()
+          updated_at: australianNowUtcISOString()
         })
         .eq('id', update.id)
 

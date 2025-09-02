@@ -21,7 +21,7 @@ import {
   Users
 } from "lucide-react"
 import { useRouter } from "next/navigation"
-import { getAustralianToday, formatAustralianDate, toAustralianTime } from "@/lib/timezone-utils"
+import { getAustralianToday, formatAustralianDate, toAustralianTime, getAustralianNow, parseAustralianDate } from "@/lib/timezone-utils"
 
 interface CalendarDay {
   date: string
@@ -81,7 +81,7 @@ export default function CalendarPage() {
   const [calendarData, setCalendarData] = useState<CalendarData | null>(null)
   const [positions, setPositions] = useState<Position[]>([])
   const [loading, setLoading] = useState(true)
-  const [currentDate, setCurrentDate] = useState(new Date())
+  const [currentDate, setCurrentDate] = useState(getAustralianNow())
   const [selectedPosition, setSelectedPosition] = useState<string>("all")
   
   // Ensure non-admins are locked to their own position
@@ -141,9 +141,7 @@ export default function CalendarPage() {
       }
 
       const url = `/api/calendar?${params.toString()}`
-      console.log('Calendar Page - Making request to:', url)
       const data = await authenticatedGet(url)
-      console.log('Calendar Page - Received data:', data)
       setCalendarData(data)
     } catch (error) {
       console.error('Calendar Page - Error loading calendar data:', error)
@@ -154,7 +152,8 @@ export default function CalendarPage() {
   }
 
   const navigateMonth = (direction: 'prev' | 'next') => {
-    const newDate = new Date(currentDate)
+    // Create a new Australian date based on current date
+    const newDate = new Date(currentDate.getFullYear(), currentDate.getMonth(), currentDate.getDate())
     if (direction === 'prev') {
       newDate.setMonth(newDate.getMonth() - 1)
     } else {
@@ -164,7 +163,8 @@ export default function CalendarPage() {
   }
 
   const navigateWeek = (direction: 'prev' | 'next') => {
-    const newDate = new Date(currentDate)
+    // Create a new Australian date based on current date
+    const newDate = new Date(currentDate.getFullYear(), currentDate.getMonth(), currentDate.getDate())
     if (direction === 'prev') {
       newDate.setDate(newDate.getDate() - 7)
     } else {
@@ -282,8 +282,8 @@ export default function CalendarPage() {
 
     // Month view
     // Compute grid using Australian timezone to avoid UTC shifts
-    const ausFirst = toAustralianTime(new Date(currentDate.getFullYear(), currentDate.getMonth(), 1))
-    const startDate = new Date(ausFirst)
+    const ausFirst = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1)
+    const startDate = new Date(ausFirst.getFullYear(), ausFirst.getMonth(), ausFirst.getDate())
     // Align month grid to start on Monday
     const dayOfWeek = ausFirst.getDay() // 0=Sun,1=Mon,...
     const diffToMonday = (dayOfWeek + 6) % 7
@@ -291,8 +291,7 @@ export default function CalendarPage() {
     
     const days = []
     for (let i = 0; i < 42; i++) {
-      const date = new Date(startDate)
-      date.setDate(startDate.getDate() + i)
+      const date = new Date(startDate.getFullYear(), startDate.getMonth(), startDate.getDate() + i)
       const dateStr = formatAustralianDate(date)
       const dayData = calendar.find(d => d.date === dateStr)
       
@@ -431,7 +430,7 @@ export default function CalendarPage() {
             <Button
               variant="outline"
               size="sm"
-              onClick={() => setCurrentDate(new Date())}
+              onClick={() => setCurrentDate(getAustralianNow())}
             >
               Today
             </Button>
@@ -469,7 +468,7 @@ export default function CalendarPage() {
         {/* Summary Stats */}
         {calendarData && (
           <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-4 mb-6">
-            <Card className="py-5 h-22">
+            <Card className="bg-white rounded-lg border border-[var(--color-border)] py-4 flex flex-col sm:flex-row gap-4">
               <CardContent>
                 <div className="flex items-center space-x-4">
                   <div className="p-2 bg-blue-100 rounded-lg">
@@ -479,12 +478,11 @@ export default function CalendarPage() {
                     <p className="text-sm text-gray-600 hidden sm:inline">Total Tasks</p>
                     <p className="text-lg font-semibold">{calendarData.summary.totalTasks}</p>
                   </div>
-                  
                 </div>
               </CardContent>
             </Card>
 
-            <Card className="py-5 h-22">
+            <Card className="bg-white rounded-lg border border-[var(--color-border)] py-4 flex flex-col sm:flex-row gap-4">
               <CardContent>
                 <div className="flex items-center space-x-4">
                   <div className="p-2 bg-green-100 rounded-lg">
@@ -498,7 +496,7 @@ export default function CalendarPage() {
               </CardContent>
             </Card>
 
-            <Card className="py-5 h-22">
+            <Card className="bg-white rounded-lg border border-[var(--color-border)] py-4 flex flex-col sm:flex-row gap-4">
               <CardContent>
                 <div className="flex items-center space-x-4">
                   <div className="p-2 bg-yellow-100 rounded-lg">
@@ -512,7 +510,7 @@ export default function CalendarPage() {
               </CardContent>
             </Card>
 
-            <Card className="py-5 h-22">
+            <Card className="bg-white rounded-lg border border-[var(--color-border)] py-4 flex flex-col sm:flex-row gap-4">
               <CardContent>
                 <div className="flex items-center space-x-4">
                   <div className="p-2 bg-red-100 rounded-lg">
@@ -526,7 +524,7 @@ export default function CalendarPage() {
               </CardContent>
             </Card>
 
-            <Card className="py-5 h-22">
+            <Card className="bg-white rounded-lg border border-[var(--color-border)] py-4 flex flex-col sm:flex-row gap-4">
               <CardContent>
                 <div className="flex items-center space-x-4">
                   <div className="p-2 bg-purple-100 rounded-lg">

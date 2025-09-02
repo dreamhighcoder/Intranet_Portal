@@ -18,6 +18,7 @@ import { toastError, toastSuccess } from '@/hooks/use-toast'
 import { toKebabCase } from '@/lib/responsibility-mapper'
 import { authenticatedGet, authenticatedPost, positionsApi } from '@/lib/api-client'
 import TaskDetailModal from '@/components/checklist/TaskDetailModal'
+import { getAustralianNow, getAustralianToday, formatAustralianDate, parseAustralianDate, createAustralianDateTime, australianNowUtcISOString } from '@/lib/timezone-utils'
 
 interface PositionCompletion {
   position_name: string
@@ -373,7 +374,7 @@ const getFrequencyRankForDay = (frequencies: string[] = [], dateStr: string) => 
   if (!frequencies || frequencies.length === 0) return 9999
   const lower = frequencies.map(f => (f || '').toLowerCase())
 
-  const date = new Date(dateStr)
+  const date = parseAustralianDate(dateStr)
   const dowNames = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday']
   const dow = date.getDay() // 0-6
   const monthKeys = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec']
@@ -556,14 +557,10 @@ export default function RoleChecklistPage() {
   const currentRoleKebab = useMemo(() => toKebabCase(role), [role])
 
   const [currentDate, setCurrentDate] = useState(() => {
-    // Use URL date if present, otherwise default to local today (avoid UTC off-by-one)
+    // Use URL date if present, otherwise default to Australian today
     const urlDate = searchParams.get("date")
     if (urlDate) return urlDate
-    const now = new Date()
-    const y = now.getFullYear()
-    const m = String(now.getMonth() + 1).padStart(2, '0')
-    const d = String(now.getDate()).padStart(2, '0')
-    return `${y}-${m}-${d}`
+    return getAustralianToday()
   })
 
   const [selectedCategory, setSelectedCategory] = useState("all")
@@ -792,16 +789,16 @@ export default function RoleChecklistPage() {
           missed: 0
         }
 
-        const now = new Date()
+        const now = getAustralianNow()
         const today = currentDate
 
         data.data.forEach((task: ChecklistTask) => {
           if (task.status !== 'completed') {
             counts.due_today++
 
-            // Check if overdue
+            // Check if overdue using Australian timezone
             if (task.master_task?.due_time) {
-              const dueTime = new Date(`${today}T${task.master_task.due_time}`)
+              const dueTime = createAustralianDateTime(today, task.master_task.due_time)
               if (now > dueTime) {
                 counts.overdue++
               }
@@ -859,7 +856,7 @@ export default function RoleChecklistPage() {
     setTasks(prevTasks =>
       prevTasks.map(task =>
         task.id === taskId
-          ? { ...task, status: 'completed', completed_at: new Date().toISOString() }
+          ? { ...task, status: 'completed', completed_at: australianNowUtcISOString() }
           : task
       )
     )
@@ -1058,8 +1055,8 @@ export default function RoleChecklistPage() {
         if (selectedStatus === "overdue") {
           if (task.status === "completed") return false
           if (task.master_task?.due_time) {
-            const dueTime = new Date(`${currentDate}T${task.master_task.due_time}`)
-            const now = new Date()
+            const dueTime = createAustralianDateTime(currentDate, task.master_task.due_time)
+            const now = getAustralianNow()
             return now > dueTime
           }
           return false
@@ -1205,10 +1202,10 @@ export default function RoleChecklistPage() {
       const completions = task.position_completions || []
 
       if (completions.length === 0) {
-        // No completions - check if overdue
+        // No completions - check if overdue using Australian timezone
         if (task.master_task?.due_time) {
-          const dueTime = new Date(`${currentDate}T${task.master_task.due_time}`)
-          const now = new Date()
+          const dueTime = createAustralianDateTime(currentDate, task.master_task.due_time)
+          const now = getAustralianNow()
           if (now > dueTime) {
             return (
               <Badge className="bg-red-100 text-red-800 border-red-200">
@@ -1256,10 +1253,10 @@ export default function RoleChecklistPage() {
       )
     }
 
-    // Check if overdue
+    // Check if overdue using Australian timezone
     if (task.master_task?.due_time) {
-      const dueTime = new Date(`${currentDate}T${task.master_task.due_time}`)
-      const now = new Date()
+      const dueTime = createAustralianDateTime(currentDate, task.master_task.due_time)
+      const now = getAustralianNow()
       if (now > dueTime) {
         return (
           <Badge className="bg-red-100 text-red-800 border-red-200">
@@ -1292,7 +1289,7 @@ export default function RoleChecklistPage() {
               <div>
                 <h1 className="text-2xl lg:text-3xl font-bold mb-2">
                   {isAdmin ? "Daily Checklist Overview" : `${formatResponsibility(role)} Checklist`} —{" "}
-                  {new Date(currentDate).toLocaleDateString("en-AU", {
+                  {parseAustralianDate(currentDate).toLocaleDateString("en-AU", {
                     weekday: "long",
                     year: "numeric",
                     month: "long",
@@ -1791,7 +1788,7 @@ export default function RoleChecklistPage() {
         <div className="p-4 bg-white rounded-lg border border-[var(--color-border)]">
           <div className="flex items-center justify-between text-sm">
             <span className="text-[var(--color-text-secondary)]">
-              Summary for {new Date(currentDate).toLocaleDateString("en-AU")}
+              Summary for {parseAustralianDate(currentDate).toLocaleDateString("en-AU")}
             </span>
             <div className="flex items-center space-x-4">
               <span className="text-green-600">

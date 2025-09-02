@@ -19,6 +19,7 @@ import { TASK_CATEGORIES, TASK_FREQUENCIES, TASK_TIMINGS, DEFAULT_DUE_TIMES } fr
 import { getResponsibilityOptions } from '@/lib/position-utils'
 import { toDisplayFormat } from '@/lib/responsibility-mapper'
 import type { MasterChecklistTask, CreateMasterTaskRequest, UpdateMasterTaskRequest } from '@/types/checklist'
+import { getAustralianToday } from '@/lib/timezone-utils'
 
 // Zod schema for form validation matching specifications
 const taskFormSchema = z.object({
@@ -74,7 +75,7 @@ export default function TaskFormNew({ task, onSubmit, onCancel }: TaskFormProps)
       publish_status: task?.publish_status || 'draft',
       publish_delay: task?.publish_delay || undefined,
       frequencies: task?.frequencies || [],
-      start_date: task?.start_date || new Date().toISOString().split('T')[0],
+      start_date: task?.start_date || getAustralianToday(),
       end_date: task?.end_date || undefined
     }
   })

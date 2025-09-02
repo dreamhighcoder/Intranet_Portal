@@ -8,7 +8,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Check, X, Eye, Clock, AlertTriangle } from 'lucide-react'
 import { toastError, toastSuccess } from '@/hooks/use-toast'
-import { createAustralianDateTime, getAustralianNow } from '@/lib/timezone-utils'
+import { createAustralianDateTime, getAustralianNow, australianNowUtcISOString } from '@/lib/timezone-utils'
 
 interface ChecklistTask {
   id: string
@@ -103,7 +103,7 @@ export default function ChecklistView({
       // Update local state
       setTasks(prev => prev.map(task => 
         task.id === taskId 
-          ? { ...task, status: 'completed', completed_at: new Date().toISOString() }
+          ? { ...task, status: 'completed', completed_at: australianNowUtcISOString() /* UI-only optimistic; server persists AUS->UTC */ }
           : task
       ))
 

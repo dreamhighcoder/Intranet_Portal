@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/auth-middleware'
 import { createClient } from '@supabase/supabase-js'
+import { getAustralianNow, getAustralianToday, formatAustralianDate, createAustralianDateTime, fromAustralianTime, australianNowUtcISOString } from '@/lib/timezone-utils'
 
 // Use service role client to bypass RLS (we enforce auth/authorization in code)
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
@@ -35,14 +36,15 @@ export async function GET(request: NextRequest) {
     
     console.log('Dashboard API: Query params:', { positionId, dateRange })
 
-    // Calculate date range
-    const endDate = new Date()
-    const startDate = new Date()
+    // Calculate date range using Australian timezone
+    const australianNow = getAustralianNow()
+    const endDate = new Date(australianNow)
+    const startDate = new Date(australianNow)
     startDate.setDate(endDate.getDate() - parseInt(dateRange))
 
-    const startDateStr = startDate.toISOString().split('T')[0]
-    const endDateStr = endDate.toISOString().split('T')[0]
-    const todayStr = new Date().toISOString().split('T')[0]
+    const startDateStr = formatAustralianDate(startDate)
+    const endDateStr = formatAustralianDate(endDate)
+    const todayStr = getAustralianToday()
 
     // Build base query with position filter if needed
     let baseQuery = supabaseAdmin.from('task_instances')
@@ -155,7 +157,7 @@ export async function GET(request: NextRequest) {
           end: endDateStr,
           days: parseInt(dateRange)
         },
-        generatedAt: new Date().toISOString()
+        generatedAt: australianNowUtcISOString()
       })
     }
     
@@ -182,11 +184,13 @@ export async function GET(request: NextRequest) {
     const overdueTasks = allTasks.filter(task => task.status === 'overdue')
     const missedTasks = allTasks.filter(task => task.status === 'missed')
     
-    // On-time completion rate
+    // On-time completion rate (completed_at UTC vs AUS end-of-day for due_date)
     const onTimeCompletions = completedTasks.filter(task => {
-      if (!task.completed_at) return false
-      const completedDate = new Date(task.completed_at).toISOString().split('T')[0]
-      return completedDate <= task.due_date
+      if (!task.completed_at || !task.due_date) return false
+      const ausEndOfDay = createAustralianDateTime(task.due_date as string, '23:59:59')
+      const ausEndOfDayUtc = fromAustralianTime(ausEndOfDay)
+      const completedUtc = new Date(task.completed_at as string)
+      return completedUtc <= ausEndOfDayUtc
     })
     
     const onTimeCompletionRate = completedTasks.length > 0 
@@ -198,14 +202,13 @@ export async function GET(request: NextRequest) {
     const completionTimes = completedTasks
       .filter(task => task.completed_at && task.instance_date)
       .map(task => {
-        // Task becomes available at start of instance_date (00:00)
-        const availableDateTime = new Date(`${task.instance_date}T00:00:00`)
-        const completed = new Date(task.completed_at!)
+        // Task becomes available at start of instance_date (00:00) in Australia/Sydney
+        const availableAus = createAustralianDateTime(task.instance_date as string, '00:00')
+        const availableUtc = fromAustralianTime(availableAus)
+        // completed_at stored in UTC
+        const completedUtc = new Date(task.completed_at as string)
         
-        // Calculate hours from when task became available to completion
-        const hoursToComplete = (completed.getTime() - availableDateTime.getTime()) / (1000 * 60 * 60)
-        
-        // Return absolute hours (always positive)
+        const hoursToComplete = (completedUtc.getTime() - availableUtc.getTime()) / (1000 * 60 * 60)
         return Math.abs(hoursToComplete)
       })
     
@@ -213,12 +216,13 @@ export async function GET(request: NextRequest) {
       ? Math.round((completionTimes.reduce((sum, time) => sum + time, 0) / completionTimes.length) * 100) / 100
       : 0
 
-    // Tasks created since 9am today
-    const nineAmToday = new Date()
-    nineAmToday.setHours(9, 0, 0, 0)
-    const newSince9am = allTasks.filter(task => 
-      new Date(task.created_at) >= nineAmToday
-    ).length
+    // Tasks created since 9am today (Australia/Sydney)
+    const nineAmAus = createAustralianDateTime(getAustralianToday(), '09:00')
+    const nineAmUtc = fromAustralianTime(nineAmAus)
+    const newSince9am = allTasks.filter(task => {
+      const createdUtc = new Date(task.created_at as string)
+      return createdUtc >= nineAmUtc
+    }).length
 
     // Tasks due today by status
     const dueTodayStats = {
@@ -276,9 +280,10 @@ export async function GET(request: NextRequest) {
         categories: task.master_tasks?.categories || []
       }))
 
-    // Upcoming tasks (next 7 days)
-    const upcomingEndDate = new Date()
-    upcomingEndDate.setDate(upcomingEndDate.getDate() + 7)
+    // Upcoming tasks (next 7 days) using Australian date range
+    const upcomingEndDateAus = new Date(australianNow)
+    upcomingEndDateAus.setDate(upcomingEndDateAus.getDate() + 7)
+    const upcomingEndDateStr = formatAustralianDate(upcomingEndDateAus)
     
     let upcomingQuery = baseQuery
       .select(`
@@ -289,7 +294,7 @@ export async function GET(request: NextRequest) {
         master_task_id
       `)
       .gt('due_date', todayStr)
-      .lte('due_date', upcomingEndDate.toISOString().split('T')[0])
+      .lte('due_date', upcomingEndDateStr)
       .in('status', ['not_due', 'due_today'])
       .order('due_date', { ascending: true })
       .limit(10)
@@ -345,7 +350,7 @@ export async function GET(request: NextRequest) {
         end: endDateStr,
         days: parseInt(dateRange)
       },
-      generatedAt: new Date().toISOString()
+      generatedAt: australianNowUtcISOString()
     }
 
     console.log('Dashboard API: Returning dashboard data:', {

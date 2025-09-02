@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase'
 import { getResponsibilityForPosition } from '@/lib/position-utils'
+import { getAustralianToday } from '@/lib/timezone-utils'
 
 export async function GET(request: NextRequest) {
   try {
@@ -18,19 +19,19 @@ export async function GET(request: NextRequest) {
       case 'tasks':
         const result = await exportTasks(startDate, endDate, positionId, category)
         data = result.data
-        filename = `tasks_export_${new Date().toISOString().split('T')[0]}.csv`
+        filename = `tasks_export_${getAustralianToday()}.csv`
         break
       
       case 'audit-log':
         const auditResult = await exportAuditLog(startDate, endDate, positionId)
         data = auditResult.data
-        filename = `audit_log_export_${new Date().toISOString().split('T')[0]}.csv`
+        filename = `audit_log_export_${getAustralianToday()}.csv`
         break
       
       case 'completion-summary':
         const summaryResult = await exportCompletionSummary(startDate, endDate, positionId, category)
         data = summaryResult.data
-        filename = `completion_summary_${new Date().toISOString().split('T')[0]}.csv`
+        filename = `completion_summary_${getAustralianToday()}.csv`
         break
       
       default:

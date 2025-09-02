@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/auth-middleware'
 import { createClient } from '@supabase/supabase-js'
 import { UpdateTaskInstanceSchema } from '@/lib/validation-schemas'
+import { australianNowUtcISOString } from '@/lib/timezone-utils'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
@@ -162,7 +163,7 @@ export async function PUT(
       finalUpdateData.status = validatedData.status
       
       if (validatedData.status === 'completed') {
-        finalUpdateData.completed_at = new Date().toISOString()
+        finalUpdateData.completed_at = australianNowUtcISOString()
         finalUpdateData.completed_by = user.id
       } else if (validatedData.status !== 'completed' && currentInstance.status === 'completed') {
         // Undoing completion
@@ -179,7 +180,7 @@ export async function PUT(
       finalUpdateData.payload = validatedData.payload
     }
 
-    finalUpdateData.updated_at = new Date().toISOString()
+    finalUpdateData.updated_at = australianNowUtcISOString()
 
     // Update the task instance
     const { data: updatedInstance, error: updateError } = await supabase
@@ -220,7 +221,7 @@ export async function PUT(
           old_values: currentInstance,
           new_values: updatedInstance,
           metadata: { 
-            timestamp: new Date().toISOString(),
+            timestamp: australianNowUtcISOString(),
             user_email: user.email,
             action_type: validatedData.status === 'completed' ? 'complete' : 'update'
           }

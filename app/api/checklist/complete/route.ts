@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { requireAuthEnhanced, logAuditAction, logPositionAuditAction, getClientInfo } from '@/lib/auth-middleware'
+import { australianNowUtcISOString, getAustralianToday } from '@/lib/timezone-utils'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
@@ -114,8 +115,8 @@ export async function POST(request: NextRequest) {
           due_date: taskDate,
           status: 'not_due',
           is_published: true,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString()
+          created_at: australianNowUtcISOString(),
+          updated_at: australianNowUtcISOString()
         })
         .select()
         .single()
@@ -164,10 +165,10 @@ export async function POST(request: NextRequest) {
         position_id: userPositionId,
         position_name: userPositionName,
         completed_by: completedBy,
-        completed_at: new Date().toISOString(),
+        completed_at: australianNowUtcISOString(),
         uncompleted_at: null,
         is_completed: true,
-        updated_at: new Date().toISOString()
+        updated_at: australianNowUtcISOString()
       }
       
       let completionResult
@@ -230,8 +231,8 @@ export async function POST(request: NextRequest) {
           .from('task_position_completions')
           .update({
             is_completed: false,
-            uncompleted_at: new Date().toISOString(),
-            updated_at: new Date().toISOString()
+            uncompleted_at: australianNowUtcISOString(),
+            updated_at: australianNowUtcISOString()
           })
           .eq('id', existingCompletion.id)
         
@@ -276,8 +277,8 @@ export async function POST(request: NextRequest) {
       // If any position has completed it, mark as done
       newStatus = 'done'
     } else {
-      // No active completions - determine status based on due date
-      const today = new Date().toISOString().split('T')[0]
+      // No active completions - determine status based on due date (Australian business day)
+      const today = getAustralianToday()
       const taskDueDate = existingInstance.due_date || taskDate
       
       if (taskDueDate < today) {
@@ -292,14 +293,14 @@ export async function POST(request: NextRequest) {
     // Update the main task instance with minimal changes
     const updateData: any = {
       status: newStatus,
-      updated_at: new Date().toISOString()
+      updated_at: australianNowUtcISOString()
     }
     
     // Keep the legacy fields for backward compatibility
     if (action === 'complete') {
       updateData.completed_by = user.id
       updateData.completed_by_type = 'position'
-      updateData.completed_at = new Date().toISOString()
+      updateData.completed_at = australianNowUtcISOString()
     } else if (action === 'undo' && (!allCompletions || allCompletions.length === 0)) {
       // Clear completion fields if no positions have completed the task
       updateData.completed_by = null

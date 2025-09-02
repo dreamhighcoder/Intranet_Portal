@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/auth-middleware'
 import { createClient } from '@supabase/supabase-js'
 import type { ChecklistInstanceStatus } from '@/types/checklist'
+import { australianNowUtcISOString } from '@/lib/timezone-utils'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
@@ -52,14 +53,15 @@ export async function PUT(
 
     // Prepare update data
     const updateData: any = {
-      updated_at: new Date().toISOString()
+      // Persist timestamps in UTC generated from Australia/Sydney "now"
+      updated_at: australianNowUtcISOString()
     }
 
     if (status !== undefined) {
       updateData.status = status
       
       if (status === 'completed') {
-        updateData.completed_at = completed_at || new Date().toISOString()
+        updateData.completed_at = completed_at || australianNowUtcISOString()
         updateData.completed_by = completed_by || user.id
       } else if (status !== 'completed' && currentInstance.status === 'completed') {
         // Undoing completion

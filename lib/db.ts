@@ -21,6 +21,7 @@ import type {
   PublishStatus,
   ChecklistInstanceStatus
 } from '@/types/checklist'
+import { australianNowUtcISOString } from '@/lib/timezone-utils'
 
 // ========================================
 // TYPES AND INTERFACES
@@ -244,8 +245,8 @@ export async function updateTask(
       updateData.category = taskInput.categories[0] // Legacy single category
     }
     
-    // Set updated_by timestamp
-    updateData.updated_at = new Date().toISOString()
+    // Set updated_at timestamp (persist UTC derived from Australia/Sydney now)
+    updateData.updated_at = australianNowUtcISOString()
 
     const { data, error } = await supabase
       .from('master_tasks')

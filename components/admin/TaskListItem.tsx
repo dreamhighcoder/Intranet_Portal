@@ -11,6 +11,7 @@ import { createRecurrenceEngine } from '@/lib/recurrence-engine'
 import { createHolidayHelper } from '@/lib/public-holidays'
 import type { MasterChecklistTask, FrequencyRule, FrequencyType } from '@/types/checklist'
 import { toDisplayFormat } from '@/lib/responsibility-mapper'
+import { getAustralianToday, getAustralianNow } from '@/lib/timezone-utils'
 
 // Responsibility options are now handled dynamically via toDisplayFormat utility
 // This removes hardcoded position names and uses database-driven data
@@ -134,14 +135,17 @@ export default function TaskListItem({ task, onEdit, onDelete }: TaskListItemPro
       const taskForPreview = {
         id: 'preview',
         frequency_rules: task.frequency_rules,
-        start_date: task.start_date || new Date().toISOString(),
+        start_date: task.start_date || getAustralianToday(),
         end_date: task.end_date
       }
       
+      const australianNow = getAustralianNow()
+      const oneYearFromNow = new Date(australianNow.getTime() + 365 * 24 * 60 * 60 * 1000)
+      
       const occurrences = recurrenceEngine.occurrencesBetween(
         taskForPreview,
-        new Date(),
-        new Date(Date.now() + 365 * 24 * 60 * 60 * 1000)
+        australianNow,
+        oneYearFromNow
       )
       
       const nextOccurrences = occurrences.slice(0, 6)
@@ -351,9 +355,9 @@ export default function TaskListItem({ task, onEdit, onDelete }: TaskListItemPro
             </div>
             
             <div className="text-right">
-              <p>Created: {new Date(task.created_at).toLocaleDateString()}</p>
+              <p>Created: {new Date(task.created_at).toLocaleDateString('en-AU', { timeZone: 'Australia/Sydney' })}</p>
               {task.updated_at !== task.created_at && (
-                <p>Updated: {new Date(task.updated_at).toLocaleDateString()}</p>
+                <p>Updated: {new Date(task.updated_at).toLocaleDateString('en-AU', { timeZone: 'Australia/Sydney' })}</p>
               )}
             </div>
           </div>

@@ -15,6 +15,7 @@ import type {
   InstanceRow,
   ChecklistInstanceStatus 
 } from './db'
+import { australianNowUtcISOString } from './timezone-utils'
 
 // ========================================
 // TYPES AND INTERFACES
@@ -475,7 +476,7 @@ export class StatusManager {
         .from('checklist_instances')
         .update({ 
           status: targetStatus,
-          updated_at: new Date().toISOString()
+          updated_at: australianNowUtcISOString()
         })
         .eq('id', instance.id)
 
@@ -732,6 +733,8 @@ export async function updateStatusesForYesterday(
 /**
  * Update a specific task instance status
  */
+import { australianNowUtcISOString } from '@/lib/timezone-utils'
+
 export async function updateSpecificTaskStatus(
   taskInstanceId: string, 
   newStatus: ChecklistInstanceStatus, 
@@ -740,11 +743,12 @@ export async function updateSpecificTaskStatus(
   try {
     const updateData: any = {
       status: newStatus,
-      updated_at: new Date().toISOString()
+      // Persist timestamps in UTC, derived from Australia/Sydney "now"
+      updated_at: australianNowUtcISOString()
     }
 
     if (newStatus === 'completed') {
-      updateData.completed_at = new Date().toISOString()
+      updateData.completed_at = australianNowUtcISOString()
       updateData.completed_by = userId
     } else if (newStatus !== 'completed') {
       // Clear completion data if not completed

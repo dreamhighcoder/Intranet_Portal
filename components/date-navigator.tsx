@@ -3,6 +3,7 @@
 import { Button } from "@/components/ui/button"
 import { Calendar } from "@/components/ui/calendar"
 import { formatDate, getDateNavigation, formatLocalDate } from "@/lib/task-utils"
+import { parseAustralianDate } from "@/lib/timezone-utils"
 import { ChevronLeft, ChevronRight, CalendarIcon } from "lucide-react"
 import { useState, useEffect, useRef } from "react"
 
@@ -87,7 +88,7 @@ export function DateNavigator({ currentDate, onDateChange }: DateNavigatorProps)
           {isCalendarOpen && (
             <div className="absolute top-full mt-2 z-[9999]">
               <div className="w-auto p-0 bg-white border rounded-md shadow-md">
-                <Calendar mode="single" selected={new Date(currentDate)} onSelect={handleDateSelect} initialFocus />
+                <Calendar mode="single" selected={parseAustralianDate(currentDate)} onSelect={handleDateSelect} initialFocus />
               </div>
             </div>
           )}
@@ -133,7 +134,7 @@ export function DateNavigator({ currentDate, onDateChange }: DateNavigatorProps)
             {isCalendarOpen && (
               <div className="absolute top-full mt-2 z-[9999]">
                 <div className="w-auto p-0 bg-white border rounded-md shadow-md">
-                  <Calendar mode="single" selected={new Date(currentDate)} onSelect={handleDateSelect} initialFocus />
+                  <Calendar mode="single" selected={parseAustralianDate(currentDate)} onSelect={handleDateSelect} initialFocus />
                 </div>
               </div>
             )}

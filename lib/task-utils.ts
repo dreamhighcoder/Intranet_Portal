@@ -1,5 +1,13 @@
 import type { TaskInstance, TaskWithDetails, TaskStatus } from "./types"
 import { taskInstancesApi } from "./api-client"
+import { 
+  getAustralianNow, 
+  getAustralianToday, 
+  formatAustralianDate,
+  parseAustralianDate,
+  createAustralianDateTime,
+  isAustralianTimePast
+} from "./timezone-utils"
 
 // Get tasks with full details for a specific date
 export async function getTasksForDate(date: string): Promise<TaskWithDetails[]> {
@@ -76,25 +84,25 @@ export async function getTasksByPosition(date: string): Promise<Record<string, T
   return grouped
 }
 
-// Calculate task status based on current time and due time
+// Calculate task status based on current time and due time (using Australian timezone)
 export function calculateTaskStatus(task: TaskInstance): TaskStatus {
-  const now = new Date()
-  const today = now.toISOString().split("T")[0]
-  const currentTime = now.toTimeString().slice(0, 5) // HH:MM format
+  const australianNow = getAustralianNow()
+  const australianToday = getAustralianToday()
+  const currentTime = australianNow.toTimeString().slice(0, 5) // HH:MM format
 
   if (task.status === "done") return "done"
 
-  if (task.due_date > today) return "not_due"
+  if (task.due_date > australianToday) return "not_due"
 
-  if (task.due_date === today) {
+  if (task.due_date === australianToday) {
     if (currentTime < task.due_time) return "not_due"
     if (currentTime >= task.due_time) return "due_today"
   }
 
-  if (task.due_date < today) {
-    // Check if it was missed (not completed by end of due date)
-    const endOfDueDate = new Date(`${task.due_date}T23:59:59`)
-    if (now > endOfDueDate) {
+  if (task.due_date < australianToday) {
+    // Check if it was missed (not completed by end of due date) using Australian timezone
+    const endOfDueDate = createAustralianDateTime(task.due_date, "23:59")
+    if (australianNow > endOfDueDate) {
       return "missed"
     }
     return "overdue"
@@ -103,43 +111,40 @@ export function calculateTaskStatus(task: TaskInstance): TaskStatus {
   return "not_due"
 }
 
-// Format a Date to local YYYY-MM-DD (avoids UTC offset issues)
+// Format a Date to Australian YYYY-MM-DD (using Australian timezone)
 export function formatLocalDate(date: Date): string {
-  const year = date.getFullYear()
-  const month = String(date.getMonth() + 1).padStart(2, '0')
-  const day = String(date.getDate()).padStart(2, '0')
-  return `${year}-${month}-${day}`
+  return formatAustralianDate(date)
 }
 
-// Parse a YYYY-MM-DD string into a local Date object (no timezone shift)
+// Parse a YYYY-MM-DD string into an Australian Date object (no timezone shift)
 export function parseLocalDate(dateString: string): Date {
-  const [y, m, d] = dateString.split('-').map(Number)
-  return new Date(y, (m || 1) - 1, d || 1)
+  return parseAustralianDate(dateString)
 }
 
-// Format date for display
+// Format date for display (using Australian timezone)
 export function formatDate(dateString: string): string {
-  const date = new Date(dateString)
+  const date = parseAustralianDate(dateString)
   return date.toLocaleDateString("en-AU", {
     weekday: "long",
     year: "numeric",
     month: "long",
     day: "numeric",
+    timeZone: "Australia/Sydney"
   })
 }
 
-// Get date navigation (previous/next day) using local time (avoids UTC issues)
+// Get date navigation (previous/next day) using Australian timezone
 export function getDateNavigation(currentDate: string) {
-  const date = new Date(currentDate)
+  const date = parseAustralianDate(currentDate)
   const prevDate = new Date(date)
   prevDate.setDate(date.getDate() - 1)
   const nextDate = new Date(date)
   nextDate.setDate(date.getDate() + 1)
 
   return {
-    previous: formatLocalDate(prevDate),
-    next: formatLocalDate(nextDate),
-    today: formatLocalDate(new Date()),
+    previous: formatAustralianDate(prevDate),
+    next: formatAustralianDate(nextDate),
+    today: getAustralianToday(),
   }
 }
 
@@ -166,7 +171,7 @@ export async function getTaskCounts(date: string) {
 // Real function to complete a task with audit trail
 export async function completeTask(taskId: string, userId?: string): Promise<boolean> {
   try {
-    const completionTime = new Date().toISOString()
+    const completionTime = getAustralianNow().toISOString()
     
     // Complete the task
     const response = await fetch(`/api/task-instances/${taskId}`, {
@@ -215,7 +220,7 @@ export async function completeTask(taskId: string, userId?: string): Promise<boo
 // Real function to undo task completion with audit trail
 export async function undoTask(taskId: string, userId?: string): Promise<boolean> {
   try {
-    const undoTime = new Date().toISOString()
+    const undoTime = getAustralianNow().toISOString()
     
     // Undo the task
     const response = await fetch(`/api/task-instances/${taskId}`, {

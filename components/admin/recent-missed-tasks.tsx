@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge"
 import { taskInstancesApi } from "@/lib/api-client"
 import { usePositionAuth } from "@/lib/position-auth-context"
 import { toDisplayFormat } from "@/lib/responsibility-mapper"
+import { getAustralianNow, formatAustralianDate } from "@/lib/timezone-utils"
 
 interface TaskInstance {
   id: string
@@ -44,12 +45,11 @@ export function RecentMissedTasks() {
       try {
         console.log('RecentMissedTasks: Fetching data for authenticated user:', user.displayName)
         
-        // Get date range for last 7 days
-        const endDate = new Date()
-        const startDate = new Date()
-        startDate.setDate(endDate.getDate() - 7)
+        // Get date range for last 7 days using Australian timezone
+        const endDate = getAustralianNow()
+        const startDate = new Date(endDate.getTime() - 7 * 24 * 60 * 60 * 1000)
         
-        const dateRange = `${startDate.toISOString().split('T')[0]},${endDate.toISOString().split('T')[0]}`
+        const dateRange = `${formatAustralianDate(startDate)},${formatAustralianDate(endDate)}`
         
         // Fetch missed and overdue tasks
         const [missedData, overdueData] = await Promise.all([

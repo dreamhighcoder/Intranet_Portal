@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/auth-middleware'
 import { createClient } from '@supabase/supabase-js'
+import { australianNowUtcISOString } from '@/lib/timezone-utils'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
@@ -91,7 +92,8 @@ export async function PUT(
 
     // Prepare data for update using new schema
     const updateData: any = {
-      updated_at: new Date().toISOString()
+      // Persist UTC timestamp derived from Australia/Sydney "now"
+      updated_at: australianNowUtcISOString()
     }
 
     // Only add fields that are explicitly provided in the request

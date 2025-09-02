@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase-server'
 import { getResponsibilityForPosition } from '@/lib/position-utils'
+import { createAustralianDateTime, fromAustralianTime } from '@/lib/timezone-utils'
 
 export async function GET(request: NextRequest) {
   try {
@@ -74,11 +75,15 @@ async function getCompletionRateReport(startDate?: string | null, endDate?: stri
 
   const totalTasks = tasks?.length || 0
   const completedTasks = tasks?.filter(task => task.status === 'done').length || 0
-  const onTimeCompletions = tasks?.filter(task => 
-    task.status === 'done' && 
-    task.completed_at && 
-    new Date(task.completed_at) <= new Date(task.due_date)
-  ).length || 0
+  const onTimeCompletions = tasks?.filter(task => {
+    if (!(task.status === 'done' && task.completed_at && task.due_date)) return false
+    // due_date is a date (AUS business day boundary at 23:59:59 AUS for on-time)
+    // Compare in UTC: AUS end-of-day -> UTC, completed_at already UTC
+    const ausEndOfDay = createAustralianDateTime(task.due_date as string, '23:59:59')
+    const ausEndOfDayUtc = fromAustralianTime(ausEndOfDay)
+    const completedUtc = new Date(task.completed_at as string)
+    return completedUtc <= ausEndOfDayUtc
+  }).length || 0
 
   const completionRate = totalTasks > 0 ? (completedTasks / totalTasks) * 100 : 0
   const onTimeRate = totalTasks > 0 ? (onTimeCompletions / totalTasks) * 100 : 0
@@ -136,9 +141,10 @@ async function getAverageCompletionTimeReport(startDate?: string | null, endDate
   }
 
   const completionTimes = tasks.map(task => {
-    const createdAt = new Date(task.created_at)
-    const completedAt = new Date(task.completed_at!)
-    return (completedAt.getTime() - createdAt.getTime()) / (1000 * 60 * 60) // hours
+    // created_at and completed_at are UTC timestamps
+    const createdUtc = new Date(task.created_at)
+    const completedUtc = new Date(task.completed_at!)
+    return (completedUtc.getTime() - createdUtc.getTime()) / (1000 * 60 * 60) // hours
   })
 
   const averageHours = completionTimes.reduce((sum, time) => sum + time, 0) / completionTimes.length

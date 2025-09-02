@@ -3,6 +3,7 @@ import { supabase } from '@/lib/supabase'
 import { NextRequest } from 'next/server'
 import type { PositionAuthUser } from '@/lib/position-auth'
 import { getPositionIdForResponsibility } from '@/lib/position-utils'
+import { australianNowUtcISOString } from '@/lib/timezone-utils'
 
 export interface AuthUser {
   id: string
@@ -98,8 +99,8 @@ export async function getAuthUser(request: NextRequest): Promise<AuthUser | null
           display_name: user.email?.split('@')[0] || 'User',
           role: isAdmin ? 'admin' : 'viewer',
           position_id: defaultPositionId, // Default to Pharmacist Primary for non-admin
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString()
+          created_at: australianNowUtcISOString(),
+          updated_at: australianNowUtcISOString()
         })
         .select()
         .single()

@@ -9,6 +9,7 @@
  * - Check if a date is a business day
  * - Shift dates to avoid holidays
  */
+import { formatAustralianDate } from './timezone-utils'
 
 // ========================================
 // TYPES AND INTERFACES
@@ -344,10 +345,10 @@ export class PublicHolidaysHelper implements HolidayChecker {
   // ========================================
 
   /**
-   * Format date to ISO string (YYYY-MM-DD)
+   * Format date to ISO string (YYYY-MM-DD) in Australian timezone
    */
   private formatDate(date: Date): string {
-    return date.toISOString().split('T')[0]
+    return formatAustralianDate(date)
   }
 
   /**
