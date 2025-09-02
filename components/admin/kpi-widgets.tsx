@@ -124,7 +124,7 @@ export function KPIWidgets() {
         const Icon = widget.icon
         return (
           <Card key={widget.title} className="card-surface">
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0">
               <CardTitle className="text-sm font-medium text-[var(--color-text-secondary)]">{widget.title}</CardTitle>
               <div className={`p-2 rounded-lg ${widget.bgColor}`}>
                 <Icon className={`w-4 h-4 ${widget.color}`} />

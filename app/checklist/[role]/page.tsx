@@ -1286,11 +1286,11 @@ export default function RoleChecklistPage() {
 
       <main className="max-w-content-lg mx-auto px-4 sm:px-6 lg:px-18 py-6 sm:py-8">
         {/* Header */}
-        <div className="mb-6 pharmacy-gradient rounded-lg p-6">
-          <div className="flex flex-wrap justify-between gap-3">
-            <div className="min-w-0">
-              <div className="flex items-center space-x-4 mb-2">
-                <h1 className="text-xl sm:text-2xl md:text-3xl font-bold text-white">
+        <div className="mb-6 lg:mb-8">
+          <div className="pharmacy-gradient rounded-lg p-4 lg:p-6 text-white">
+            <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between space-y-4 lg:space-y-0">
+              <div>
+                <h1 className="text-2xl lg:text-3xl font-bold mb-2">
                   {isAdmin ? "Daily Checklist Overview" : `${formatResponsibility(role)} Checklist`} —{" "}
                   {new Date(currentDate).toLocaleDateString("en-AU", {
                     weekday: "long",
@@ -1299,33 +1299,31 @@ export default function RoleChecklistPage() {
                     day: "numeric",
                   })}
                 </h1>
+                <p className="text-white/90 text-sm lg:text-base">
+                  {filteredAndSortedTasks.length} tasks • {filteredAndSortedTasks.filter((t) => t.status === "completed").length} completed
+                  {totalPages > 1 && (
+                    <span className="ml-2">
+                      • Page {currentPage} of {totalPages}
+                    </span>
+                  )}
+                </p>
               </div>
-
-              <p className="text-white/90">
-                {filteredAndSortedTasks.length} tasks • {filteredAndSortedTasks.filter((t) => t.status === "completed").length} completed
-                {totalPages > 1 && (
-                  <span className="ml-2">
-                    • Page {currentPage} of {totalPages}
-                  </span>
-                )}
-              </p>
+              {/* Checklist Management Button for Administrators */}
+              {userRole === 'admin' && (
+                <div className="flex sm:flex-row space-y-2 sm:space-y-0 sm:space-x-2">
+                  <Button
+                    asChild
+                    variant="outline"
+                    className="bg-white text-blue-600 hover:bg-gray-100 w-full sm:w-auto"
+                  >
+                    <Link href="/admin/master-tasks">
+                      <Settings className="w-4 h-4 text-blue-600" />
+                      <span className="text-blue-600">Master Tasks Management</span>
+                    </Link>
+                  </Button>
+                </div>
+              )}
             </div>
-
-            {/* Checklist Management Button for Administrators */}
-            {userRole === 'admin' && (
-              <div className="min-w-0">
-                <Button
-                  asChild
-                  variant="outline"
-                  className="bg-blue-600 text-white hover:bg-blue-700 border-blue-600 hover:border-blue-700 font-medium disabled:opacity-50 max-w-full"
-                >
-                  <Link href="/admin/master-tasks" className="flex items-center space-x-2 truncate">
-                    <Settings className="w-4 h-4" />
-                    <span className="truncate">Master Tasks Management</span>
-                  </Link>
-                </Button>
-              </div>
-            )}
           </div>
         </div>
 

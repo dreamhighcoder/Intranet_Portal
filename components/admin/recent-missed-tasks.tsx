@@ -85,7 +85,7 @@ export function RecentMissedTasks() {
         ) : recentMissedTasks.length === 0 ? (
           <p className="text-[var(--color-text-secondary)] text-center py-4">No missed tasks recently</p>
         ) : (
-          <div className="space-y-4">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
             {recentMissedTasks.map((task) => (
               <div key={task.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
                 <div className="flex-1">

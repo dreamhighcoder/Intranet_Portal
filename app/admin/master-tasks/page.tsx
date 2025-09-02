@@ -1605,20 +1605,17 @@ export default function AdminMasterTasksPage() {
                 <h1 className="text-2xl lg:text-3xl font-bold mb-2">Master Tasks Management</h1>
                 <p className="text-white/90 text-sm lg:text-base">Manage the central checklist that generates all task instances</p>
               </div>
-              <div className="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-3">
-                <div className="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-2">
-                  <Button
-                    onClick={() => {
-                      setEditingTask(null)
-                      setIsTaskDialogOpen(true)
-                    }}
-                    className="bg-blue-600 text-white hover:bg-blue-700 border-blue-600 hover:border-blue-700 font-medium disabled:opacity-50"
-                  >
-                    <Plus className="w-4 h-4 mr-2" />
-                    New Task
-                  </Button>
-                </div>
-
+              <div className="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-2">
+                <Button
+                  onClick={() => {
+                    setEditingTask(null)
+                    setIsTaskDialogOpen(true)
+                  }}
+                  className="bg-white text-blue-600 hover:bg-gray-100 w-full sm:w-auto"
+                >
+                  <Plus className="w-4 h-4 mr-2" />
+                  New Task
+                </Button>
               </div>
             </div>
           </div>
