@@ -46,6 +46,42 @@ export async function POST(request: NextRequest) {
     const [masterTaskId, taskDate] = taskIdParts
     
     console.log('Parsed task info:', { masterTaskId, taskDate })
+
+    // Get user's position information
+    let userPositionId: string | null = null
+    let userPositionName: string | null = null
+    
+    if ('position' in user && user.position) {
+      userPositionId = user.position.id
+      userPositionName = user.position.name
+    } else {
+      // For Supabase auth users, get position from user_profiles
+      const { data: userProfile, error: profileError } = await supabaseAdmin
+        .from('user_profiles')
+        .select(`
+          position_id,
+          positions!inner(id, name)
+        `)
+        .eq('id', user.id)
+        .single()
+      
+      if (profileError || !userProfile?.position_id) {
+        return NextResponse.json({ 
+          error: 'User position not found. Position-specific completion requires a valid position.' 
+        }, { status: 400 })
+      }
+      
+      userPositionId = userProfile.position_id
+      userPositionName = (userProfile as any).positions.name
+    }
+
+    if (!userPositionId || !userPositionName) {
+      return NextResponse.json({ 
+        error: 'Unable to determine user position for completion tracking' 
+      }, { status: 400 })
+    }
+
+    console.log('User position info:', { userPositionId, userPositionName })
     
     // Check if task instance exists
     let { data: existingInstance, error: fetchError } = await supabaseAdmin
@@ -95,33 +131,166 @@ export async function POST(request: NextRequest) {
       console.log('Created new instance:', existingInstance)
     }
     
-    // Determine the user identifier for completed_by field
-    let completedBy: string | null = null
-    let completedByType: string | null = null
+    // Handle position-specific completion
     if (action === 'complete') {
-      if ('position' in user && user.position) {
-        // For position-based auth, store the position ID
-        completedBy = user.position.id
-        completedByType = 'position'
+      // Check if this position already has a completion record
+      const { data: existingCompletion, error: completionFetchError } = await supabaseAdmin
+        .from('task_position_completions')
+        .select('*')
+        .eq('task_instance_id', existingInstance.id)
+        .eq('position_id', userPositionId)
+        .maybeSingle()
+      
+      if (completionFetchError) {
+        console.error('Error fetching existing completion:', completionFetchError)
+        return NextResponse.json({ 
+          error: 'Failed to fetch completion status' 
+        }, { status: 500 })
+      }
+      
+      if (existingCompletion && existingCompletion.is_completed) {
+        return NextResponse.json({ 
+          error: 'Task is already completed for this position' 
+        }, { status: 400 })
+      }
+      
+      // Determine who completed the task
+      const isPositionAuth = 'position' in user && !!user.position
+      const completedBy = isPositionAuth ? null : user.id // position-auth has no auth.users id
+
+      // Create or update position completion record
+      const completionData = {
+        task_instance_id: existingInstance.id,
+        position_id: userPositionId,
+        position_name: userPositionName,
+        completed_by: completedBy,
+        completed_at: new Date().toISOString(),
+        uncompleted_at: null,
+        is_completed: true,
+        updated_at: new Date().toISOString()
+      }
+      
+      let completionResult
+      if (existingCompletion) {
+        // Update existing record
+        const { error: updateCompletionError } = await supabaseAdmin
+          .from('task_position_completions')
+          .update(completionData)
+          .eq('id', existingCompletion.id)
+        
+        if (updateCompletionError) {
+          console.error('Error updating position completion:', updateCompletionError)
+          return NextResponse.json({ 
+            error: 'Failed to update completion status' 
+          }, { status: 500 })
+        }
+        completionResult = { ...existingCompletion, ...completionData }
       } else {
-        // For Supabase auth, use the actual user ID
-        completedBy = user.id
-        completedByType = 'user'
+        // Create new completion record
+        const { data: newCompletion, error: createCompletionError } = await supabaseAdmin
+          .from('task_position_completions')
+          .insert(completionData)
+          .select()
+          .single()
+        
+        if (createCompletionError) {
+          console.error('Error creating position completion:', createCompletionError)
+          return NextResponse.json({ 
+            error: 'Failed to create completion record' 
+          }, { status: 500 })
+        }
+        completionResult = newCompletion
+      }
+      
+      console.log('Position completion recorded:', completionResult)
+      
+    } else if (action === 'undo') {
+      // Handle undo - mark position completion as not completed
+      const { data: existingCompletion, error: completionFetchError } = await supabaseAdmin
+        .from('task_position_completions')
+        .select('*')
+        .eq('task_instance_id', existingInstance.id)
+        .eq('position_id', userPositionId)
+        .maybeSingle()
+      
+      if (completionFetchError) {
+        console.error('Error fetching existing completion:', completionFetchError)
+        return NextResponse.json({ 
+          error: 'Failed to fetch completion status' 
+        }, { status: 500 })
+      }
+      
+      let undoNoop = false
+      if (!existingCompletion || !existingCompletion.is_completed) {
+        // Idempotent undo: nothing to do for this position
+        undoNoop = true
+      } else {
+        // Update completion record to mark as uncompleted
+        const { error: undoCompletionError } = await supabaseAdmin
+          .from('task_position_completions')
+          .update({
+            is_completed: false,
+            uncompleted_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', existingCompletion.id)
+        
+        if (undoCompletionError) {
+          console.error('Error undoing position completion:', undoCompletionError)
+          return NextResponse.json({ 
+            error: 'Failed to undo completion' 
+          }, { status: 500 })
+        }
+        console.log('Position completion undone for:', userPositionName)
       }
     }
     
-    // Update status - use consistent status values
-    const newStatus = action === 'complete' ? 'done' : 'due_today'
+    // Update the main task instance status based on all position completions
+    // Get all position completions for this task
+    const { data: allCompletions, error: allCompletionsError } = await supabaseAdmin
+      .from('task_position_completions')
+      .select('position_name, is_completed')
+      .eq('task_instance_id', existingInstance.id)
+      .eq('is_completed', true)
+    
+    if (allCompletionsError) {
+      console.error('Error fetching all completions:', allCompletionsError)
+      // Don't fail the request, just log the error
+    }
+    
+    // Get the master task to check how many positions it's assigned to
+    const { data: masterTask, error: masterTaskError } = await supabaseAdmin
+      .from('master_tasks')
+      .select('responsibility')
+      .eq('id', masterTaskId)
+      .single()
+    
+    if (masterTaskError) {
+      console.error('Error fetching master task:', masterTaskError)
+      // Don't fail the request, just log the error
+    }
+    
+    // Determine the overall task status
+    let newStatus = 'due_today' // Default status
+    if (allCompletions && allCompletions.length > 0) {
+      // If any position has completed it, mark as done
+      // In the future, we might want more sophisticated logic here
+      newStatus = 'done'
+    }
+    
+    // Update the main task instance with minimal changes
     const updateData: any = {
       status: newStatus,
       updated_at: new Date().toISOString()
     }
     
+    // Keep the legacy fields for backward compatibility, but use the last completion
     if (action === 'complete') {
-      updateData.completed_by = completedBy
-      updateData.completed_by_type = completedByType
+      updateData.completed_by = user.id
+      updateData.completed_by_type = 'position'
       updateData.completed_at = new Date().toISOString()
-    } else {
+    } else if (action === 'undo' && (!allCompletions || allCompletions.length === 0)) {
+      // Only clear these if no positions have completed the task
       updateData.completed_by = null
       updateData.completed_by_type = null
       updateData.completed_at = null
@@ -203,8 +372,8 @@ export async function POST(request: NextRequest) {
       data: {
         id: existingInstance.id,
         status: newStatus,
-        completed_by: completedBy,
-        completed_at: updateData.completed_at
+        completed_by: updateData.completed_by ?? null,
+        completed_at: updateData.completed_at ?? null
       }
     })
     

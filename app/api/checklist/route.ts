@@ -113,10 +113,13 @@ export async function GET(request: NextRequest) {
     // Check for existing task instances to get completion status
     const masterTaskIds = filteredTasks.map(task => task.id)
     let existingInstances: any[] | null = null
+    let positionCompletions: any[] | null = null
+    
     if (masterTaskIds.length > 0) {
+      // Get task instances
       const { data, error: instancesError } = await supabaseAdmin
         .from('task_instances')
-        .select('master_task_id, status, completed_by, completed_at')
+        .select('id, master_task_id, status, completed_by, completed_at')
         .in('master_task_id', masterTaskIds)
         .eq('instance_date', validatedDate)
 
@@ -124,13 +127,48 @@ export async function GET(request: NextRequest) {
         console.error('Error fetching existing instances:', instancesError)
       }
       existingInstances = data || null
+
+      // Get position-specific completions if we have instances
+      if (existingInstances && existingInstances.length > 0) {
+        const instanceIds = existingInstances.map(inst => inst.id)
+        const { data: completionsData, error: completionsError } = await supabaseAdmin
+          .from('task_position_completions')
+          .select(`
+            task_instance_id,
+            position_id,
+            position_name,
+            completed_by,
+            completed_at,
+            is_completed,
+            positions!inner(name)
+          `)
+          .in('task_instance_id', instanceIds)
+          .eq('is_completed', true)
+
+        if (completionsError) {
+          console.error('Error fetching position completions:', completionsError)
+        }
+        positionCompletions = completionsData || null
+      }
     }
 
-    // Create a map for quick lookup
+    // Create maps for quick lookup
     const instanceMap = new Map<string, any>()
+    const completionsByInstanceMap = new Map<string, any[]>()
+    
     if (existingInstances) {
       existingInstances.forEach(instance => {
         instanceMap.set(instance.master_task_id, instance)
+      })
+    }
+    
+    if (positionCompletions) {
+      positionCompletions.forEach(completion => {
+        const instanceId = completion.task_instance_id
+        if (!completionsByInstanceMap.has(instanceId)) {
+          completionsByInstanceMap.set(instanceId, [])
+        }
+        completionsByInstanceMap.get(instanceId)!.push(completion)
       })
     }
 
@@ -141,23 +179,45 @@ export async function GET(request: NextRequest) {
       const dueTime = task.due_time ? createAustralianDateTime(validatedDate, task.due_time) : null
       const isOverdue = dueTime ? now > dueTime : false
 
-      // Determine status based on existing instance or default logic
+      // Get position-specific completions for this task
+      const taskCompletions = existingInstance ? completionsByInstanceMap.get(existingInstance.id) || [] : []
+      
+      // Determine status based on position-specific completion or existing instance
       let status: ChecklistInstanceStatus = 'pending'
+      let isCompletedForCurrentPosition = false
+
       if (existingInstance) {
-        // Map database status to UI status
-        const dbStatus = existingInstance.status
-        if (dbStatus === 'done') {
-          status = 'completed'
-        } else if (dbStatus === 'due_today') {
-          status = 'pending'
-        } else if (dbStatus === 'overdue') {
-          status = 'overdue'
+        if (!isAdminRequest) {
+          // Non-admin: completed ONLY if this position has a completion record
+          isCompletedForCurrentPosition = taskCompletions.some(
+            (completion) => completion.position_name.toLowerCase().replace(/[^a-z0-9]+/g, '-') === normalizedRole
+          )
+          status = isCompletedForCurrentPosition ? 'completed' : (isOverdue ? 'overdue' : 'pending')
         } else {
-          status = 'pending'
+          // Admin: completed if any position has completed; otherwise, avoid marking completed from legacy status
+          if (taskCompletions.length > 0) {
+            status = 'completed'
+          } else {
+            const dbStatus = existingInstance.status
+            if (dbStatus === 'overdue') {
+              status = 'overdue'
+            } else {
+              // Treat legacy 'done' without position completions as pending for clarity
+              status = 'pending'
+            }
+          }
         }
       } else if (isOverdue) {
         status = 'overdue'
       }
+
+      // Prepare position completion data for the UI
+      const positionCompletionData = taskCompletions.map(completion => ({
+        position_name: completion.position_name,
+        completed_by: completion.completed_by,
+        completed_at: completion.completed_at,
+        is_completed: completion.is_completed
+      }))
 
       return {
         id: `${task.id}:${validatedDate}`, // virtual instance id
@@ -171,6 +231,9 @@ export async function GET(request: NextRequest) {
         notes: undefined,
         created_at: task.created_at,
         updated_at: task.created_at,
+        // Add position-specific completion data
+        position_completions: positionCompletionData,
+        is_completed_for_position: isCompletedForCurrentPosition,
         master_task: {
           id: task.id,
           title: task.title,

@@ -92,7 +92,7 @@ export async function GET(request: NextRequest) {
     const { data: instances, error: instancesError } = masterTaskIds.length > 0
       ? await supabaseAdmin
           .from('task_instances')
-          .select('master_task_id, status, created_at, instance_date')
+          .select('id, master_task_id, status, created_at, instance_date')
           .in('master_task_id', masterTaskIds)
           .eq('instance_date', validatedDate)
       : { data: [], error: null as any }
@@ -103,26 +103,46 @@ export async function GET(request: NextRequest) {
 
     const instanceMap = new Map<string, any>()
     ;(instances || []).forEach(inst => instanceMap.set(inst.master_task_id, inst))
-    
-    if (instancesError) {
-      console.error('Error fetching checklist instances:', instancesError)
+
+    // Fetch position-specific completions for these instances
+    const instanceIds = (instances || []).map(i => i.id)
+    let completionsByInstance = new Map<string, any[]>()
+    if (instanceIds.length > 0) {
+      const { data: completions, error: completionsError } = await supabaseAdmin
+        .from('task_position_completions')
+        .select('task_instance_id, position_name, is_completed')
+        .in('task_instance_id', instanceIds)
+        .eq('is_completed', true)
+
+      if (completionsError) {
+        console.error('Error fetching position completions for counts:', completionsError)
+      }
+
+      (completions || []).forEach(c => {
+        const key = c.task_instance_id
+        if (!completionsByInstance.has(key)) completionsByInstance.set(key, [])
+        completionsByInstance.get(key)!.push(c)
+      })
     }
-    
-    // Calculate task counts using Australian timezone
+
+    // Calculate task counts using Australian timezone, per-position completion
     const counts = {
-      total: 0,           // pending tasks to do today
-      newSinceNine: 0,    // tasks that appeared today (instance created today OR once_off activated today)
+      total: 0,           // pending tasks to do today for this role
+      newSinceNine: 0,    // tasks that appeared today
       dueToday: 0,        // pending and scheduled for today
       overdue: 0,         // pending and past due time
-      completed: 0        // completed today
+      completed: 0        // completed today by this role
     }
 
     const now = getAustralianNow()
+    const normalizedRole = toKebabCase(validatedRole)
 
     filteredTasks.forEach(task => {
       const instance = instanceMap.get(task.id)
-      const isCompleted = instance?.status === 'done' || instance?.status === 'completed'
-      if (isCompleted) {
+      const comps = instance ? (completionsByInstance.get(instance.id) || []) : []
+      const isCompletedForRole = comps.some(c => (c.position_name || '').toLowerCase().replace(/[^a-z0-9]+/g, '-') === normalizedRole)
+
+      if (isCompletedForRole) {
         counts.completed++
         return
       }
@@ -141,9 +161,6 @@ export async function GET(request: NextRequest) {
       }
 
       // New since 9:00am logic (Australian time):
-      // A task is "new" if it was assigned/instanced at or after the 9:00am baseline,
-      // and is not completed yet. Baseline is 9:00am today; if current time is before 9:00am,
-      // baseline is 9:00am of the previous day.
       const nineAmToday = createAustralianDateTime(getAustralianToday(), '09:00')
       const baseline = now >= nineAmToday
         ? nineAmToday

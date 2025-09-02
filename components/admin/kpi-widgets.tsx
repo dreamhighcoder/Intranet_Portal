@@ -54,7 +54,7 @@ export function KPIWidgets() {
             onTimeCompletionRate: Math.round(data.summary.onTimeCompletionRate || 0),
             avgTimeToCompleteHours: Math.round((data.summary.avgTimeToCompleteHours || 0) * 10) / 10,
             missedLast7Days: data.summary.missedLast7Days || 0,
-            totalTasks: data.summary.totalTasks || 0,
+            totalTasks: data.summary.completedTasks || 0,
           })
         } else {
           // If no data or no summary, show zeros but don't show error
@@ -85,17 +85,17 @@ export function KPIWidgets() {
 
   const widgets = [
     {
-      title: "On-Time Completion Rate",
+      title: "On-Time Completion Rate (7 days)",
       value: isLoading ? "..." : `${stats?.onTimeCompletionRate || 0}%`,
-      description: "Tasks completed on time",
+      description: "Tasks completed on time in last 7 days",
       icon: TrendingUp,
       color: "text-green-600",
       bgColor: "bg-green-100",
     },
     {
-      title: "Average Time to Complete",
+      title: "Average Time to Complete (7 days)",
       value: isLoading ? "..." : `${stats?.avgTimeToCompleteHours || 0}h`,
-      description: "Average completion time",
+      description: "Average completion time in last 7 days",
       icon: Clock,
       color: "text-blue-600",
       bgColor: "bg-blue-100",
@@ -109,9 +109,9 @@ export function KPIWidgets() {
       bgColor: "bg-red-100",
     },
     {
-      title: "Total Completed Tasks",
+      title: "Total Completed Tasks (7 days)",
       value: isLoading ? "..." : stats?.totalTasks || 0,
-      description: "Total completed tasks in period",
+      description: "Total completed tasks in last 7 days",
       icon: Calendar,
       color: "text-purple-600",
       bgColor: "bg-purple-100",

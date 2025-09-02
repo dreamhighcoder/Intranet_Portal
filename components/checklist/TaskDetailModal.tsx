@@ -241,13 +241,19 @@ export default function TaskDetailModal({
               <CardHeader className="pb-0">
                 <CardTitle className="text-xl text-gray-900 flex items-start justify-between">
                   <span className="flex-1">{task.master_task?.title}</span>
-                  <Badge className={
-                    task.status === 'completed'
-                      ? 'bg-green-100 text-green-800 border-green-200 ml-2'
-                      : 'bg-orange-100 text-orange-800 border-orange-200 ml-2'
-                  }>
-                    {task.status === 'completed' ? 'Completed' : 'Pending'}
-                  </Badge>
+                  <div className="flex flex-wrap gap-1 ml-2">
+                    {task.position_completions && task.position_completions.length > 0 ? (
+                      task.position_completions.map((completion: any, index: number) => (
+                        <Badge key={index} className="bg-green-100 text-green-800 border-green-200 text-xs">
+                          ✓ {completion.position_name.replace(/-/g, ' ').replace(/\b\w/g, (l: string) => l.toUpperCase())}
+                        </Badge>
+                      ))
+                    ) : (
+                      <Badge className="bg-orange-100 text-orange-800 border-orange-200">
+                        Pending
+                      </Badge>
+                    )}
+                  </div>
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-6">
@@ -456,6 +462,49 @@ export default function TaskDetailModal({
                     </p>
                   )}
                 </div>
+
+                {/* Position-Specific Completion Status */}
+                {task.position_completions && task.position_completions.length > 0 && (
+                  <div>
+                    <h4 className="font-medium text-gray-700 mb-4 flex items-center space-x-2">
+                      <CheckCircle className="h-4 w-4" />
+                      <span>Position Completion Status</span>
+                    </h4>
+                    <div className="space-y-3">
+                      {task.position_completions.map((completion: any, index: number) => (
+                        <div key={index} className="bg-green-50 p-4 rounded-lg border border-green-200">
+                          <div className="flex items-start justify-between">
+                            <div className="flex-1">
+                              <div className="flex items-center space-x-2 mb-2">
+                                <Badge className="bg-green-100 text-green-800 border-green-200">
+                                  ✓ {completion.position_name.replace(/-/g, ' ').replace(/\b\w/g, (l: string) => l.toUpperCase())}
+                                </Badge>
+                              </div>
+                              <div className="text-sm text-green-700 space-y-1">
+                                <p>
+                                  <span className="font-medium">Completed at:</span>{' '}
+                                  {new Date(completion.completed_at).toLocaleString('en-AU', {
+                                    weekday: 'short',
+                                    year: 'numeric',
+                                    month: 'short',
+                                    day: 'numeric',
+                                    hour: '2-digit',
+                                    minute: '2-digit'
+                                  })}
+                                </p>
+                                {completion.completed_by && (
+                                  <p>
+                                    <span className="font-medium">Completed by:</span> {completion.completed_by}
+                                  </p>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
 
                 {/* Task Completion History */}
                 {loading ? (

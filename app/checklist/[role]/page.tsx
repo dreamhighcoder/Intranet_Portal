@@ -19,6 +19,13 @@ import { toKebabCase } from '@/lib/responsibility-mapper'
 import { authenticatedGet, authenticatedPost, positionsApi } from '@/lib/api-client'
 import TaskDetailModal from '@/components/checklist/TaskDetailModal'
 
+interface PositionCompletion {
+  position_name: string
+  completed_by: string
+  completed_at: string
+  is_completed: boolean
+}
+
 interface ChecklistTask {
   id: string
   master_task_id: string
@@ -31,6 +38,9 @@ interface ChecklistTask {
   notes?: string
   created_at: string
   updated_at: string
+  // New position-specific completion data
+  position_completions?: PositionCompletion[]
+  is_completed_for_position?: boolean
   master_task: {
     id: string
     title: string
@@ -745,10 +755,11 @@ export default function RoleChecklistPage() {
           date: currentDate
         })
 
-        // Add admin mode for admins (but don't filter by responsibility on server-side)
+        // Add admin mode for admins
         if (isAdmin) {
           params.append('admin_mode', 'true')
-          // Note: We'll filter by responsibility on the client-side to keep all responsibilities available in the dropdown
+          // Pass the selected responsibility to enable position-specific completion logic
+          params.append('responsibility', selectedResponsibility)
         }
 
         console.log('Fetching tasks with params:', params.toString())
@@ -821,7 +832,7 @@ export default function RoleChecklistPage() {
     }
 
     loadTasks()
-  }, [currentDate, refreshKey, isLoading, user, role, isAdmin])
+  }, [currentDate, selectedResponsibility, refreshKey, isLoading, user, role, isAdmin])
 
   useEffect(() => {
     const dateParam = searchParams.get("date")
@@ -1189,7 +1200,55 @@ export default function RoleChecklistPage() {
   }
 
   const getStatusBadge = (task: ChecklistTask) => {
-    if (task.status === "completed") {
+    // For admin view with "All Responsibilities" filter
+    if (isAdmin && selectedResponsibility === 'all') {
+      const completions = task.position_completions || []
+      
+      if (completions.length === 0) {
+        // No completions - check if overdue
+        if (task.master_task?.due_time) {
+          const dueTime = new Date(`${currentDate}T${task.master_task.due_time}`)
+          const now = new Date()
+          if (now > dueTime) {
+            return (
+              <Badge className="bg-red-100 text-red-800 border-red-200">
+                ⚠️ Overdue
+              </Badge>
+            )
+          }
+        }
+        return (
+          <Badge className="bg-orange-100 text-orange-800 border-orange-200">
+            ⏰ Due Today
+          </Badge>
+        )
+      }
+      
+      // Show position completion badges with truncation
+      const maxVisible = 2
+      const visibleCompletions = completions.slice(0, maxVisible)
+      const hiddenCount = completions.length - maxVisible
+      
+      return (
+        <div className="flex flex-wrap gap-1">
+          {visibleCompletions.map((completion, index) => (
+            <Badge key={index} className="bg-green-100 text-green-800 border-green-200 text-xs">
+              ✓ {formatResponsibility(completion.position_name)}
+            </Badge>
+          ))}
+          {hiddenCount > 0 && (
+            <Badge variant="outline" className="text-xs bg-gray-50 text-gray-600">
+              +{hiddenCount}
+            </Badge>
+          )}
+        </div>
+      )
+    }
+    
+    // For specific position view (admin with specific filter or regular user)
+    const isCompletedForPosition = task.is_completed_for_position || task.status === "completed"
+    
+    if (isCompletedForPosition) {
       return (
         <Badge className="bg-green-100 text-green-800 border-green-200">
           ✓ Done
@@ -1217,7 +1276,9 @@ export default function RoleChecklistPage() {
     )
   }
 
-  const allTasksCompleted = filteredAndSortedTasks.length > 0 && filteredAndSortedTasks.every((task) => task.status === "completed")
+  const allTasksCompleted = filteredAndSortedTasks.length > 0 && filteredAndSortedTasks.every((task) => 
+    task.is_completed_for_position || task.status === "completed"
+  )
 
   return (
     <div className="min-h-screen bg-[var(--color-background)]">
@@ -1505,7 +1566,7 @@ export default function RoleChecklistPage() {
                                 </Button>
                               ) : (
                                 <>
-                                  {task.status === "completed" ? (
+                                  {(task.is_completed_for_position || task.status === "completed") ? (
                                     <Button
                                       size="sm"
                                       variant="outline"

@@ -316,45 +316,38 @@ export function getClientInfo(request: any): {
  */
 export async function requireAuthEnhanced(request: NextRequest): Promise<AuthUser | PositionAuthUser> {
   try {
-    // First try Supabase authentication
-    try {
-      const supabaseUser = await requireAuth(request)
-      return supabaseUser
-    } catch (error) {
-      // If Supabase auth fails, try position-based auth
-      const positionUserId = request.headers.get('X-Position-User-Id')
-      const positionUserRole = request.headers.get('X-Position-User-Role')
-      const positionDisplayName = request.headers.get('X-Position-Display-Name')
-      
-      if (positionUserId && positionUserRole && positionDisplayName) {
-        // This is a position-based authenticated request
-        const positionUser: PositionAuthUser = {
+    // Prefer position-based auth if position headers are present (even if a Bearer token exists)
+    const positionUserId = request.headers.get('X-Position-User-Id')
+    const positionUserRole = request.headers.get('X-Position-User-Role')
+    const positionDisplayName = request.headers.get('X-Position-Display-Name')
+
+    if (positionUserId && positionUserRole && positionDisplayName) {
+      const positionUser: PositionAuthUser = {
+        id: positionUserId,
+        position: {
           id: positionUserId,
-          position: {
-            id: positionUserId,
-            name: positionUserRole,
-            displayName: positionDisplayName,
-            password: '', // Not needed for validation
-            role: positionUserRole as 'admin' | 'viewer',
-            is_super_admin: positionUserRole === 'admin'
-          },
-          role: positionUserRole as 'admin' | 'viewer',
+          name: positionDisplayName.toLowerCase().replace(/\s+/g, '-'),
           displayName: positionDisplayName,
-          isAuthenticated: true,
-          loginTime: new Date(),
-          isSuperAdmin: positionUserRole === 'admin',
-          sessionId: request.headers.get('X-Session-Id') || 'unknown',
-          ipAddress: request.headers.get('X-Forwarded-For'),
-          userAgent: request.headers.get('User-Agent'),
-          lastActivity: new Date()
-        }
-        
-        return positionUser
+          password: '',
+          role: (positionUserRole as 'admin' | 'viewer'),
+          is_super_admin: positionUserRole === 'admin'
+        },
+        role: (positionUserRole as 'admin' | 'viewer'),
+        displayName: positionDisplayName,
+        isAuthenticated: true,
+        loginTime: new Date(),
+        isSuperAdmin: positionUserRole === 'admin',
+        sessionId: request.headers.get('X-Session-Id') || 'unknown',
+        ipAddress: request.headers.get('X-Forwarded-For') || undefined,
+        userAgent: request.headers.get('User-Agent') || undefined,
+        lastActivity: new Date()
       }
-      
-      // Neither authentication method worked
-      throw new Error('Authentication required')
+      return positionUser
     }
+
+    // Fallback to Supabase authentication
+    const supabaseUser = await requireAuth(request)
+    return supabaseUser
   } catch (error) {
     console.error('Enhanced authentication failed:', error)
     throw error

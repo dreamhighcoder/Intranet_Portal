@@ -90,6 +90,8 @@ export async function GET(request: NextRequest) {
         id,
         status,
         due_date,
+        due_time,
+        instance_date,
         completed_at,
         created_at,
         master_task_id
@@ -187,17 +189,24 @@ export async function GET(request: NextRequest) {
       return completedDate <= task.due_date
     })
     
-    const onTimeCompletionRate = allTasks.length > 0 
-      ? Math.round((onTimeCompletions.length / allTasks.length) * 100 * 100) / 100
+    const onTimeCompletionRate = completedTasks.length > 0 
+      ? Math.round((onTimeCompletions.length / completedTasks.length) * 100 * 100) / 100
       : 0
 
     // Average time to complete (in hours)
+    // Calculate time from when task became available (instance_date) to when it was completed
     const completionTimes = completedTasks
-      .filter(task => task.completed_at && task.created_at)
+      .filter(task => task.completed_at && task.instance_date)
       .map(task => {
-        const created = new Date(task.created_at)
+        // Task becomes available at start of instance_date (00:00)
+        const availableDateTime = new Date(`${task.instance_date}T00:00:00`)
         const completed = new Date(task.completed_at!)
-        return (completed.getTime() - created.getTime()) / (1000 * 60 * 60) // hours
+        
+        // Calculate hours from when task became available to completion
+        const hoursToComplete = (completed.getTime() - availableDateTime.getTime()) / (1000 * 60 * 60)
+        
+        // Return absolute hours (always positive)
+        return Math.abs(hoursToComplete)
       })
     
     const avgTimeToComplete = completionTimes.length > 0

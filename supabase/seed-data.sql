@@ -137,32 +137,63 @@ INSERT INTO system_settings (key, value, description, data_type, is_public) VALU
 -- Insert sample task instances (this would normally be done by the task generator)
 -- These are for demo/testing purposes
 INSERT INTO task_instances (
-  master_task_id, instance_date, due_date, due_time, status, is_published
+  master_task_id, instance_date, due_date, due_time, status, is_published, completed_at, completed_by
 ) VALUES
   -- Today's tasks
   ((SELECT id FROM master_tasks WHERE title = 'Daily Register Check'), 
-   CURRENT_DATE, CURRENT_DATE, '09:00:00', 'due_today', true),
+   CURRENT_DATE, CURRENT_DATE, '09:00:00', 'due_today', true, NULL, NULL),
   ((SELECT id FROM master_tasks WHERE title = 'Daily Temperature Log'), 
-   CURRENT_DATE, CURRENT_DATE, '08:30:00', 'due_today', true),
+   CURRENT_DATE, CURRENT_DATE, '08:30:00', 'due_today', true, NULL, NULL),
    
-  -- Yesterday's completed task
+  -- Yesterday's completed tasks (with completion timestamps)
   ((SELECT id FROM master_tasks WHERE title = 'Daily Register Check'), 
-   CURRENT_DATE - 1, CURRENT_DATE - 1, '09:00:00', 'done', true),
+   CURRENT_DATE - 1, CURRENT_DATE - 1, '09:00:00', 'done', true, 
+   (CURRENT_DATE - 1)::timestamp + '09:15:00'::time, NULL),
   ((SELECT id FROM master_tasks WHERE title = 'Daily Temperature Log'), 
-   CURRENT_DATE - 1, CURRENT_DATE - 1, '08:30:00', 'done', true),
+   CURRENT_DATE - 1, CURRENT_DATE - 1, '08:30:00', 'done', true, 
+   (CURRENT_DATE - 1)::timestamp + '08:45:00'::time, NULL),
+   
+  -- Day before yesterday's completed tasks (completed late)
+  ((SELECT id FROM master_tasks WHERE title = 'Daily Register Check'), 
+   CURRENT_DATE - 2, CURRENT_DATE - 2, '09:00:00', 'done', true, 
+   (CURRENT_DATE - 2)::timestamp + '11:30:00'::time, NULL),
+  ((SELECT id FROM master_tasks WHERE title = 'Daily Temperature Log'), 
+   CURRENT_DATE - 2, CURRENT_DATE - 2, '08:30:00', 'done', true, 
+   (CURRENT_DATE - 2)::timestamp + '09:00:00'::time, NULL),
+   
+  -- 3 days ago - missed tasks
+  ((SELECT id FROM master_tasks WHERE title = 'Daily Register Check'), 
+   CURRENT_DATE - 3, CURRENT_DATE - 3, '09:00:00', 'missed', true, NULL, NULL),
+  ((SELECT id FROM master_tasks WHERE title = 'Daily Temperature Log'), 
+   CURRENT_DATE - 3, CURRENT_DATE - 3, '08:30:00', 'missed', true, NULL, NULL),
+   
+  -- 4 days ago - more completed tasks
+  ((SELECT id FROM master_tasks WHERE title = 'Daily Register Check'), 
+   CURRENT_DATE - 4, CURRENT_DATE - 4, '09:00:00', 'done', true, 
+   (CURRENT_DATE - 4)::timestamp + '09:05:00'::time, NULL),
+  ((SELECT id FROM master_tasks WHERE title = 'Daily Temperature Log'), 
+   CURRENT_DATE - 4, CURRENT_DATE - 4, '08:30:00', 'done', true, 
+   (CURRENT_DATE - 4)::timestamp + '08:35:00'::time, NULL),
+   
+  -- 5 days ago - one missed, one completed
+  ((SELECT id FROM master_tasks WHERE title = 'Daily Register Check'), 
+   CURRENT_DATE - 5, CURRENT_DATE - 5, '09:00:00', 'missed', true, NULL, NULL),
+  ((SELECT id FROM master_tasks WHERE title = 'Daily Temperature Log'), 
+   CURRENT_DATE - 5, CURRENT_DATE - 5, '08:30:00', 'done', true, 
+   (CURRENT_DATE - 5)::timestamp + '08:40:00'::time, NULL),
    
   -- Weekly task for this week
   ((SELECT id FROM master_tasks WHERE title = 'Weekly Safety Review'), 
    DATE_TRUNC('week', CURRENT_DATE) + INTERVAL '0 days', -- This Monday
    DATE_TRUNC('week', CURRENT_DATE) + INTERVAL '0 days', 
-   '09:30:00', 'not_due', true),
+   '09:30:00', 'not_due', true, NULL, NULL),
    
   -- Monthly task for this month
   ((SELECT id FROM master_tasks WHERE title = 'Monthly Inventory Count'), 
    DATE_TRUNC('month', CURRENT_DATE), 
    DATE_TRUNC('month', CURRENT_DATE) + INTERVAL '4 days', -- +5 workdays (approx)
-   '08:00:00', 'not_due', true),
+   '08:00:00', 'not_due', true, NULL, NULL),
    
-  -- Overdue task from 2 days ago
+  -- Overdue task from 6 days ago
   ((SELECT id FROM master_tasks WHERE title = 'Daily Register Check'), 
-   CURRENT_DATE - 2, CURRENT_DATE - 2, '09:00:00', 'overdue', true);
+   CURRENT_DATE - 6, CURRENT_DATE - 6, '09:00:00', 'overdue', true, NULL, NULL);
