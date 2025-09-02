@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { taskInstancesApi } from "@/lib/api-client"
 import { usePositionAuth } from "@/lib/position-auth-context"
+import { toDisplayFormat } from "@/lib/responsibility-mapper"
 
 interface TaskInstance {
   id: string
@@ -13,9 +14,7 @@ interface TaskInstance {
   status: string
   master_task: {
     title: string
-    position: {
-      name: string
-    }
+    responsibility: string[]
   }
 }
 
@@ -91,7 +90,12 @@ export function RecentMissedTasks() {
               <div key={task.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
                 <div className="flex-1">
                   <h4 className="font-medium text-[var(--color-text-primary)]">{task.master_task.title}</h4>
-                  <p className="text-sm text-[var(--color-text-secondary)]">{task.master_task.position.name}</p>
+                  <p className="text-sm text-[var(--color-text-secondary)]">
+                    {task.master_task.responsibility && task.master_task.responsibility.length > 0 
+                      ? task.master_task.responsibility.map(r => toDisplayFormat(r)).join(', ')
+                      : 'All Positions'
+                    }
+                  </p>
                   <p className="text-xs text-[var(--color-text-secondary)]">
                     Due: {task.due_date} at {task.due_time}
                   </p>

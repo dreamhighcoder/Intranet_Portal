@@ -270,12 +270,23 @@ export async function POST(request: NextRequest) {
       // Don't fail the request, just log the error
     }
     
-    // Determine the overall task status
+    // Determine the overall task status based on active completions
     let newStatus = 'due_today' // Default status
     if (allCompletions && allCompletions.length > 0) {
       // If any position has completed it, mark as done
-      // In the future, we might want more sophisticated logic here
       newStatus = 'done'
+    } else {
+      // No active completions - determine status based on due date
+      const today = new Date().toISOString().split('T')[0]
+      const taskDueDate = existingInstance.due_date || taskDate
+      
+      if (taskDueDate < today) {
+        newStatus = 'overdue'
+      } else if (taskDueDate > today) {
+        newStatus = 'not_due'
+      } else {
+        newStatus = 'due_today'
+      }
     }
     
     // Update the main task instance with minimal changes
@@ -284,13 +295,13 @@ export async function POST(request: NextRequest) {
       updated_at: new Date().toISOString()
     }
     
-    // Keep the legacy fields for backward compatibility, but use the last completion
+    // Keep the legacy fields for backward compatibility
     if (action === 'complete') {
       updateData.completed_by = user.id
       updateData.completed_by_type = 'position'
       updateData.completed_at = new Date().toISOString()
     } else if (action === 'undo' && (!allCompletions || allCompletions.length === 0)) {
-      // Only clear these if no positions have completed the task
+      // Clear completion fields if no positions have completed the task
       updateData.completed_by = null
       updateData.completed_by_type = null
       updateData.completed_at = null
