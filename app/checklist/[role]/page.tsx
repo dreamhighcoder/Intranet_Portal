@@ -51,7 +51,7 @@ interface ChecklistTask {
     responsibility: string[]
     categories: string[]
     frequencies: string[] // Using frequencies from database
-    custom_order?: Record<string, number> // role -> custom index
+    custom_order?: number
   }
 }
 
@@ -370,6 +370,17 @@ const parseDueTimeToMinutes = (time?: string | null) => {
   return h * 60 + m
 }
 
+// Helper function to convert position name to responsibility value
+// This must match the nameToResponsibilityValue function in position-utils.ts
+const nameToResponsibilityValue = (positionName: string): string => {
+  return positionName
+    .toLowerCase()
+    .trim()
+    .replace(/[()/]/g, ' ') // normalize punctuation
+    .replace(/[^a-z0-9]+/g, '-') // non-alphanum to dash
+    .replace(/^-+|-+$/g, '') // trim dashes
+}
+
 const getFrequencyRankForDay = (frequencies: string[] = [], dateStr: string) => {
   if (!frequencies || frequencies.length === 0) return 9999
   const lower = frequencies.map(f => (f || '').toLowerCase())
@@ -581,112 +592,11 @@ export default function RoleChecklistPage() {
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false)
   const [processingTasks, setProcessingTasks] = useState<Set<string>>(new Set())
 
-  // Custom order state
-  const [roleOrderMap, setRoleOrderMap] = useState<Record<string, number>>({}) // master_task_id -> index
-  const [isSavingOrder, setIsSavingOrder] = useState(false)
-  const [isOrderDirty, setIsOrderDirty] = useState(false)
-  const [dragIndex, setDragIndex] = useState<number | null>(null)
-  const isReorderActive = isAdmin && selectedResponsibility !== 'all'
-  const currentOrderResponsibility = useMemo(() => (isAdmin ? selectedResponsibility : currentRoleKebab), [isAdmin, selectedResponsibility, currentRoleKebab])
+  // Custom order is now managed from Master Tasks Management page only
 
-  // Detect if any task has a saved custom order for the current responsibility
-  const hasCustomOrderForRole = useMemo(() => {
-    if (!currentOrderResponsibility) return false
-    return tasks.some(t => typeof (t.master_task as any).custom_order?.[currentOrderResponsibility] === 'number')
-  }, [tasks, currentOrderResponsibility])
 
-  // Initialize order map when tasks load or responsibility changes
-  useEffect(() => {
-    if (!isReorderActive || !currentOrderResponsibility) {
-      setRoleOrderMap({})
-      setIsOrderDirty(false)
-      return
-    }
-    // Build order map from saved custom order if present; otherwise seed from base default order
-    const order: Record<string, number> = {}
 
-    // Tasks for selected responsibility
-    const subset = tasks.filter(t => (t.master_task.responsibility || []).includes(currentOrderResponsibility))
 
-    // Base sort (Due Time -> Frequency -> Description)
-    const seedList = [...subset].sort((a, b) => {
-      const aMin = parseDueTimeToMinutes(a.master_task.due_time)
-      const bMin = parseDueTimeToMinutes(b.master_task.due_time)
-      if (aMin !== bMin) return aMin - bMin
-      const aRank = getFrequencyRankForDay(a.master_task.frequencies || [], currentDate)
-      const bRank = getFrequencyRankForDay(b.master_task.frequencies || [], currentDate)
-      if (aRank !== bRank) return aRank - bRank
-      const aDesc = a.master_task.description?.toLowerCase() || ''
-      const bDesc = b.master_task.description?.toLowerCase() || ''
-      if (aDesc < bDesc) return -1
-      if (aDesc > bDesc) return 1
-      return 0
-    })
-
-    // Prefer saved indices; otherwise use base order indices
-    seedList.forEach((t, idx) => {
-      const val = (t.master_task as any).custom_order?.[currentOrderResponsibility]
-      order[t.master_task.id] = typeof val === 'number' ? val : idx
-    })
-
-    setRoleOrderMap(order)
-    setIsOrderDirty(false)
-  }, [tasks, isReorderActive, currentOrderResponsibility])
-
-  // Drag handlers for desktop rows
-  const handleRowDragStart = (index: number) => {
-    if (!isReorderActive) return
-    setDragIndex(index)
-  }
-
-  const handleRowDragOver = (e: React.DragEvent, overIndex: number) => {
-    if (!isReorderActive) return
-    e.preventDefault()
-  }
-
-  const handleRowDrop = (overIndex: number) => {
-    if (!isReorderActive) return
-    if (dragIndex === null || dragIndex === overIndex) return
-
-    // Reorder only the current page slice to reflect UI drag; then rebuild roleOrderMap based on new order
-    const current = [...filteredAndSortedTasks]
-    const [moved] = current.splice(dragIndex, 1)
-    current.splice(overIndex, 0, moved)
-
-    // Rebuild map for tasks of selected responsibility only
-    const newMap: Record<string, number> = { ...roleOrderMap }
-    let seq = 0
-    current.forEach(task => {
-      if ((task.master_task.responsibility || []).includes(currentOrderResponsibility)) {
-        newMap[task.master_task.id] = seq++
-      }
-    })
-    setRoleOrderMap(newMap)
-    setIsOrderDirty(true)
-    setDragIndex(null)
-  }
-
-  const handleSaveOrder = async () => {
-    if (!isReorderActive || isSavingOrder) return
-    try {
-      setIsSavingOrder(true)
-      const payload = {
-        responsibility: currentOrderResponsibility,
-        order: Object.entries(roleOrderMap).map(([master_task_id, index]) => ({ master_task_id, index })),
-      }
-      const result = await authenticatedPost('/api/checklist/custom-order', payload)
-      if (result) {
-        toastSuccess('Order Saved', 'Custom order has been saved successfully.')
-        setIsOrderDirty(false)
-        setRefreshKey(prev => prev + 1)
-      }
-    } catch (e) {
-      console.error('Failed to save custom order', e)
-      toastError('Save Failed', e instanceof Error ? e.message : 'Unknown error')
-    } finally {
-      setIsSavingOrder(false)
-    }
-  }
 
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1)
@@ -703,12 +613,13 @@ export default function RoleChecklistPage() {
 
   // Get responsibilities from positions table (ordered by display_order, excluding Administrator)
   const [responsibilitiesFromDb, setResponsibilitiesFromDb] = useState<string[]>([])
+  const [positions, setPositions] = useState<Array<{id: string, name: string, display_order?: number}>>([])
+  
   useEffect(() => {
     const loadResponsibilities = async () => {
-      if (!isAdmin) return
       try {
-        const positions = await positionsApi.getAll()
-        const nonAdmin = (positions || [])
+        const positionsData = await positionsApi.getAll()
+        const nonAdmin = (positionsData || [])
           .filter((p: any) => p.name !== 'Administrator')
           .sort((a: any, b: any) => {
             const ao = a.display_order ?? 9999
@@ -716,13 +627,21 @@ export default function RoleChecklistPage() {
             if (ao !== bo) return ao - bo
             return (a.displayName || a.name).localeCompare(b.displayName || b.name)
           })
-        const mapped = nonAdmin
-          .map((p: any) => toKebabCase(p.displayName || p.name))
-          .filter((v: string) => !!v && v.trim() !== '')
-        setResponsibilitiesFromDb(mapped)
+        
+        // Store positions for sorting (needed for all users)
+        setPositions(nonAdmin)
+        
+        // Only set responsibilities dropdown for admin users
+        if (isAdmin) {
+          const mapped = nonAdmin
+            .map((p: any) => toKebabCase(p.displayName || p.name))
+            .filter((v: string) => !!v && v.trim() !== '')
+          setResponsibilitiesFromDb(mapped)
+        }
       } catch (e) {
         console.error('Failed to load responsibilities from DB:', e)
         setResponsibilitiesFromDb([])
+        setPositions([])
       }
     }
     loadResponsibilities()
@@ -1077,53 +996,60 @@ export default function RoleChecklistPage() {
       return true
     })
 
-    // Base ordering: due_time then frequency rank for the day, then description for stability
-    const baseSorted = [...filtered].sort((a, b) => {
+    // Always sort by custom_order first (as set by administrator in Master Tasks Management)
+    // This ensures tasks are displayed in the order most recently saved by the administrator
+    return [...filtered].sort((a, b) => {
+      // 1. Primary sort: custom_order from master_tasks table
+      const aCustomOrder = a.master_task.custom_order
+      const bCustomOrder = b.master_task.custom_order
+      
+      // If both tasks have custom_order, sort by it
+      if (typeof aCustomOrder === 'number' && typeof bCustomOrder === 'number') {
+        return aCustomOrder - bCustomOrder
+      }
+      
+      // If only one has custom_order, prioritize it (tasks with custom_order come first)
+      if (typeof aCustomOrder === 'number' && typeof bCustomOrder !== 'number') {
+        return -1
+      }
+      if (typeof bCustomOrder === 'number' && typeof aCustomOrder !== 'number') {
+        return 1
+      }
+      
+      // Fallback sorting for tasks without custom_order: due_time, then position display_order, then frequency rank, then description
+      // 2. Sort by due_time (timing)
       const aMin = parseDueTimeToMinutes(a.master_task.due_time)
       const bMin = parseDueTimeToMinutes(b.master_task.due_time)
       if (aMin !== bMin) return aMin - bMin
+
+      // 3. Sort by position display_order (responsibility)
+      const aResponsibility = (a.master_task.responsibility || [])[0] || ''
+      const bResponsibility = (b.master_task.responsibility || [])[0] || ''
+      
+      if (aResponsibility !== bResponsibility) {
+        // Find the positions for these responsibilities
+        const aPosition = positions.find(p => nameToResponsibilityValue(p.name) === aResponsibility)
+        const bPosition = positions.find(p => nameToResponsibilityValue(p.name) === bResponsibility)
+        
+        const aOrder = aPosition?.display_order || 999
+        const bOrder = bPosition?.display_order || 999
+        
+        if (aOrder !== bOrder) return aOrder - bOrder
+      }
+
+      // 4. Sort by frequency rank
       const aRank = getFrequencyRankForDay(a.master_task.frequencies || [], currentDate)
       const bRank = getFrequencyRankForDay(b.master_task.frequencies || [], currentDate)
       if (aRank !== bRank) return aRank - bRank
+
+      // 5. Sort by task description
       const aDesc = a.master_task.description?.toLowerCase() || ''
       const bDesc = b.master_task.description?.toLowerCase() || ''
-      if (aDesc < bDesc) return -1
-      if (aDesc > bDesc) return 1
+      if (aDesc !== bDesc) return aDesc.localeCompare(bDesc)
+
       return 0
     })
-
-    // Apply custom order OVER the base order for:
-    // - Admin viewing a specific responsibility (not "all"): use local drag order if present, else saved order
-    // - Employees viewing their responsibility: use saved order if present
-    if (currentOrderResponsibility) {
-      const applyForAdmin = isAdmin && selectedResponsibility !== 'all'
-      const applyForEmployee = !isAdmin
-      if (applyForAdmin || applyForEmployee) {
-        const orderSource: Record<string, number> = {}
-        baseSorted.forEach((t, idx) => {
-          const saved = (t.master_task as any).custom_order?.[currentOrderResponsibility]
-          const local = roleOrderMap[t.master_task.id]
-          if (applyForAdmin) {
-            // Admin: prefer local (unsaved) > saved > base index
-            orderSource[t.master_task.id] = typeof local === 'number' ? local : (typeof saved === 'number' ? saved : idx)
-          } else {
-            // Employee: use saved if available, else base index
-            orderSource[t.master_task.id] = typeof saved === 'number' ? saved : idx
-          }
-        })
-
-        return [...baseSorted].sort((a, b) => {
-          const ai = orderSource[a.master_task.id]
-          const bi = orderSource[b.master_task.id]
-          if (ai !== bi) return ai - bi
-          return 0
-        })
-      }
-    }
-
-    // Default: return the base order
-    return baseSorted
-  }, [tasks, searchTerm, selectedResponsibility, selectedCategory, selectedStatus, currentDate, isAdmin, roleOrderMap, isReorderActive, currentOrderResponsibility])
+  }, [tasks, searchTerm, selectedResponsibility, selectedCategory, selectedStatus, currentDate, isAdmin, positions])
 
   // Pagination calculations
   const totalPages = Math.ceil(filteredAndSortedTasks.length / tasksPerPage)
@@ -1435,17 +1361,7 @@ export default function RoleChecklistPage() {
                   </SelectContent>
                 </Select>
 
-                {isAdmin && isReorderActive && (
-                  <Button
-                    size="sm"
-                    onClick={handleSaveOrder}
-                    disabled={!isOrderDirty || isSavingOrder}
-                    className="ml-2 bg-emerald-600 text-white hover:bg-emerald-700 border-emerald-600 hover:border-emerald-700 disabled:opacity-50"
-                    title={selectedResponsibility === 'all' ? 'Select a responsibility to reorder' : 'Save custom order for this role'}
-                  >
-                    {isSavingOrder ? 'Saving...' : 'Save Order'}
-                  </Button>
-                )}
+
               </div>
             </div>
           </CardHeader>
@@ -1492,12 +1408,7 @@ export default function RoleChecklistPage() {
                       {paginatedTasks.map((task, index) => (
                         <TableRow
                           key={`${task.id}-${refreshKey}`}
-                          draggable={isAdmin && isReorderActive}
-                          onDragStart={() => handleRowDragStart(index)}
-                          onDragOver={(e) => handleRowDragOver(e, index)}
-                          onDrop={() => handleRowDrop(index)}
-                          className={isAdmin && isReorderActive ? 'cursor-move' : ''}
-                          title={isAdmin && isReorderActive ? 'Drag to reorder' : undefined}
+                          className="hover:bg-gray-50"
                         >
 
                           <TableCell className="py-3">

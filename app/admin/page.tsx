@@ -185,7 +185,7 @@ export default function AdminDashboard() {
               const IconComponent = action.icon
               return (
                 <Card key={action.title} className="card-surface hover:shadow-lg transition-shadow flex flex-col">
-                  <CardHeader className="pb-2 sm:pb-3">
+                  <CardHeader>
                     <div className="flex items-center justify-between">
                       <CardTitle className="text-base sm:text-lg text-[var(--color-text)]">
                         {action.title}

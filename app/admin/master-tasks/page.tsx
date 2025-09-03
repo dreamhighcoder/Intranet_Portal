@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useRef } from "react"
+import { useState, useEffect, useRef, useMemo } from "react"
 import Head from 'next/head'
 import { usePositionAuth } from "@/lib/position-auth-context"
 import { Navigation } from "@/components/navigation"
@@ -58,11 +58,13 @@ type MasterTask = MasterChecklistTask & {
     id: string
     name: string
   }
+  custom_order?: number
 }
 
 interface Position {
   id: string
   name: string
+  display_order?: number
 }
 
 const frequencyLabels = {
@@ -319,6 +321,55 @@ const renderFrequencyWithDetails = (task: MasterTask) => {
       )}
     </div>
   )
+}
+
+// Helper function to parse due time to minutes for sorting
+const parseDueTimeToMinutes = (dueTime?: string): number => {
+  if (!dueTime) return 1020 // Default to 17:00 (17 * 60 = 1020 minutes)
+  const [hours, minutes] = dueTime.split(':').map(Number)
+  return hours * 60 + minutes
+}
+
+// Helper function to get frequency rank for sorting
+const getFrequencyRankForDay = (frequencies: string[], date: Date): number => {
+  if (!frequencies || frequencies.length === 0) return 999
+
+  // Frequency priority order (lower number = higher priority)
+  const frequencyRanks: Record<string, number> = {
+    'once_off': 1,
+    'once_off_sticky': 2,
+    'every_day': 3,
+    'monday': 4,
+    'tuesday': 5,
+    'wednesday': 6,
+    'thursday': 7,
+    'friday': 8,
+    'saturday': 9,
+    'sunday': 10,
+    'weekly': 11,
+    'specific_weekdays': 12,
+    'once_weekly': 13,
+    'start_every_month': 14,
+    'start_of_every_month': 15,
+    'start_certain_months': 16,
+    'every_month': 17,
+    'certain_months': 18,
+    'once_monthly': 19,
+    'end_every_month': 20,
+    'end_of_every_month': 21,
+    'end_certain_months': 22
+  }
+
+  // Get the lowest rank (highest priority) from all frequencies
+  let minRank = 999
+  for (const freq of frequencies) {
+    const rank = frequencyRanks[freq] || 999
+    if (rank < minRank) {
+      minRank = rank
+    }
+  }
+
+  return minRank
 }
 
 // Sortable Header Component
@@ -802,6 +853,12 @@ export default function AdminMasterTasksPage() {
   // Sorting state
   const [sortField, setSortField] = useState<string>('')
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc')
+
+  // Drag and drop state for custom ordering
+  const [customOrderMap, setCustomOrderMap] = useState<Record<string, number>>({}) // master_task_id -> index
+  const [isSavingOrder, setIsSavingOrder] = useState(false)
+  const [isOrderDirty, setIsOrderDirty] = useState(false)
+  const [dragIndex, setDragIndex] = useState<number | null>(null)
 
   // Sorting function
   const handleSort = (field: string) => {
@@ -1464,77 +1521,249 @@ export default function AdminMasterTasksPage() {
     }
   }
 
-  // Filter and sort tasks based on search and filters
-  const filteredAndSortedTasks = tasks.filter(task => {
-    const matchesSearch = !searchTerm ||
-      task.title?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      task.description?.toLowerCase().includes(searchTerm.toLowerCase())
-
-    // Check if position matches - since we're filtering by position but tasks have responsibility arrays,
-    // we need to match the selected position name with the responsibility values
-    const matchesPosition = filterPosition === 'all' ||
-      (task.responsibility && Array.isArray(task.responsibility) && task.responsibility.some(r => {
-        // If filtering by a position ID, get the position name and convert it to the same format
-        // used when creating responsibility values (lowercase with dashes)
-        const position = positions.find(p => p.id === filterPosition)
-        if (!position) return false
-
-        // Convert position name to the same format used in responsibility values
-        const formattedPositionName = nameToResponsibilityValue(position.name)
-
-
-
-        // Check if the responsibility matches the formatted position name
-        return r === formattedPositionName
-      }))
-
-    const matchesStatus = filterStatus === 'all' || task.publish_status === filterStatus
-
-    // Check if category matches either in categories array or legacy category field
-    const matchesCategory = filterCategory === 'all' ||
-      task.category === filterCategory ||
-      (task.categories && task.categories.includes(filterCategory))
-
-    return matchesSearch && matchesPosition && matchesStatus && matchesCategory
-  }).sort((a, b) => {
-    if (!sortField) return 0
-
-    let aValue: any = ''
-    let bValue: any = ''
-
-    switch (sortField) {
-      case 'title':
-        aValue = a.description?.toLowerCase() || ''
-        bValue = b.description?.toLowerCase() || ''
-        break
-      case 'responsibility':
-        aValue = a.responsibility?.[0] || ''
-        bValue = b.responsibility?.[0] || ''
-        break
-      case 'category':
-        aValue = a.categories?.[0] || a.category || ''
-        bValue = b.categories?.[0] || b.category || ''
-        break
-      case 'frequency':
-        aValue = a.frequencies?.[0] || ''
-        bValue = b.frequencies?.[0] || ''
-        break
-      case 'status':
-        aValue = a.publish_status || ''
-        bValue = b.publish_status || ''
-        break
-      case 'due_time':
-        aValue = (a as any).default_due_time || '17:00'
-        bValue = (b as any).default_due_time || '17:00'
-        break
-      default:
-        return 0
+  // Initialize custom order map when tasks load
+  useEffect(() => {
+    if (tasks.length === 0) {
+      setCustomOrderMap({})
+      setIsOrderDirty(false)
+      return
     }
 
-    if (aValue < bValue) return sortDirection === 'asc' ? -1 : 1
-    if (aValue > bValue) return sortDirection === 'asc' ? 1 : -1
-    return 0
-  })
+    // Check if any task has custom_order from database
+    const hasCustomOrder = tasks.some(t => typeof t.custom_order === 'number')
+
+    if (!hasCustomOrder) {
+      // No custom order exists, initialize with base default order
+      const baseOrder: Record<string, number> = {}
+      const baseSorted = getBaseSortedTasks(tasks)
+      baseSorted.forEach((task, index) => {
+        baseOrder[task.id] = index
+      })
+      setCustomOrderMap(baseOrder)
+      setIsOrderDirty(false)
+    } else {
+      // Custom order exists, use it
+      const orderMap: Record<string, number> = {}
+      tasks.forEach((task) => {
+        // Use custom_order from database if available, otherwise use default order
+        if (typeof task.custom_order === 'number') {
+          orderMap[task.id] = task.custom_order
+        } else {
+          // For tasks without custom_order, assign a high number to put them at the end
+          orderMap[task.id] = 999999
+        }
+      })
+      setCustomOrderMap(orderMap)
+      setIsOrderDirty(false)
+    }
+  }, [tasks, positions])
+
+  // Helper function to get base sorted tasks (Timing, Frequency, Position order, Task Description)
+  const getBaseSortedTasks = (taskList: MasterTask[]) => {
+    return [...taskList].sort((a, b) => {
+      // 1. Sort by due_time (timing)
+      const aMin = parseDueTimeToMinutes(a.due_time)
+      const bMin = parseDueTimeToMinutes(b.due_time)
+      if (aMin !== bMin) return aMin - bMin
+
+      // 2. Sort by position display_order (responsibility)
+      const aResponsibility = (a.responsibility || [])[0] || ''
+      const bResponsibility = (b.responsibility || [])[0] || ''
+      
+      if (aResponsibility !== bResponsibility) {
+        // Find the positions for these responsibilities
+        const aPosition = positions.find(p => nameToResponsibilityValue(p.name) === aResponsibility)
+        const bPosition = positions.find(p => nameToResponsibilityValue(p.name) === bResponsibility)
+        
+        const aOrder = aPosition?.display_order || 999
+        const bOrder = bPosition?.display_order || 999
+        
+        if (aOrder !== bOrder) return aOrder - bOrder
+      }
+
+      // 3. Sort by frequency rank
+      const aRank = getFrequencyRankForDay(a.frequencies || [], new Date())
+      const bRank = getFrequencyRankForDay(b.frequencies || [], new Date())
+      if (aRank !== bRank) return aRank - bRank
+
+      // 4. Sort by task description
+      const aDesc = a.description?.toLowerCase() || ''
+      const bDesc = b.description?.toLowerCase() || ''
+      if (aDesc !== bDesc) return aDesc.localeCompare(bDesc)
+
+      return 0
+    })
+  }
+
+  // Drag handlers for desktop rows
+  const handleRowDragStart = (index: number) => {
+    setDragIndex(index)
+  }
+
+  const handleRowDragOver = (e: React.DragEvent, overIndex: number) => {
+    e.preventDefault()
+  }
+
+  const handleRowDrop = (overIndex: number) => {
+    if (dragIndex === null || dragIndex === overIndex) return
+
+    // Reorder the filtered tasks
+    const current = [...filteredAndSortedTasks]
+    const [moved] = current.splice(dragIndex, 1)
+    current.splice(overIndex, 0, moved)
+
+    // Rebuild custom order map based on new order
+    const newMap: Record<string, number> = { ...customOrderMap }
+    current.forEach((task, index) => {
+      newMap[task.id] = index
+    })
+
+    setCustomOrderMap(newMap)
+    setIsOrderDirty(true)
+    setDragIndex(null)
+  }
+
+  const handleSaveOrder = async () => {
+    if (isSavingOrder) return
+    try {
+      setIsSavingOrder(true)
+
+      // Create order array from customOrderMap
+      const orderArray = Object.entries(customOrderMap).map(([taskId, customOrder]) => ({
+        id: taskId,
+        custom_order: customOrder
+      }))
+
+      // Save the order using the new reorder API
+      await masterTasksApi.reorder(orderArray)
+
+      // Update the local tasks state with the new custom_order values
+      setTasks(prevTasks => 
+        prevTasks.map(task => ({
+          ...task,
+          custom_order: customOrderMap[task.id] ?? task.custom_order
+        }))
+      )
+
+      toastSuccess('Order Saved', 'Custom order has been saved successfully.')
+      setIsOrderDirty(false)
+      setCustomOrderMap({}) // Clear the temporary order map
+
+      // Reload tasks to get updated custom_order data
+      await loadData()
+    } catch (e) {
+      console.error('Failed to save custom order', e)
+      toastError('Save Failed', e instanceof Error ? e.message : 'Unknown error')
+    } finally {
+      setIsSavingOrder(false)
+    }
+  }
+
+  // Filter and sort tasks based on search and filters
+  const filteredAndSortedTasks = useMemo(() => {
+    // First, filter tasks
+    const filtered = tasks.filter(task => {
+      const matchesSearch = !searchTerm ||
+        task.title?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        task.description?.toLowerCase().includes(searchTerm.toLowerCase())
+
+      // Check if position matches - since we're filtering by position but tasks have responsibility arrays,
+      // we need to match the selected position name with the responsibility values
+      const matchesPosition = filterPosition === 'all' ||
+        (task.responsibility && Array.isArray(task.responsibility) && task.responsibility.some(r => {
+          // If filtering by a position ID, get the position name and convert it to the same format
+          // used when creating responsibility values (lowercase with dashes)
+          const position = positions.find(p => p.id === filterPosition)
+          if (!position) return false
+
+          // Convert position name to the same format used in responsibility values
+          const formattedPositionName = nameToResponsibilityValue(position.name)
+
+          // Check if the responsibility matches the formatted position name
+          return r === formattedPositionName
+        }))
+
+      const matchesStatus = filterStatus === 'all' || task.publish_status === filterStatus
+
+      // Check if category matches either in categories array or legacy category field
+      const matchesCategory = filterCategory === 'all' ||
+        task.category === filterCategory ||
+        (task.categories && task.categories.includes(filterCategory))
+
+      return matchesSearch && matchesPosition && matchesStatus && matchesCategory
+    })
+
+    // Then, sort tasks
+    if (sortField) {
+      // Manual sorting is active
+      return [...filtered].sort((a, b) => {
+        let aValue: any = ''
+        let bValue: any = ''
+
+        switch (sortField) {
+          case 'title':
+            aValue = a.description?.toLowerCase() || ''
+            bValue = b.description?.toLowerCase() || ''
+            break
+          case 'responsibility':
+            aValue = a.responsibility?.[0] || ''
+            bValue = b.responsibility?.[0] || ''
+            break
+          case 'category':
+            aValue = a.categories?.[0] || a.category || ''
+            bValue = b.categories?.[0] || b.category || ''
+            break
+          case 'frequency':
+            aValue = a.frequencies?.[0] || ''
+            bValue = b.frequencies?.[0] || ''
+            break
+          case 'status':
+            aValue = a.publish_status || ''
+            bValue = b.publish_status || ''
+            break
+          case 'due_time':
+            aValue = (a as any).default_due_time || '17:00'
+            bValue = (b as any).default_due_time || '17:00'
+            break
+          default:
+            return 0
+        }
+
+        if (aValue < bValue) return sortDirection === 'asc' ? -1 : 1
+        if (aValue > bValue) return sortDirection === 'asc' ? 1 : -1
+        return 0
+      })
+    } else {
+      // No manual sorting, use customOrderMap or fallback to default sorting
+      
+      // If customOrderMap is empty or not ready, use base default sorting
+      if (Object.keys(customOrderMap).length === 0) {
+        return getBaseSortedTasks(filtered)
+      }
+      
+      // Use customOrderMap (which contains either database custom_order or default order)
+      return [...filtered].sort((a, b) => {
+        const aOrder = customOrderMap[a.id]
+        const bOrder = customOrderMap[b.id]
+
+        // If both have order values, sort by them
+        if (typeof aOrder === 'number' && typeof bOrder === 'number') {
+          return aOrder - bOrder
+        }
+
+        // If only one has order, prioritize it
+        if (typeof aOrder === 'number' && typeof bOrder !== 'number') {
+          return -1
+        }
+        if (typeof bOrder === 'number' && typeof aOrder !== 'number') {
+          return 1
+        }
+
+        // Fallback to base default order
+        return getBaseSortedTasks([a, b]).indexOf(a) - getBaseSortedTasks([a, b]).indexOf(b)
+      })
+    }
+  }, [tasks, searchTerm, filterPosition, filterStatus, filterCategory, sortField, sortDirection, customOrderMap, positions])
 
   // Pagination calculations
   const totalPages = Math.ceil(filteredAndSortedTasks.length / tasksPerPage)
@@ -1746,6 +1975,7 @@ export default function AdminMasterTasksPage() {
                     </Button>
                   </div>
                 </div>
+
               </div>
             </div>
           </CardContent>
@@ -1778,56 +2008,78 @@ export default function AdminMasterTasksPage() {
                 </Select>
               </div>
             </div>
-
-            {/* Bulk Actions */}
-            {selectedTasks.size > 0 && (
-              <div className="flex space-x-3">
-                <span className="text-sm font-medium text-gray-700 mt-1">
-                  {selectedTasks.size} task{selectedTasks.size !== 1 ? 's' : ''} selected
-                </span>
-                <div className="flex space-x-2">
+            <div className="flex space-x-3">
+              {/* Bulk Actions */}
+              {selectedTasks.size > 0 && (
+                <div className="flex space-x-3">
+                  <span className="text-sm font-medium text-gray-700 mt-1">
+                    {selectedTasks.size} task{selectedTasks.size !== 1 ? 's' : ''} selected
+                  </span>
+                  <div className="flex space-x-3">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleBulkAction('status')}
+                      disabled={bulkStatusLoading}
+                      className="flex items-center space-x-1"
+                    >
+                      {bulkStatusLoading ? (
+                        <>
+                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
+                          <span>Changing Status...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Settings className="w-4 h-4" />
+                          <span>Change Status</span>
+                        </>
+                      )}
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleBulkAction('delete')}
+                      disabled={bulkDeleteLoading}
+                      className="flex items-center space-x-1 text-red-600 hover:text-red-700 border-red-200 hover:border-red-300"
+                    >
+                      {bulkDeleteLoading ? (
+                        <>
+                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-red-600"></div>
+                          <span>Deleting Selected...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Trash2 className="w-4 h-4" />
+                          <span>Delete Selected</span>
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                </div>
+              )}
+              {/* Save Order Button - Only show when order is dirty and in "All Positions" view */}
+              {isOrderDirty && filterPosition === 'all' && !sortField && (
+                <div>
                   <Button
-                    variant="outline"
+                    onClick={handleSaveOrder}
+                    disabled={isSavingOrder}
+                    className="w-full bg-blue-600 hover:bg-blue-700 text-white"
                     size="sm"
-                    onClick={() => handleBulkAction('status')}
-                    disabled={bulkStatusLoading}
-                    className="flex items-center space-x-1"
                   >
-                    {bulkStatusLoading ? (
-                      <>
-                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
-                        <span>Changing Status...</span>
-                      </>
+                    {isSavingOrder ? (
+                      <span className="flex items-center justify-center">
+                        <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-white mr-2"></div>
+                        Saving Order...
+                      </span>
                     ) : (
-                      <>
-                        <Settings className="w-4 h-4" />
-                        <span>Change Status</span>
-                      </>
-                    )}
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => handleBulkAction('delete')}
-                    disabled={bulkDeleteLoading}
-                    className="flex items-center space-x-1 text-red-600 hover:text-red-700 border-red-200 hover:border-red-300"
-                  >
-                    {bulkDeleteLoading ? (
-                      <>
-                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-red-600"></div>
-                        <span>Deleting Selected...</span>
-                      </>
-                    ) : (
-                      <>
-                        <Trash2 className="w-4 h-4" />
-                        <span>Delete Selected</span>
-                      </>
+                      <span className="flex items-center justify-center">
+                        Save Order
+                      </span>
                     )}
                   </Button>
                 </div>
-              </div>
-            )}
-
+              )}
+            </div>
           </CardHeader>
           <CardContent className="w-full p-0 sm:p-6">
             {loading ? (
@@ -1908,130 +2160,144 @@ export default function AdminMasterTasksPage() {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {paginatedTasks.map((task) => (
-                        <TableRow key={task.id} className="hover:bg-gray-50">
-                          <TableCell className="py-3 text-center">
-                            <Checkbox
-                              checked={selectedTasks.has(task.id)}
-                              onCheckedChange={(checked) => handleSelectTask(task.id, checked as boolean)}
-                              aria-label={`Select task ${task.title}`}
-                              className="data-[state=checked]:bg-blue-500 data-[state=checked]:text-white data-[state=checked]:border-blue-500"
-                            />
-                          </TableCell>
-                          <TableCell className="py-3">
-                            <div className="max-w-full">
-                              <div className="font-medium truncate">{task.title}</div>
-                              {task.description && (
-                                <div className="text-sm text-gray-600 truncate">
-                                  {task.description}
-                                </div>
-                              )}
-                            </div>
-                          </TableCell>
-                          <TableCell className="py-3">
-                            <div className="max-w-full overflow-hidden">
-                              {task.responsibility && task.responsibility.length > 0 ? (
-                                renderTruncatedArray(task.responsibility, 2, "secondary", "responsibility")
-                              ) : task.positions?.name || task.position?.name ? (
-                                <div>
-                                  <Badge variant="secondary" className="text-xs truncate max-w-full">{task.positions?.name || task.position?.name}</Badge>
-                                  <div className="text-xs text-red-500 mt-1 truncate">Legacy data</div>
-                                </div>
-                              ) : (
-                                <span className="text-gray-400 text-xs">None</span>
-                              )}
-                            </div>
-                          </TableCell>
-                          <TableCell className="py-3">
-                            <div className="max-w-full overflow-hidden">
-                              {task.categories && task.categories.length > 0 ? (
-                                renderTruncatedArray(task.categories, 2, "outline", "category")
-                              ) : task.category ? (
-                                <div>
-                                  <Badge variant="outline" className="text-xs truncate max-w-full">{getCategoryDisplayName(task.category)}</Badge>
-                                  <div className="text-xs text-red-500 mt-1 truncate">Legacy data</div>
-                                </div>
-                              ) : (
-                                <span className="text-gray-400 text-xs">None</span>
-                              )}
-                            </div>
-                          </TableCell>
-                          <TableCell className="py-3">
-                            <div className="max-w-full overflow-hidden">
-                              {renderFrequencyWithDetails(task)}
-                            </div>
-                          </TableCell>
-                          <TableCell className="text-center">
-                            <div className="flex justify-center">
-                              <Select
-                                value={task.publish_status}
-                                onValueChange={(value: PublishStatus) =>
-                                  handleStatusChange(task.id, value)
-                                }
-                              >
-                                <SelectTrigger className="w-26">
-                                  <SelectValue />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  <SelectItem value="draft">Draft</SelectItem>
-                                  <SelectItem value="active">Active</SelectItem>
-                                  <SelectItem value="inactive">Inactive</SelectItem>
-                                </SelectContent>
-                              </Select>
-                            </div>
-                          </TableCell>
-                          <TableCell className="text-center">
-                            <div className="flex items-center justify-center text-sm">
-                              <Clock className="w-3 h-3 mr-1 text-gray-400" />
-                              {task.due_time || 'Not set'}
-                            </div>
-                          </TableCell>
-                          <TableCell className="text-center">
-                            <div className="flex flex-wrap justify-center gap-1 max-w-full">
-                              <Dialog>
-                                <DialogTrigger asChild>
-                                  <Button
-                                    size="sm"
-                                    variant="outline"
-                                    className="h-7 w-7 p-0"
-                                    title="View task details"
-                                  >
-                                    <Eye className="w-3 h-3" />
-                                  </Button>
-                                </DialogTrigger>
-                                <TaskDetailsModal task={task} positions={positions} />
-                              </Dialog>
+                      {paginatedTasks.map((task, index) => {
+                        const globalIndex = startIndex + index
+                        const isDragging = dragIndex === globalIndex
+                        const canDrag = filterPosition === 'all' && !sortField // Only allow drag when showing all positions and no manual sorting
 
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() => {
-                                  setEditingTask(task)
-                                  setIsTaskDialogOpen(true)
-                                }}
-                                className="h-7 w-7 p-0"
-                                title="Edit task"
-                              >
-                                <Edit className="w-3 h-3" />
-                              </Button>
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() => handleDeleteTask(task.id)}
-                                disabled={deletingTaskId === task.id}
-                                className="h-7 w-7 p-0 text-red-600 hover:text-red-700"
-                                title="Delete task"
-                              >
-                                {deletingTaskId === task.id ? (
-                                  <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-red-600"></div>
-                                ) : (
-                                  <Trash2 className="w-3 h-3" />
+                        return (
+                          <TableRow
+                            key={task.id}
+                            className={`hover:bg-gray-50 transition-colors ${isDragging ? 'opacity-50' : ''} ${canDrag ? 'cursor-move' : ''}`}
+                            draggable={canDrag}
+                            onDragStart={() => canDrag && handleRowDragStart(globalIndex)}
+                            onDragOver={(e) => canDrag && handleRowDragOver(e, globalIndex)}
+                            onDrop={() => canDrag && handleRowDrop(globalIndex)}
+                            onDragEnd={() => setDragIndex(null)}
+                          >
+                            <TableCell className="py-3 text-center">
+                              <Checkbox
+                                checked={selectedTasks.has(task.id)}
+                                onCheckedChange={(checked) => handleSelectTask(task.id, checked as boolean)}
+                                aria-label={`Select task ${task.title}`}
+                                className="data-[state=checked]:bg-blue-500 data-[state=checked]:text-white data-[state=checked]:border-blue-500"
+                              />
+                            </TableCell>
+                            <TableCell className="py-3">
+                              <div className="max-w-full">
+                                <div className="font-medium truncate">{task.title}</div>
+                                {task.description && (
+                                  <div className="text-sm text-gray-600 truncate">
+                                    {task.description}
+                                  </div>
                                 )}
-                              </Button>
-                            </div>
-                          </TableCell>
-                        </TableRow>
-                      ))}
+                              </div>
+                            </TableCell>
+                            <TableCell className="py-3">
+                              <div className="max-w-full overflow-hidden">
+                                {task.responsibility && task.responsibility.length > 0 ? (
+                                  renderTruncatedArray(task.responsibility, 2, "secondary", "responsibility")
+                                ) : task.positions?.name || task.position?.name ? (
+                                  <div>
+                                    <Badge variant="secondary" className="text-xs truncate max-w-full">{task.positions?.name || task.position?.name}</Badge>
+                                    <div className="text-xs text-red-500 mt-1 truncate">Legacy data</div>
+                                  </div>
+                                ) : (
+                                  <span className="text-gray-400 text-xs">None</span>
+                                )}
+                              </div>
+                            </TableCell>
+                            <TableCell className="py-3">
+                              <div className="max-w-full overflow-hidden">
+                                {task.categories && task.categories.length > 0 ? (
+                                  renderTruncatedArray(task.categories, 2, "outline", "category")
+                                ) : task.category ? (
+                                  <div>
+                                    <Badge variant="outline" className="text-xs truncate max-w-full">{getCategoryDisplayName(task.category)}</Badge>
+                                    <div className="text-xs text-red-500 mt-1 truncate">Legacy data</div>
+                                  </div>
+                                ) : (
+                                  <span className="text-gray-400 text-xs">None</span>
+                                )}
+                              </div>
+                            </TableCell>
+                            <TableCell className="py-3">
+                              <div className="max-w-full overflow-hidden">
+                                {renderFrequencyWithDetails(task)}
+                              </div>
+                            </TableCell>
+                            <TableCell className="text-center">
+                              <div className="flex justify-center">
+                                <Select
+                                  value={task.publish_status}
+                                  onValueChange={(value: PublishStatus) =>
+                                    handleStatusChange(task.id, value)
+                                  }
+                                >
+                                  <SelectTrigger className="w-26">
+                                    <SelectValue />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="draft">Draft</SelectItem>
+                                    <SelectItem value="active">Active</SelectItem>
+                                    <SelectItem value="inactive">Inactive</SelectItem>
+                                  </SelectContent>
+                                </Select>
+                              </div>
+                            </TableCell>
+                            <TableCell className="text-center">
+                              <div className="flex items-center justify-center text-sm">
+                                <Clock className="w-3 h-3 mr-1 text-gray-400" />
+                                {task.due_time || 'Not set'}
+                              </div>
+                            </TableCell>
+                            <TableCell className="text-center">
+                              <div className="flex flex-wrap justify-center gap-1 max-w-full">
+                                <Dialog>
+                                  <DialogTrigger asChild>
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      className="h-7 w-7 p-0"
+                                      title="View task details"
+                                    >
+                                      <Eye className="w-3 h-3" />
+                                    </Button>
+                                  </DialogTrigger>
+                                  <TaskDetailsModal task={task} positions={positions} />
+                                </Dialog>
+
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => {
+                                    setEditingTask(task)
+                                    setIsTaskDialogOpen(true)
+                                  }}
+                                  className="h-7 w-7 p-0"
+                                  title="Edit task"
+                                >
+                                  <Edit className="w-3 h-3" />
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => handleDeleteTask(task.id)}
+                                  disabled={deletingTaskId === task.id}
+                                  className="h-7 w-7 p-0 text-red-600 hover:text-red-700"
+                                  title="Delete task"
+                                >
+                                  {deletingTaskId === task.id ? (
+                                    <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-red-600"></div>
+                                  ) : (
+                                    <Trash2 className="w-3 h-3" />
+                                  )}
+                                </Button>
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        )
+                      })}
                     </TableBody>
                   </Table>
                 </div>

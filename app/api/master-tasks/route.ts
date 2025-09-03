@@ -3,6 +3,7 @@ import { requireAuth } from '@/lib/auth-middleware'
 import { createClient } from '@supabase/supabase-js'
 import { toKebabCase, toDisplayFormat } from '@/lib/responsibility-mapper'
 import { getResponsibilityForPosition, getResponsibilityOptions } from '@/lib/position-utils'
+import { DEFAULT_DUE_TIMES } from '@/lib/constants'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
@@ -62,6 +63,8 @@ export async function GET(request: NextRequest) {
       console.log('Master tasks GET - No status filter (showing all)')
     }
 
+    // Order by custom_order first (if exists), then by created_at
+    query = query.order('custom_order', { ascending: true, nullsLast: true })
     query = query.order('created_at', { ascending: false })
 
     const { data: masterTasks, error } = await query
@@ -83,8 +86,14 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Failed to fetch master tasks' }, { status: 500 })
     }
 
-    console.log('Master tasks GET - Successfully fetched', masterTasks?.length || 0, 'tasks')
-    return NextResponse.json(masterTasks || [])
+    // Add due_time based on timing for each task
+    const tasksWithDueTime = (masterTasks || []).map(task => ({
+      ...task,
+      due_time: task.due_time || DEFAULT_DUE_TIMES[task.timing as keyof typeof DEFAULT_DUE_TIMES] || '17:00'
+    }))
+
+    console.log('Master tasks GET - Successfully fetched', tasksWithDueTime.length, 'tasks')
+    return NextResponse.json(tasksWithDueTime)
   } catch (error) {
     console.error('Master tasks GET - Error:', error)
     

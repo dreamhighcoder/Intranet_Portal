@@ -243,7 +243,7 @@ export async function GET(request: NextRequest) {
           responsibility: task.responsibility || [],
           categories: task.categories || ['general'],
           frequencies: task.frequencies || [], // Using frequencies from database
-          custom_order: (task as any).custom_order || {},
+          custom_order: task.custom_order,
         },
       }
     })

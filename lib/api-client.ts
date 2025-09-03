@@ -271,6 +271,10 @@ export const masterTasksApi = {
     return await authenticatedPut(`/api/master-tasks/${id}`, data)
   },
 
+  async reorder(order: Array<{ id: string; custom_order: number }>) {
+    return await authenticatedPost('/api/master-tasks/reorder', { order })
+  },
+
   async delete(id: string) {
     return await authenticatedDelete(`/api/master-tasks/${id}`)
   }

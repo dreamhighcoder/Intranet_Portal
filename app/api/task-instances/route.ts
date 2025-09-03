@@ -41,7 +41,8 @@ export async function GET(request: NextRequest) {
           frequencies,
           timing,
           categories,
-          responsibility
+          responsibility,
+          custom_order
         )
       `)
 
@@ -116,7 +117,8 @@ export async function GET(request: NextRequest) {
         frequencies: instance.master_tasks.frequencies,
         timing: instance.master_tasks.timing,
         categories: instance.master_tasks.categories,
-        responsibility: instance.master_tasks.responsibility
+        responsibility: instance.master_tasks.responsibility,
+        custom_order: instance.master_tasks.custom_order
       }
     })) || []
 
