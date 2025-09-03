@@ -209,6 +209,110 @@ export default function CalendarPage() {
     }
   }
 
+  // Calculate dynamic summary stats based on current view settings
+  const calculateDynamicSummary = () => {
+    if (!calendarData) return null
+
+    const today = getAustralianToday()
+    const todayDate = parseAustralianDate(today)
+    const currentAusDate = getAustralianNow()
+    
+    // Debug: Log the calendar data to understand what we're working with
+    console.log('=== SUMMARY CALCULATION DEBUG ===')
+    console.log('View mode:', view)
+    console.log('Calendar data length:', calendarData.calendar.length)
+    console.log('Date range:', calendarData.metadata.startDate, 'to', calendarData.metadata.endDate)
+    console.log('Calendar days:', calendarData.calendar.map(d => ({ date: d.date, total: d.total })))
+    
+    // For now, let's use the calendar data as-is to see what we get
+    // This will help us understand if the issue is in the API or in our calculation
+    const relevantDays = calendarData.calendar
+    
+    // Determine the summary period based on view mode
+    let summaryStartDate: Date
+    let summaryEndDate: Date
+    let isCurrentPeriod = false
+    
+    if (view === 'month') {
+      // Month view: Summary is for the entire month
+      const viewingMonth = currentDate.getMonth()
+      const viewingYear = currentDate.getFullYear()
+      const currentMonth = currentAusDate.getMonth()
+      const currentYear = currentAusDate.getFullYear()
+      
+      // Month boundaries
+      summaryStartDate = new Date(viewingYear, viewingMonth, 1)
+      const monthEndDate = new Date(viewingYear, viewingMonth + 1, 0) // Last day of month
+      
+      // Check if viewing current month
+      isCurrentPeriod = (viewingYear === currentYear && viewingMonth === currentMonth)
+      
+      if (isCurrentPeriod) {
+        // Current month: only count up to today
+        summaryEndDate = todayDate
+      } else {
+        // Past or future month: count entire month
+        summaryEndDate = monthEndDate
+      }
+      
+      // Filter calendar days based on the calculated summary period
+      const summaryStartDateStr = formatAustralianDate(summaryStartDate)
+      const summaryEndDateStr = formatAustralianDate(summaryEndDate)
+      
+      console.log('Month view - filtering from', summaryStartDateStr, 'to', summaryEndDateStr)
+      
+      const filteredDays = calendarData.calendar.filter(day => {
+        return day.date >= summaryStartDateStr && day.date <= summaryEndDateStr
+      })
+      
+      console.log('Month view - filtered days:', filteredDays.length)
+      
+    } else {
+      // Week view: Summary is for the specific week being viewed
+      const startDate = parseAustralianDate(calendarData.metadata.startDate)
+      const endDate = parseAustralianDate(calendarData.metadata.endDate)
+      
+      summaryStartDate = startDate
+      
+      // Check if today falls within the current week range
+      isCurrentPeriod = (todayDate >= startDate && todayDate <= endDate)
+      
+      if (isCurrentPeriod) {
+        // Current week: only count up to today
+        summaryEndDate = todayDate
+      } else {
+        // Past or future week: count entire week
+        summaryEndDate = endDate
+      }
+      
+      // For week view, use all the calendar data (which should be just the week)
+      console.log('Week view - using all calendar data:', calendarData.calendar.length, 'days')
+    }
+    
+    // Calculate totals from the relevant days
+    const totalTasks = relevantDays.reduce((sum, day) => sum + day.total, 0)
+    const completedTasks = relevantDays.reduce((sum, day) => sum + day.completed, 0)
+    const pendingTasks = relevantDays.reduce((sum, day) => sum + day.pending, 0)
+    const overdueTasks = relevantDays.reduce((sum, day) => sum + day.overdue, 0)
+    const missedTasks = relevantDays.reduce((sum, day) => sum + day.missed, 0)
+    
+    const completionRate = totalTasks > 0 
+      ? Math.round((completedTasks / totalTasks) * 100 * 100) / 100
+      : 0
+    
+    console.log('Summary result:', { totalTasks, completedTasks, pendingTasks, overdueTasks, completionRate })
+    console.log('=== END DEBUG ===')
+    
+    return {
+      totalTasks,
+      completedTasks,
+      pendingTasks,
+      overdueTasks,
+      missedTasks,
+      completionRate
+    }
+  }
+
   const handleDayClick = (date: string) => {
     if (isAdmin) {
       // For admin users, navigate to admin checklist view with position filter applied
@@ -509,79 +613,84 @@ export default function CalendarPage() {
         </div>
 
         {/* Summary Stats */}
-        {calendarData && (
-          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-4 mb-6">
-            <Card className="bg-white rounded-lg border border-[var(--color-border)] py-4 flex flex-col sm:flex-row gap-4">
-              <CardContent>
-                <div className="flex items-center space-x-4">
-                  <div className="p-2 bg-blue-100 rounded-lg">
-                    <CalendarIcon className="w-8 h-8 text-blue-600" />
+        {calendarData && (() => {
+          const dynamicSummary = calculateDynamicSummary()
+          if (!dynamicSummary) return null
+          
+          return (
+            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-4 mb-6">
+              <Card className="bg-white rounded-lg border border-[var(--color-border)] py-4 flex flex-col sm:flex-row gap-4">
+                <CardContent>
+                  <div className="flex items-center space-x-4">
+                    <div className="p-2 bg-blue-100 rounded-lg">
+                      <CalendarIcon className="w-8 h-8 text-blue-600" />
+                    </div>
+                    <div>
+                      <p className="text-sm text-gray-600 hidden sm:inline">Total Tasks</p>
+                      <p className="text-lg font-semibold">{dynamicSummary.totalTasks}</p>
+                    </div>
                   </div>
-                  <div>
-                    <p className="text-sm text-gray-600 hidden sm:inline">Total Tasks</p>
-                    <p className="text-lg font-semibold">{calendarData.summary.totalTasks}</p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
+                </CardContent>
+              </Card>
 
-            <Card className="bg-white rounded-lg border border-[var(--color-border)] py-4 flex flex-col sm:flex-row gap-4">
-              <CardContent>
-                <div className="flex items-center space-x-4">
-                  <div className="p-2 bg-green-100 rounded-lg">
-                    <CheckCircle className="w-8 h-8 text-green-600" />
+              <Card className="bg-white rounded-lg border border-[var(--color-border)] py-4 flex flex-col sm:flex-row gap-4">
+                <CardContent>
+                  <div className="flex items-center space-x-4">
+                    <div className="p-2 bg-green-100 rounded-lg">
+                      <CheckCircle className="w-8 h-8 text-green-600" />
+                    </div>
+                    <div>
+                      <p className="text-sm text-gray-600 hidden sm:inline">Completed</p>
+                      <p className="text-lg font-semibold">{dynamicSummary.completedTasks}</p>
+                    </div>
                   </div>
-                  <div>
-                    <p className="text-sm text-gray-600 hidden sm:inline">Completed</p>
-                    <p className="text-lg font-semibold">{calendarData.summary.completedTasks}</p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
+                </CardContent>
+              </Card>
 
-            <Card className="bg-white rounded-lg border border-[var(--color-border)] py-4 flex flex-col sm:flex-row gap-4">
-              <CardContent>
-                <div className="flex items-center space-x-4">
-                  <div className="p-2 bg-yellow-100 rounded-lg">
-                    <Clock className="w-8 h-8 text-yellow-600" />
+              <Card className="bg-white rounded-lg border border-[var(--color-border)] py-4 flex flex-col sm:flex-row gap-4">
+                <CardContent>
+                  <div className="flex items-center space-x-4">
+                    <div className="p-2 bg-yellow-100 rounded-lg">
+                      <Clock className="w-8 h-8 text-yellow-600" />
+                    </div>
+                    <div>
+                      <p className="text-sm text-gray-600 hidden sm:inline">Pending</p>
+                      <p className="text-lg font-semibold">{dynamicSummary.pendingTasks}</p>
+                    </div>
                   </div>
-                  <div>
-                    <p className="text-sm text-gray-600 hidden sm:inline">Pending</p>
-                    <p className="text-lg font-semibold">{calendarData.summary.pendingTasks}</p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
+                </CardContent>
+              </Card>
 
-            <Card className="bg-white rounded-lg border border-[var(--color-border)] py-4 flex flex-col sm:flex-row gap-4">
-              <CardContent>
-                <div className="flex items-center space-x-4">
-                  <div className="p-2 bg-red-100 rounded-lg">
-                    <AlertTriangle className="w-8 h-8 text-red-600" />
+              <Card className="bg-white rounded-lg border border-[var(--color-border)] py-4 flex flex-col sm:flex-row gap-4">
+                <CardContent>
+                  <div className="flex items-center space-x-4">
+                    <div className="p-2 bg-red-100 rounded-lg">
+                      <AlertTriangle className="w-8 h-8 text-red-600" />
+                    </div>
+                    <div>
+                      <p className="text-sm text-gray-600 hidden sm:inline">Overdue</p>
+                      <p className="text-lg font-semibold">{dynamicSummary.overdueTasks}</p>
+                    </div>
                   </div>
-                  <div>
-                    <p className="text-sm text-gray-600 hidden sm:inline">Overdue</p>
-                    <p className="text-lg font-semibold">{calendarData.summary.overdueTasks}</p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
+                </CardContent>
+              </Card>
 
-            <Card className="bg-white rounded-lg border border-[var(--color-border)] py-4 flex flex-col sm:flex-row gap-4">
-              <CardContent>
-                <div className="flex items-center space-x-4">
-                  <div className="p-2 bg-purple-100 rounded-lg">
-                    <Users className="w-8 h-8 text-purple-600" />
+              <Card className="bg-white rounded-lg border border-[var(--color-border)] py-4 flex flex-col sm:flex-row gap-4">
+                <CardContent>
+                  <div className="flex items-center space-x-4">
+                    <div className="p-2 bg-purple-100 rounded-lg">
+                      <Users className="w-8 h-8 text-purple-600" />
+                    </div>
+                    <div>
+                      <p className="text-sm text-gray-600 hidden sm:inline">Completion Rate</p>
+                      <p className="text-lg font-semibold">{dynamicSummary.completionRate}%</p>
+                    </div>
                   </div>
-                  <div>
-                    <p className="text-sm text-gray-600 hidden sm:inline">Completion Rate</p>
-                    <p className="text-lg font-semibold">{calendarData.summary.completionRate}%</p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-        )}
+                </CardContent>
+              </Card>
+            </div>
+          )
+        })()}
 
         {/* Calendar Grid */}
         <Card>
