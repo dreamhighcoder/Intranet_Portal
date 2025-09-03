@@ -295,26 +295,8 @@
   box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
 }
 
-/* Calendar styling improvements for better visibility */
-/* Multiple selector approaches to ensure compatibility with different calendar implementations */
-
-/* Primary selectors for react-day-picker v9+ - Override Tailwind classes */
-[data-slot="calendar"] button[data-selected-single="true"],
-[data-slot="calendar"] button[data-selected="true"],
-.rdp button[data-selected-single="true"],
-.rdp button[data-selected="true"],
-button[data-selected-single="true"],
-button[data-selected="true"] {
-  background-color: #dbeafe !important; /* Light blue background */
-  color: #1e40af !important; /* Dark blue text */
-  border-color: #3b82f6 !important; /* Blue border */
-}
-
-/* Override specific Tailwind data attribute classes */
-button[data-selected-single="true"] {
-  background-color: #dbeafe !important; /* Light blue background */
-  color: #1e40af !important; /* Dark blue text */
-}
+/* Calendar styling improvements - now handled directly in the component */
+/* Keeping minimal CSS as backup */
 
 /* Range selection styling */
 [data-slot="calendar"] button[data-range-start="true"],
