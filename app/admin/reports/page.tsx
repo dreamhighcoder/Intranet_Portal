@@ -13,7 +13,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { authenticatedGet, positionsApi } from "@/lib/api-client"
 import { toastSuccess, toastError } from "@/hooks/use-toast"
 import { TASK_CATEGORIES } from "@/lib/constants"
-import { 
+import {
   BarChart,
   Bar,
   XAxis,
@@ -27,11 +27,12 @@ import {
   LineChart,
   Line,
 } from "recharts"
-import { 
+import {
   CalendarIcon,
   Download,
   TrendingUp,
   Clock,
+  Eye,
   AlertTriangle,
   CheckCircle,
   XCircle,
@@ -122,6 +123,58 @@ const getStatusBadgeColor = (status: string) => {
   }
 }
 
+// Helper to render truncated badges with "+(n)" format
+const renderTruncatedBadges = (
+  items: string[],
+  maxVisible: number,
+  type: 'responsibility' | 'category',
+  variant: 'outline' | 'secondary' = 'outline'
+) => {
+  if (!items || items.length === 0) {
+    return <span className="text-gray-500 text-sm">N/A</span>
+  }
+
+  const visibleItems = items.slice(0, maxVisible)
+  const remainingCount = items.length - maxVisible
+
+  const getDisplayName = (item: string) => {
+    return type === 'responsibility' ? formatResponsibility(item) : formatCategory(item)
+  }
+
+  const getBadgeColor = (item: string) => {
+    return type === 'responsibility' ? getResponsibilityBadgeColor(item) : getCategoryBadgeColor(item)
+  }
+
+  return (
+    <div className="flex flex-wrap gap-1 w-full">
+      {visibleItems.map((item, index) => {
+        const displayName = getDisplayName(item)
+        const badgeClass = getBadgeColor(item)
+
+        return (
+          <Badge
+            key={index}
+            variant={variant}
+            className={`text-xs truncate ${badgeClass}`}
+            title={displayName}
+          >
+            {displayName}
+          </Badge>
+        )
+      })}
+      {remainingCount > 0 && (
+        <Badge
+          variant="outline"
+          className="text-xs bg-gray-100"
+          title={`${remainingCount} more: ${items.slice(maxVisible).map(item => getDisplayName(item)).join(', ')}`}
+        >
+          + {remainingCount}
+        </Badge>
+      )}
+    </div>
+  )
+}
+
 interface Position {
   id: string
   name: string
@@ -146,6 +199,7 @@ interface ReportData {
       due_date: string
       master_tasks: {
         title: string
+        description?: string
         categories?: string[]
         responsibility?: string[]
       }
@@ -163,6 +217,7 @@ interface ReportData {
       due_date: string
       master_tasks: {
         title: string
+        description?: string
         categories?: string[]
         responsibility?: string[]
       }
@@ -189,11 +244,11 @@ const COLORS = {
 export default function ReportsPage() {
   const { user, isLoading: authLoading, isAdmin } = usePositionAuth()
   const router = useRouter()
-  
+
   const [positions, setPositions] = useState<Position[]>([])
   const [loading, setLoading] = useState(false)
   const [reportData, setReportData] = useState<ReportData>({})
-  
+
   // Filters
   const [dateRange, setDateRange] = useState({
     from: new Date(new Date().setDate(new Date().getDate() - 30)),
@@ -202,6 +257,8 @@ export default function ReportsPage() {
   const [selectedPosition, setSelectedPosition] = useState<string>("all")
   const [selectedCategory, setSelectedCategory] = useState<string>("all")
   const [activeReportType, setActiveReportType] = useState<string>("overview")
+  const [fromDateOpen, setFromDateOpen] = useState(false)
+  const [toDateOpen, setToDateOpen] = useState(false)
 
   useEffect(() => {
     if (!authLoading && (!user || !isAdmin)) {
@@ -216,17 +273,21 @@ export default function ReportsPage() {
     }
   }, [authLoading, user, isAdmin])
 
-  useEffect(() => {
+  // Remove automatic loading when filters change - now controlled by manual button click
+
+  const handleReportTypeChange = (reportType: string) => {
+    setActiveReportType(reportType)
+    // Always trigger data loading when report type is changed
     if (user && isAdmin) {
       loadReports()
     }
-  }, [dateRange, selectedPosition, selectedCategory, activeReportType])
+  }
 
   const loadPositions = async () => {
     try {
       const positionsData = await positionsApi.getAll()
       // Filter out only exact 'Administrator'
-      const filteredPositions = positionsData.filter(position => position.name !== 'Administrator')
+      const filteredPositions = positionsData.filter((position: Position) => position.name !== 'Administrator')
       setPositions(filteredPositions)
     } catch (error) {
       console.error('Error loading positions:', error)
@@ -238,23 +299,23 @@ export default function ReportsPage() {
     try {
       const startDate = dateRange.from.toISOString().split('T')[0]
       const endDate = dateRange.to.toISOString().split('T')[0]
-      
+
       const params = new URLSearchParams({
         start_date: startDate,
         end_date: endDate,
       })
-      
+
       if (selectedPosition !== "all") {
         params.append('position_id', selectedPosition)
       }
-      
+
       if (selectedCategory !== "all") {
         params.append('category', selectedCategory)
       }
 
       // Load multiple report types based on active report
       const reportPromises: Promise<any>[] = []
-      
+
       if (activeReportType === "overview") {
         reportPromises.push(
           authenticatedGet(`/api/reports?type=completion-rate&${params.toString()}`),
@@ -269,7 +330,7 @@ export default function ReportsPage() {
       }
 
       const results = await Promise.all(reportPromises)
-      
+
       if (activeReportType === "overview") {
         setReportData({
           completionRate: results[0],
@@ -294,7 +355,7 @@ export default function ReportsPage() {
           setReportData({})
         }
       }
-      
+
     } catch (error) {
       console.error('Error loading reports:', error)
       toastError("Error", "Failed to load report data")
@@ -306,7 +367,7 @@ export default function ReportsPage() {
   const exportToExcel = () => {
     try {
       const workbook = XLSX.utils.book_new()
-      
+
       // Export completion rate data
       if (reportData.completionRate) {
         const completionData = [
@@ -320,7 +381,7 @@ export default function ReportsPage() {
         const completionSheet = XLSX.utils.aoa_to_sheet(completionData)
         XLSX.utils.book_append_sheet(workbook, completionSheet, 'Completion Rate')
       }
-      
+
       // Export missed tasks data
       if (reportData.missedTasks?.missedTasks) {
         const missedData = [
@@ -335,7 +396,7 @@ export default function ReportsPage() {
         const missedSheet = XLSX.utils.aoa_to_sheet(missedData)
         XLSX.utils.book_append_sheet(workbook, missedSheet, 'Missed Tasks')
       }
-      
+
       // Export outstanding tasks data
       if (reportData.outstandingTasks?.outstandingTasks) {
         const outstandingData = [
@@ -351,11 +412,11 @@ export default function ReportsPage() {
         const outstandingSheet = XLSX.utils.aoa_to_sheet(outstandingData)
         XLSX.utils.book_append_sheet(workbook, outstandingSheet, 'Outstanding Tasks')
       }
-      
+
       // Generate and download file
       const excelBuffer = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' })
       const blob = new Blob([excelBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
-      
+
       const link = document.createElement('a')
       const url = URL.createObjectURL(blob)
       link.setAttribute('href', url)
@@ -365,7 +426,7 @@ export default function ReportsPage() {
       link.click()
       document.body.removeChild(link)
       URL.revokeObjectURL(url)
-      
+
       toastSuccess("Export Successful", "Reports exported to Excel successfully")
     } catch (error) {
       console.error('Error exporting reports:', error)
@@ -407,7 +468,7 @@ export default function ReportsPage() {
                   cx="50%"
                   cy="50%"
                   labelLine={false}
-                  label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                  label={({ name, percent }) => `${name} ${((percent || 0) * 100).toFixed(0)}%`}
                   outerRadius={80}
                   fill="#8884d8"
                   dataKey="value"
@@ -461,60 +522,45 @@ export default function ReportsPage() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Task</TableHead>
-                <TableHead>Responsibility</TableHead>
-                <TableHead>Category</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Due Date</TableHead>
+                <TableHead className="w-[35%]">Task</TableHead>
+                <TableHead className="w-[20%]">Responsibility</TableHead>
+                <TableHead className="w-[20%]">Category</TableHead>
+                <TableHead className="w-[15%]">Status</TableHead>
+                <TableHead className="w-[10%]">Due Date</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {reportData.outstandingTasks.outstandingTasks.slice(0, 10).map((task) => (
                 <TableRow key={task.id}>
-                  <TableCell className="font-medium">{task.master_tasks.title}</TableCell>
-                  <TableCell>
-                    <div className="flex flex-wrap gap-1">
-                      {task.master_tasks.responsibility && task.master_tasks.responsibility.length > 0 ? (
-                        task.master_tasks.responsibility.map((resp: string, index: number) => (
-                          <Badge 
-                            key={index}
-                            variant="outline" 
-                            className={`text-xs ${getResponsibilityBadgeColor(resp)}`}
-                          >
-                            {formatResponsibility(resp)}
-                          </Badge>
-                        ))
-                      ) : (
-                        <span className="text-gray-500 text-sm">N/A</span>
+                  <TableCell className="py-3">
+                    <div className="max-w-full">
+                      <div className="font-medium truncate">{task.master_tasks.title}</div>
+                      {task.master_tasks.description && (
+                        <div className="text-sm text-gray-600 truncate mt-1">
+                          {task.master_tasks.description}
+                        </div>
                       )}
                     </div>
                   </TableCell>
-                  <TableCell>
-                    <div className="flex flex-wrap gap-1">
-                      {task.master_tasks.categories && task.master_tasks.categories.length > 0 ? (
-                        task.master_tasks.categories.map((cat: string, index: number) => (
-                          <Badge 
-                            key={index}
-                            variant="outline" 
-                            className={`text-xs ${getCategoryBadgeColor(cat)}`}
-                          >
-                            {formatCategory(cat)}
-                          </Badge>
-                        ))
-                      ) : (
-                        <span className="text-gray-500 text-sm">N/A</span>
-                      )}
+                  <TableCell className="py-3">
+                    <div className="max-w-full overflow-hidden">
+                      {renderTruncatedBadges(task.master_tasks.responsibility || [], 2, 'responsibility')}
                     </div>
                   </TableCell>
-                  <TableCell>
-                    <Badge 
+                  <TableCell className="py-3">
+                    <div className="max-w-full overflow-hidden">
+                      {renderTruncatedBadges(task.master_tasks.categories || [], 2, 'category')}
+                    </div>
+                  </TableCell>
+                  <TableCell className="py-3">
+                    <Badge
                       variant="outline"
                       className={`text-xs ${getStatusBadgeColor(task.status)}`}
                     >
                       {formatStatus(task.status)}
                     </Badge>
                   </TableCell>
-                  <TableCell>{new Date(task.due_date).toLocaleDateString()}</TableCell>
+                  <TableCell className="py-3 text-sm">{new Date(task.due_date).toLocaleDateString()}</TableCell>
                 </TableRow>
               ))}
             </TableBody>
@@ -557,11 +603,11 @@ export default function ReportsPage() {
         {/* Filters */}
         <Card className="bg-white rounded-lg border border-[var(--color-border)] py-4 gap-4 mb-6">
           <CardContent>
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-4 xl:grid-cols-6 gap-4">
               {/* Date Range */}
               <div className="space-y-2">
                 <label className="text-sm font-medium">From Date</label>
-                <Popover>
+                <Popover open={fromDateOpen} onOpenChange={setFromDateOpen}>
                   <PopoverTrigger asChild>
                     <Button variant="outline" className="w-full justify-start">
                       <CalendarIcon className="w-4 h-4 mr-2" />
@@ -572,7 +618,12 @@ export default function ReportsPage() {
                     <Calendar
                       mode="single"
                       selected={dateRange.from}
-                      onSelect={(date) => date && setDateRange(prev => ({ ...prev, from: date }))}
+                      onSelect={(date) => {
+                        if (date) {
+                          setDateRange(prev => ({ ...prev, from: date }))
+                          setFromDateOpen(false)
+                        }
+                      }}
                       initialFocus
                     />
                   </PopoverContent>
@@ -581,7 +632,7 @@ export default function ReportsPage() {
 
               <div className="space-y-2">
                 <label className="text-sm font-medium">To Date</label>
-                <Popover>
+                <Popover open={toDateOpen} onOpenChange={setToDateOpen}>
                   <PopoverTrigger asChild>
                     <Button variant="outline" className="w-full justify-start">
                       <CalendarIcon className="w-4 h-4 mr-2" />
@@ -592,7 +643,12 @@ export default function ReportsPage() {
                     <Calendar
                       mode="single"
                       selected={dateRange.to}
-                      onSelect={(date) => date && setDateRange(prev => ({ ...prev, to: date }))}
+                      onSelect={(date) => {
+                        if (date) {
+                          setDateRange(prev => ({ ...prev, to: date }))
+                          setToDateOpen(false)
+                        }
+                      }}
                       initialFocus
                     />
                   </PopoverContent>
@@ -634,38 +690,45 @@ export default function ReportsPage() {
                   </SelectContent>
                 </Select>
               </div>
+              <div className="relative md:col-span-2">
+                <div className="grid grid-cols-1 sm:grid-cols-3 md:grid-cols-3 xl:grid-cols-3 gap-3">
+                  {/* Overview Button */}
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">&nbsp;</label>
+                    <Button
+                      variant={activeReportType === "overview" ? "default" : "outline"}
+                      onClick={() => handleReportTypeChange("overview")}
+                      className={`w-full ${activeReportType === "overview" ? "text-white" : ""}`}
+                      disabled={loading}
+                    >
+                      <Eye className="w-3 h-3" />
+                      {loading && activeReportType === "overview" ? "Loading..." : "Overview"}
+                    </Button>
+                  </div>
+
+                  {/* Missed Tasks Button */}
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">&nbsp;</label>
+                    <Button
+                      variant={activeReportType === "missed-tasks" ? "default" : "outline"}
+                      onClick={() => handleReportTypeChange("missed-tasks")}
+                      className={`w-full ${activeReportType === "missed-tasks" ? "text-white" : ""}`}
+                      disabled={loading}
+                    >
+                      {loading && activeReportType === "missed-tasks" ? "Loading..." : "Missed Tasks"}
+                    </Button>
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">&nbsp;</label>
+                    <Button onClick={exportToExcel} variant="outline" className="w-full">
+                      <Download className="w-4 h-4" />
+                      Export Excel
+                    </Button>
+                  </div>
+                </div>
+              </div>
             </div>
 
-            <div className="flex justify-between items-center mt-4 pt-4 border-t">
-              <div className="flex flex-wrap gap-2">
-                <Button
-                  variant={activeReportType === "overview" ? "default" : "outline"}
-                  onClick={() => setActiveReportType("overview")}
-                  className={`${activeReportType === "overview" ? "text-white" : ""} whitespace-nowrap`}
-                >
-                  Overview
-                </Button>
-                <Button
-                  variant={activeReportType === "completion-rate" ? "default" : "outline"}
-                  onClick={() => setActiveReportType("completion-rate")}
-                  className={`${activeReportType === "completion-rate" ? "text-white" : ""} whitespace-nowrap`}
-                >
-                  Completion Rate
-                </Button>
-                <Button
-                  variant={activeReportType === "missed-tasks" ? "default" : "outline"}
-                  onClick={() => setActiveReportType("missed-tasks")}
-                  className={`${activeReportType === "missed-tasks" ? "text-white" : ""} whitespace-nowrap`}
-                >
-                  Missed Tasks
-                </Button>
-              </div>
-              
-              <Button onClick={exportToExcel} variant="outline" className="whitespace-nowrap">
-                <Download className="w-4 h-4 mr-2" />
-                Export Excel
-              </Button>
-            </div>
           </CardContent>
         </Card>
 
@@ -745,51 +808,36 @@ export default function ReportsPage() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Task</TableHead>
-                    <TableHead>Responsibility</TableHead>
-                    <TableHead>Category</TableHead>
-                    <TableHead>Due Date</TableHead>
+                    <TableHead className="w-[40%]">Task</TableHead>
+                    <TableHead className="w-[25%]">Responsibility</TableHead>
+                    <TableHead className="w-[25%]">Category</TableHead>
+                    <TableHead className="w-[10%]">Due Date</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {reportData.missedTasks.missedTasks.map((task) => (
                     <TableRow key={task.id}>
-                      <TableCell className="font-medium">{task.master_tasks.title}</TableCell>
-                      <TableCell>
-                        <div className="flex flex-wrap gap-1">
-                          {task.master_tasks.responsibility && task.master_tasks.responsibility.length > 0 ? (
-                            task.master_tasks.responsibility.map((resp: string, index: number) => (
-                              <Badge 
-                                key={index}
-                                variant="outline" 
-                                className={`text-xs ${getResponsibilityBadgeColor(resp)}`}
-                              >
-                                {formatResponsibility(resp)}
-                              </Badge>
-                            ))
-                          ) : (
-                            <span className="text-gray-500 text-sm">N/A</span>
+                      <TableCell className="py-3">
+                        <div className="max-w-full">
+                          <div className="font-medium truncate">{task.master_tasks.title}</div>
+                          {task.master_tasks.description && (
+                            <div className="text-sm text-gray-600 truncate mt-1">
+                              {task.master_tasks.description}
+                            </div>
                           )}
                         </div>
                       </TableCell>
-                      <TableCell>
-                        <div className="flex flex-wrap gap-1">
-                          {task.master_tasks.categories && task.master_tasks.categories.length > 0 ? (
-                            task.master_tasks.categories.map((cat: string, index: number) => (
-                              <Badge 
-                                key={index}
-                                variant="outline" 
-                                className={`text-xs ${getCategoryBadgeColor(cat)}`}
-                              >
-                                {formatCategory(cat)}
-                              </Badge>
-                            ))
-                          ) : (
-                            <span className="text-gray-500 text-sm">N/A</span>
-                          )}
+                      <TableCell className="py-3">
+                        <div className="max-w-full overflow-hidden">
+                          {renderTruncatedBadges(task.master_tasks.responsibility || [], 2, 'responsibility')}
                         </div>
                       </TableCell>
-                      <TableCell>{new Date(task.due_date).toLocaleDateString()}</TableCell>
+                      <TableCell className="py-3">
+                        <div className="max-w-full overflow-hidden">
+                          {renderTruncatedBadges(task.master_tasks.categories || [], 2, 'category')}
+                        </div>
+                      </TableCell>
+                      <TableCell className="py-3 text-sm">{new Date(task.due_date).toLocaleDateString()}</TableCell>
                     </TableRow>
                   ))}
                 </TableBody>

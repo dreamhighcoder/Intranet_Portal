@@ -209,6 +209,7 @@ async function generateTaskOccurrences(startDate: string, endDate: string, posit
   const taskOccurrences: Array<{
     masterTaskId: string
     title: string
+    description: string
     categories: string[]
     responsibility: string[]
     date: string
@@ -264,6 +265,7 @@ async function generateTaskOccurrences(startDate: string, endDate: string, posit
         taskOccurrences.push({
           masterTaskId: task.id,
           title: task.title || '',
+          description: task.description || '',
           categories: task.categories || [],
           responsibility: task.responsibility || [],
           date: dateStr,
@@ -366,6 +368,7 @@ async function getMissedTasksReport(startDate?: string | null, endDate?: string 
         due_date: task.date,
         master_tasks: {
           title: task.title,
+          description: task.description,
           categories: task.categories,
           responsibility: task.responsibility
         }
@@ -427,6 +430,7 @@ async function getOutstandingTasksReport(startDate?: string | null, endDate?: st
         due_date: task.date,
         master_tasks: {
           title: task.title,
+          description: task.description,
           categories: task.categories,
           responsibility: task.responsibility
         }

@@ -295,3 +295,100 @@
   box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
 }
 
+/* Calendar styling improvements for better visibility */
+/* Multiple selector approaches to ensure compatibility with different calendar implementations */
+
+/* Primary selectors for react-day-picker v9+ - Override Tailwind classes */
+[data-slot="calendar"] button[data-selected-single="true"],
+[data-slot="calendar"] button[data-selected="true"],
+.rdp button[data-selected-single="true"],
+.rdp button[data-selected="true"],
+button[data-selected-single="true"],
+button[data-selected="true"] {
+  background-color: #dbeafe !important; /* Light blue background */
+  color: #1e40af !important; /* Dark blue text */
+  border-color: #3b82f6 !important; /* Blue border */
+}
+
+/* Override specific Tailwind data attribute classes */
+button[data-selected-single="true"] {
+  background-color: #dbeafe !important; /* Light blue background */
+  color: #1e40af !important; /* Dark blue text */
+}
+
+/* Range selection styling */
+[data-slot="calendar"] button[data-range-start="true"],
+[data-slot="calendar"] button[data-range-end="true"],
+.rdp button[data-range-start="true"],
+.rdp button[data-range-end="true"] {
+  background-color: #dbeafe !important; /* Light blue background */
+  color: #1e40af !important; /* Dark blue text */
+  border-color: #3b82f6 !important; /* Blue border */
+}
+
+/* Today's date styling - light green background with dark text when not selected */
+[data-slot="calendar"] .today button:not([data-selected-single="true"]):not([data-range-start="true"]):not([data-range-end="true"]),
+[data-slot="calendar"] button[data-today="true"]:not([data-selected-single="true"]):not([data-range-start="true"]):not([data-range-end="true"]),
+.rdp .today button:not([data-selected-single="true"]):not([data-range-start="true"]):not([data-range-end="true"]),
+.rdp button[data-today="true"]:not([data-selected-single="true"]):not([data-range-start="true"]):not([data-range-end="true"]) {
+  background-color: #dcfce7 !important; /* Light green background */
+  color: #166534 !important; /* Dark green text */
+  border-color: #22c55e !important; /* Green border */
+}
+
+/* Fallback selectors for older versions or different implementations */
+.react-day-picker button[aria-selected="true"],
+.calendar button[aria-selected="true"],
+button[data-selected="true"] {
+  background-color: #dbeafe !important; /* Light blue background */
+  color: #1e40af !important; /* Dark blue text */
+  border-color: #3b82f6 !important; /* Blue border */
+}
+
+/* Today fallback selectors */
+.react-day-picker button[data-today="true"]:not([aria-selected="true"]),
+.calendar button[data-today="true"]:not([aria-selected="true"]),
+button[data-today="true"]:not([data-selected="true"]),
+button[data-today="true"]:not([data-selected-single="true"]) {
+  background-color: #dcfce7 !important; /* Light green background */
+  color: #166534 !important; /* Dark green text */
+  border-color: #22c55e !important; /* Green border */
+}
+
+/* Additional broad selectors to catch any calendar implementation */
+.popover-content button[data-selected-single="true"],
+.popover-content button[data-selected="true"],
+[role="dialog"] button[data-selected-single="true"],
+[role="dialog"] button[data-selected="true"] {
+  background-color: #dbeafe !important; /* Light blue background */
+  color: #1e40af !important; /* Dark blue text */
+  border-color: #3b82f6 !important; /* Blue border */
+}
+
+/* Hover states for better UX */
+[data-slot="calendar"] button:hover:not([data-selected-single="true"]):not([data-range-start="true"]):not([data-range-end="true"]),
+.rdp button:hover:not([data-selected-single="true"]):not([data-range-start="true"]):not([data-range-end="true"]) {
+  background-color: #f3f4f6 !important; /* Light gray on hover */
+  color: #374151 !important; /* Dark gray text */
+}
+
+/* Ensure selected date hover maintains good visibility */
+[data-slot="calendar"] button[data-selected-single="true"]:hover,
+[data-slot="calendar"] button[data-range-start="true"]:hover,
+[data-slot="calendar"] button[data-range-end="true"]:hover,
+.rdp button[data-selected-single="true"]:hover,
+.rdp button[data-range-start="true"]:hover,
+.rdp button[data-range-end="true"]:hover {
+  background-color: #bfdbfe !important; /* Slightly darker blue on hover */
+  color: #1e40af !important; /* Keep dark blue text */
+}
+
+/* Today's date hover state when not selected */
+[data-slot="calendar"] .today button:not([data-selected-single="true"]):not([data-range-start="true"]):not([data-range-end="true"]):hover,
+[data-slot="calendar"] button[data-today="true"]:not([data-selected-single="true"]):not([data-range-start="true"]):not([data-range-end="true"]):hover,
+.rdp .today button:not([data-selected-single="true"]):not([data-range-start="true"]):not([data-range-end="true"]):hover,
+.rdp button[data-today="true"]:not([data-selected-single="true"]):not([data-range-start="true"]):not([data-range-end="true"]):hover {
+  background-color: #bbf7d0 !important; /* Slightly darker green on hover */
+  color: #166534 !important; /* Keep dark green text */
+}
+
