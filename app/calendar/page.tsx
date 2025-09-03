@@ -210,17 +210,34 @@ export default function CalendarPage() {
   }
 
   const handleDayClick = (date: string) => {
-    // Navigate to the checklist page for the selected date
-    // If user has a specific position, navigate to their checklist
-    // Otherwise, navigate to a default role (pharmacist-in-charge)
-    let targetRole = 'pharmacist-in-charge' // default role
-    
-    if (user?.position?.name) {
-      // Convert position name to kebab-case for URL using the proper utility function
-      targetRole = toKebabCase(user.position.name)
+    if (isAdmin) {
+      // For admin users, navigate to admin checklist view with position filter applied
+      let targetRole = 'administrator' // Admin role
+      let url = `/checklist/${targetRole}?date=${date}&admin_mode=true`
+      
+      // If a specific position is selected, add it as a responsibility filter parameter
+      if (selectedPosition !== "all") {
+        // Find the selected position and convert its name to responsibility format
+        const selectedPositionData = positions.find(p => p.id === selectedPosition)
+        if (selectedPositionData) {
+          // Convert position name to kebab-case responsibility format
+          const responsibilityName = toKebabCase(selectedPositionData.name)
+          url += `&responsibility_filter=${responsibilityName}`
+        }
+      }
+      
+      router.push(url)
+    } else {
+      // For regular users, navigate to their specific checklist
+      let targetRole = 'pharmacist-in-charge' // default role
+      
+      if (user?.position?.name) {
+        // Convert position name to kebab-case for URL using the proper utility function
+        targetRole = toKebabCase(user.position.name)
+      }
+      
+      router.push(`/checklist/${targetRole}?date=${date}`)
     }
-    
-    router.push(`/checklist/${targetRole}?date=${date}`)
   }
 
   const renderCalendarGrid = () => {

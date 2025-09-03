@@ -135,21 +135,21 @@ export async function GET(request: NextRequest) {
       // Fetch position to map to responsibility
       const { data: position } = await supabaseAdmin
         .from('positions')
-        .select('name, display_name')
+        .select('name')
         .eq('id', positionId)
         .maybeSingle()
       if (position) {
-        responsibilityVariants = buildResponsibilityVariants(position.name, position.display_name)
+        responsibilityVariants = buildResponsibilityVariants(position.name, position.name)
       }
     } else if (user.role !== 'admin' && user.position_id) {
       // Fetch user's position to map to responsibility
       const { data: position } = await supabaseAdmin
         .from('positions')
-        .select('name, display_name')
+        .select('name')
         .eq('id', user.position_id)
         .maybeSingle()
       if (position) {
-        responsibilityVariants = buildResponsibilityVariants(position.name, position.display_name)
+        responsibilityVariants = buildResponsibilityVariants(position.name, position.name)
       }
     }
 
@@ -190,8 +190,8 @@ export async function GET(request: NextRequest) {
 
 
 
-    // Non-admins must be restricted to their responsibility only
-    if (user.role !== 'admin' && responsibilityVariants && responsibilityVariants.length > 0) {
+    // Apply responsibility filter when specified (for position filtering or non-admin users)
+    if (responsibilityVariants && responsibilityVariants.length > 0) {
       taskQuery = taskQuery.overlaps('responsibility', responsibilityVariants)
     }
 
@@ -201,14 +201,17 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Failed to fetch calendar data' }, { status: 500 })
     }
 
-    // Final in-memory safety filter to ensure non-admins never see others' tasks
-    const roleFiltered = (user.role !== 'admin' && responsibilityVariants && responsibilityVariants.length > 0)
+    // Final in-memory safety filter to apply responsibility filtering when specified
+    const roleFiltered = (responsibilityVariants && responsibilityVariants.length > 0)
       ? (masterTasks || []).filter(t => {
           const resp: string[] = (t as any).responsibility || []
           // Match any variant including raw, lowercase, kebab, underscore, and space-separated
-          return responsibilityVariants!.some(v => resp.includes(v))
+          const matches = responsibilityVariants!.some(v => resp.includes(v))
+          return matches
         })
       : (masterTasks || [])
+
+
 
     // Build calendar map using Australian timezone
     const calendarMap: Record<string, any> = {}
@@ -246,7 +249,7 @@ export async function GET(request: NextRequest) {
       .lte('instance_date', endDateStr)
 
     // Apply same responsibility filtering for task instances
-    if (user.role !== 'admin' && responsibilityVariants && responsibilityVariants.length > 0) {
+    if (responsibilityVariants && responsibilityVariants.length > 0) {
       instancesQuery = instancesQuery.overlaps('master_tasks.responsibility', responsibilityVariants)
     }
 

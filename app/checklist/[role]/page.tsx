@@ -836,7 +836,13 @@ export default function RoleChecklistPage() {
     if (dateParam && dateParam !== currentDate) {
       setCurrentDate(dateParam)
     }
-  }, [searchParams, currentDate])
+    
+    // Handle responsibility filter from URL parameter (for admin navigation from calendar)
+    const responsibilityParam = searchParams.get("responsibility_filter")
+    if (responsibilityParam && isAdmin && responsibilityParam !== selectedResponsibility) {
+      setSelectedResponsibility(responsibilityParam)
+    }
+  }, [searchParams, currentDate, isAdmin, selectedResponsibility])
 
   const handleDateChange = (date: string) => {
     setCurrentDate(date)
