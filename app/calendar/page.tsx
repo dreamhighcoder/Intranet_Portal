@@ -697,7 +697,7 @@ export default function CalendarPage() {
           <CardHeader>
             <CardTitle className="flex items-center space-x-2">
               <CalendarIcon className="w-5 h-5" />
-              <span>
+              <span className="text-lg">
                 {view === 'month' ? 'Monthly' : 'Weekly'} Task Calendar
                 {selectedPosition !== "all" && positions.length > 0 && (
                   <span className="text-sm font-normal text-gray-500 ml-2">
@@ -713,7 +713,7 @@ export default function CalendarPage() {
         </Card>
 
         {/* Legend */}
-        <Card className="mt-6">
+        <Card className="mt-6 gap-2">
           <CardHeader>
             <CardTitle className="text-lg">Legend</CardTitle>
           </CardHeader>

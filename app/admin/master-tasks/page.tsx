@@ -789,6 +789,11 @@ export default function AdminMasterTasksPage() {
   const [bulkStatusValue, setBulkStatusValue] = useState<PublishStatus>(PublishStatus.ACTIVE)
   const [bulkDeleteConfirmModal, setBulkDeleteConfirmModal] = useState(false)
   const [bulkActionLoading, setBulkActionLoading] = useState(false)
+  const [bulkStatusLoading, setBulkStatusLoading] = useState(false)
+  const [bulkDeleteLoading, setBulkDeleteLoading] = useState(false)
+
+  // Import loading state
+  const [isImporting, setIsImporting] = useState(false)
 
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1)
@@ -1038,7 +1043,7 @@ export default function AdminMasterTasksPage() {
 
   const confirmBulkDelete = async () => {
     setBulkDeleteConfirmModal(false)
-    setBulkActionLoading(true)
+    setBulkDeleteLoading(true)
 
     try {
       const selectedTaskIds = Array.from(selectedTasks)
@@ -1059,13 +1064,13 @@ export default function AdminMasterTasksPage() {
       // Reload data to ensure consistency
       await loadData()
     } finally {
-      setBulkActionLoading(false)
+      setBulkDeleteLoading(false)
     }
   }
 
   const confirmBulkStatusChange = async () => {
     setBulkActionModal({ isOpen: false, action: null })
-    setBulkActionLoading(true)
+    setBulkStatusLoading(true)
 
     try {
       const selectedTaskIds = Array.from(selectedTasks)
@@ -1092,7 +1097,7 @@ export default function AdminMasterTasksPage() {
       // Reload data to ensure consistency
       await loadData()
     } finally {
-      setBulkActionLoading(false)
+      setBulkStatusLoading(false)
     }
   }
 
@@ -1158,6 +1163,8 @@ export default function AdminMasterTasksPage() {
   const handleImport = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
     if (!file) return
+
+    setIsImporting(true)
 
     try {
       let importData: any[] = []
@@ -1449,6 +1456,7 @@ export default function AdminMasterTasksPage() {
       const errorMessage = error instanceof Error ? error.message : 'Failed to import file'
       showToast('error', 'Import Failed', errorMessage)
     } finally {
+      setIsImporting(false)
       // Reset file input
       if (fileInputRef.current) {
         fileInputRef.current.value = ''
@@ -1721,10 +1729,20 @@ export default function AdminMasterTasksPage() {
                       variant="outline"
                       size="sm"
                       onClick={() => fileInputRef.current?.click()}
+                      disabled={isImporting}
                       className="w-full"
                     >
-                      <Upload className="w-4 h-4 mr-1" />
-                      Import
+                      {isImporting ? (
+                        <span className="flex items-center justify-center">
+                          <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-green-800 mr-2"></div>
+                          Importing...
+                        </span>
+                      ) : (
+                        <span className="flex items-center justify-center">
+                          <Upload className="w-4 h-4 mr-1" />
+                          Import
+                        </span>
+                      )}
                     </Button>
                   </div>
                 </div>
@@ -1772,21 +1790,39 @@ export default function AdminMasterTasksPage() {
                     variant="outline"
                     size="sm"
                     onClick={() => handleBulkAction('status')}
-                    disabled={bulkActionLoading}
+                    disabled={bulkStatusLoading}
                     className="flex items-center space-x-1"
                   >
-                    <Settings className="w-4 h-4" />
-                    <span>Change Status</span>
+                    {bulkStatusLoading ? (
+                      <>
+                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
+                        <span>Changing Status...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Settings className="w-4 h-4" />
+                        <span>Change Status</span>
+                      </>
+                    )}
                   </Button>
                   <Button
                     variant="outline"
                     size="sm"
                     onClick={() => handleBulkAction('delete')}
-                    disabled={bulkActionLoading}
+                    disabled={bulkDeleteLoading}
                     className="flex items-center space-x-1 text-red-600 hover:text-red-700 border-red-200 hover:border-red-300"
                   >
-                    <Trash2 className="w-4 h-4" />
-                    <span>Delete Selected</span>
+                    {bulkDeleteLoading ? (
+                      <>
+                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-red-600"></div>
+                        <span>Deleting Selected...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Trash2 className="w-4 h-4" />
+                        <span>Delete Selected</span>
+                      </>
+                    )}
                   </Button>
                 </div>
               </div>
@@ -2241,20 +2277,19 @@ export default function AdminMasterTasksPage() {
                 <Button
                   variant="outline"
                   onClick={() => setBulkActionModal({ isOpen: false, action: null })}
-                  disabled={bulkActionLoading}
+                  disabled={bulkStatusLoading}
                 >
                   Cancel
                 </Button>
                 <Button
                   onClick={confirmBulkStatusChange}
-                  disabled={bulkActionLoading}
-                  className="bg-blue-600 hover:bg-blue-700"
+                  disabled={bulkStatusLoading}
+                  className="bg-blue-600 hover:bg-blue-700 text-white"
                 >
-                  {bulkActionLoading ? (
+                  {bulkStatusLoading ? (
                     <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                  ) : (
-                    <Check className="w-4 h-4 mr-2" />
-                  )}
+                  ) : ("")
+                  }
                   Update Status
                 </Button>
               </div>
