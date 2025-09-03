@@ -7,6 +7,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Calendar } from "@/components/ui/calendar"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { authenticatedGet, positionsApi } from "@/lib/api-client"
 import { toastError } from "@/hooks/use-toast"
 import { toKebabCase } from "@/lib/responsibility-mapper"
@@ -83,6 +85,7 @@ export default function CalendarPage() {
   const [loading, setLoading] = useState(true)
   const [currentDate, setCurrentDate] = useState(getAustralianNow())
   const [selectedPosition, setSelectedPosition] = useState<string>("all")
+  const [datePickerOpen, setDatePickerOpen] = useState(false)
   
   // Ensure non-admins are locked to their own position
   useEffect(() => {
@@ -173,6 +176,13 @@ export default function CalendarPage() {
     setCurrentDate(newDate)
   }
 
+  const handleDatePickerSelect = (date: Date | undefined) => {
+    if (date) {
+      setCurrentDate(date)
+      setDatePickerOpen(false)
+    }
+  }
+
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'done':
@@ -236,8 +246,8 @@ export default function CalendarPage() {
               <div
                 key={day.date}
                 onClick={() => handleDayClick(day.date)}
-                className={`min-h-32 p-2 border border-gray-200 cursor-pointer transition-all duration-200 hover:shadow-md hover:scale-[1.02] hover:border-blue-300 ${
-                  isToday ? 'bg-blue-50 border-blue-300' : 'bg-white hover:bg-blue-50'
+                className={`min-h-32 p-2 border rounded-lg cursor-pointer transition-all duration-200 hover:shadow-md hover:scale-[1.02] hover:border-blue-300 ${
+                  isToday ? 'bg-blue-50 border-blue-500 border-2 shadow-sm' : 'border-gray-200 bg-white hover:bg-blue-50'
                 } ${day.holiday ? 'bg-yellow-50 hover:bg-yellow-100' : ''}`}
               >
                 <div className="flex items-center justify-between mb-2">
@@ -323,10 +333,10 @@ export default function CalendarPage() {
           <div
             key={index}
             onClick={() => day.isCurrentMonth ? handleDayClick(day.date) : null}
-            className={`min-h-24 p-1 border border-gray-200 transition-all duration-200 ${
+            className={`min-h-24 p-2 border rounded-lg transition-all duration-200 ${
               day.isCurrentMonth ? 'cursor-pointer hover:shadow-md hover:scale-[1.02] hover:border-blue-300' : 'cursor-not-allowed'
             } ${
-              day.isToday ? 'bg-blue-50 border-blue-300' : 'bg-white'
+              day.isToday ? 'bg-blue-50 border-blue-300 border-2 shadow-sm' : 'border-gray-200 bg-white'
             } ${
               day.isCurrentMonth && !day.isToday ? 'hover:bg-blue-50' : ''
             } ${
@@ -409,15 +419,31 @@ export default function CalendarPage() {
               <ChevronLeft className="w-4 h-4" />
             </Button>
             
-            <div className="flex items-center space-x-2">
-              <CalendarIcon className="w-4 h-4" />
-              <span className="font-medium">
-                {view === 'month' 
-                  ? `${monthNames[toAustralianTime(currentDate).getMonth()]} ${toAustralianTime(currentDate).getFullYear()}`
-                  : `Week of ${formatAustralianDate(currentDate)}`
-                }
-              </span>
-            </div>
+            <Popover open={datePickerOpen} onOpenChange={setDatePickerOpen}>
+              <PopoverTrigger asChild>
+                <Button
+                  variant="outline"
+                  className="flex items-center space-x-2 font-medium hover:bg-blue-50"
+                >
+                  <CalendarIcon className="w-4 h-4" />
+                  <span>
+                    {view === 'month' 
+                      ? `${monthNames[toAustralianTime(currentDate).getMonth()]} ${toAustralianTime(currentDate).getFullYear()}`
+                      : `Week of ${formatAustralianDate(currentDate)}`
+                    }
+                  </span>
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-auto p-0" align="start">
+                <Calendar
+                  mode="single"
+                  selected={currentDate}
+                  onSelect={handleDatePickerSelect}
+                  initialFocus
+                  captionLayout="dropdown"
+                />
+              </PopoverContent>
+            </Popover>
             
             <Button
               variant="outline"

@@ -16,7 +16,8 @@
     "deploy-recurrence-engine": "tsx scripts/deploy-recurrence-engine.ts",
     "run-migration": "tsx scripts/run-migration.ts",
     "check-schema": "tsx scripts/check-schema.ts",
-    "fix-audit-constraint": "node scripts/fix-audit-constraint.js"
+    "fix-audit-constraint": "node scripts/fix-audit-constraint.js",
+    "clear-audit-log": "node scripts/clear-audit-log.js"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",
