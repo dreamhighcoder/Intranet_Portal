@@ -576,7 +576,9 @@ export default function AdminPublicHolidaysPage() {
                     <p className="text-sm text-gray-600">Total Holidays</p>
                     <p className="text-xl sm:text-2xl font-bold">{holidays.length}</p>
                   </div>
-                  <Calendar className="w-6 h-6 sm:w-8 sm:h-8 text-blue-600" />
+                  <div className="p-2 bg-purple-100 rounded-lg">
+                    <Calendar className="w-6 h-6 text-purple-600" />
+                  </div>
                 </div>
               </CardContent>
             </Card>
@@ -590,7 +592,9 @@ export default function AdminPublicHolidaysPage() {
                       {holidaysByYear[new Date().getFullYear()]?.length || 0}
                     </p>
                   </div>
-                  <Calendar className="w-6 h-6 sm:w-8 sm:h-8 text-green-600" />
+                  <div className="p-2 bg-green-100 rounded-lg">
+                    <Calendar className="w-6 h-6 text-green-600" />
+                  </div>
                 </div>
               </CardContent>
             </Card>
@@ -604,7 +608,9 @@ export default function AdminPublicHolidaysPage() {
                       {holidaysByYear[getAustralianNow().getFullYear() + 1]?.length || 0}
                     </p>
                   </div>
-                  <Calendar className="w-6 h-6 sm:w-8 sm:h-8 text-orange-600" />
+                  <div className="p-2 bg-orange-100 rounded-lg">
+                    <Calendar className="w-6 h-6 text-orange-600" />
+                  </div>
                 </div>
               </CardContent>
             </Card>

@@ -623,7 +623,7 @@ export default function CalendarPage() {
                 <CardContent>
                   <div className="flex items-center space-x-4">
                     <div className="p-2 bg-blue-100 rounded-lg">
-                      <CalendarIcon className="w-8 h-8 text-blue-600" />
+                      <CalendarIcon className="w-6 h-6 text-blue-600" />
                     </div>
                     <div>
                       <p className="text-sm text-gray-600 hidden sm:inline">Total Tasks</p>
@@ -637,7 +637,7 @@ export default function CalendarPage() {
                 <CardContent>
                   <div className="flex items-center space-x-4">
                     <div className="p-2 bg-green-100 rounded-lg">
-                      <CheckCircle className="w-8 h-8 text-green-600" />
+                      <CheckCircle className="w-6 h-6 text-green-600" />
                     </div>
                     <div>
                       <p className="text-sm text-gray-600 hidden sm:inline">Completed</p>
@@ -651,7 +651,7 @@ export default function CalendarPage() {
                 <CardContent>
                   <div className="flex items-center space-x-4">
                     <div className="p-2 bg-yellow-100 rounded-lg">
-                      <Clock className="w-8 h-8 text-yellow-600" />
+                      <Clock className="w-6 h-6 text-yellow-600" />
                     </div>
                     <div>
                       <p className="text-sm text-gray-600 hidden sm:inline">Pending</p>
@@ -665,7 +665,7 @@ export default function CalendarPage() {
                 <CardContent>
                   <div className="flex items-center space-x-4">
                     <div className="p-2 bg-red-100 rounded-lg">
-                      <AlertTriangle className="w-8 h-8 text-red-600" />
+                      <AlertTriangle className="w-6 h-6 text-red-600" />
                     </div>
                     <div>
                       <p className="text-sm text-gray-600 hidden sm:inline">Overdue</p>
@@ -679,7 +679,7 @@ export default function CalendarPage() {
                 <CardContent>
                   <div className="flex items-center space-x-4">
                     <div className="p-2 bg-purple-100 rounded-lg">
-                      <Users className="w-8 h-8 text-purple-600" />
+                      <Users className="w-6 h-6 text-purple-600" />
                     </div>
                     <div>
                       <p className="text-sm text-gray-600 hidden sm:inline">Completion Rate</p>

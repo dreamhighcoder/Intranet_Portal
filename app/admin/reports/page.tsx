@@ -519,52 +519,113 @@ export default function ReportsPage() {
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead className="w-[35%]">Task</TableHead>
-                <TableHead className="w-[20%]">Responsibility</TableHead>
-                <TableHead className="w-[20%]">Category</TableHead>
-                <TableHead className="w-[15%]">Status</TableHead>
-                <TableHead className="w-[10%]">Due Date</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {reportData.outstandingTasks.outstandingTasks.slice(0, 10).map((task) => (
-                <TableRow key={task.id}>
-                  <TableCell className="py-3">
-                    <div className="max-w-full">
-                      <div className="font-medium truncate">{task.master_tasks.title}</div>
+          {/* Desktop Table Layout */}
+          <div className="hidden lg:block">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="w-[35%]">Task</TableHead>
+                  <TableHead className="w-[20%]">Responsibility</TableHead>
+                  <TableHead className="w-[20%]">Category</TableHead>
+                  <TableHead className="w-[15%]">Status</TableHead>
+                  <TableHead className="w-[10%]">Due Date</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {reportData.outstandingTasks.outstandingTasks.slice(0, 10).map((task) => (
+                  <TableRow key={task.id}>
+                    <TableCell className="py-3">
+                      <div className="max-w-full">
+                        <div className="font-medium truncate">{task.master_tasks.title}</div>
+                        {task.master_tasks.description && (
+                          <div className="text-sm text-gray-600 truncate mt-1">
+                            {task.master_tasks.description}
+                          </div>
+                        )}
+                      </div>
+                    </TableCell>
+                    <TableCell className="py-3">
+                      <div className="max-w-full overflow-hidden">
+                        {renderTruncatedBadges(task.master_tasks.responsibility || [], 2, 'responsibility')}
+                      </div>
+                    </TableCell>
+                    <TableCell className="py-3">
+                      <div className="max-w-full overflow-hidden">
+                        {renderTruncatedBadges(task.master_tasks.categories || [], 2, 'category')}
+                      </div>
+                    </TableCell>
+                    <TableCell className="py-3">
+                      <Badge
+                        variant="outline"
+                        className={`text-xs ${getStatusBadgeColor(task.status)}`}
+                      >
+                        {formatStatus(task.status)}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="py-3 text-sm">{new Date(task.due_date).toLocaleDateString()}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+
+          {/* Mobile Card Layout */}
+          <div className="lg:hidden space-y-4">
+            {reportData.outstandingTasks.outstandingTasks.slice(0, 10).map((task) => (
+              <Card key={task.id} className="border border-gray-200">
+                <CardContent className="p-4">
+                  <div className="space-y-3">
+                    {/* Title and Description */}
+                    <div>
+                      <h3 className="font-medium text-base">{task.master_tasks.title}</h3>
                       {task.master_tasks.description && (
-                        <div className="text-sm text-gray-600 truncate mt-1">
-                          {task.master_tasks.description}
-                        </div>
+                        <p className="text-sm text-gray-600 mt-1">{task.master_tasks.description}</p>
                       )}
                     </div>
-                  </TableCell>
-                  <TableCell className="py-3">
-                    <div className="max-w-full overflow-hidden">
-                      {renderTruncatedBadges(task.master_tasks.responsibility || [], 2, 'responsibility')}
+
+                    {/* Details Grid */}
+                    <div className="space-y-3 text-sm">
+                      <div>
+                        <span className="text-gray-500 font-medium">Responsibility:</span>
+                        <div className="mt-1">
+                          {renderTruncatedBadges(task.master_tasks.responsibility || [], 3, 'responsibility')}
+                        </div>
+                      </div>
+
+                      <div>
+                        <span className="text-gray-500 font-medium">Category:</span>
+                        <div className="mt-1">
+                          {renderTruncatedBadges(task.master_tasks.categories || [], 3, 'category')}
+                        </div>
+                      </div>
+
+                      <div className="flex justify-between items-center">
+                        <div>
+                          <span className="text-gray-500 font-medium">Status:</span>
+                          <div className="mt-1">
+                            <Badge
+                              variant="outline"
+                              className={`text-xs ${getStatusBadgeColor(task.status)}`}
+                            >
+                              {formatStatus(task.status)}
+                            </Badge>
+                          </div>
+                        </div>
+
+                        <div>
+                          <span className="text-gray-500 font-medium">Due Date:</span>
+                          <div className="mt-1 text-sm font-medium">
+                            {new Date(task.due_date).toLocaleDateString()}
+                          </div>
+                        </div>
+                      </div>
                     </div>
-                  </TableCell>
-                  <TableCell className="py-3">
-                    <div className="max-w-full overflow-hidden">
-                      {renderTruncatedBadges(task.master_tasks.categories || [], 2, 'category')}
-                    </div>
-                  </TableCell>
-                  <TableCell className="py-3">
-                    <Badge
-                      variant="outline"
-                      className={`text-xs ${getStatusBadgeColor(task.status)}`}
-                    >
-                      {formatStatus(task.status)}
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="py-3 text-sm">{new Date(task.due_date).toLocaleDateString()}</TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+
           {reportData.outstandingTasks.outstandingTasks.length > 10 && (
             <p className="text-sm text-gray-500 mt-2">
               Showing 10 of {reportData.outstandingTasks.outstandingTasks.length} outstanding tasks
@@ -737,9 +798,9 @@ export default function ReportsPage() {
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
             <Card className="bg-white rounded-lg border border-[var(--color-border)] py-4 flex flex-col sm:flex-row gap-4">
               <CardContent>
-                <div className="flex items-center space-x-2">
+                <div className="flex items-center space-x-4">
                   <div className="p-2 bg-blue-100 rounded-lg">
-                    <FileText className="w-4 h-4 text-blue-600" />
+                    <FileText className="w-6 h-6 text-blue-600" />
                   </div>
                   <div>
                     <p className="text-sm text-gray-600">Total Tasks</p>
@@ -751,9 +812,9 @@ export default function ReportsPage() {
 
             <Card className="bg-white rounded-lg border border-[var(--color-border)] py-4 flex flex-col sm:flex-row gap-4">
               <CardContent>
-                <div className="flex items-center space-x-2">
+                <div className="flex items-center space-x-4">
                   <div className="p-2 bg-green-100 rounded-lg">
-                    <CheckCircle className="w-4 h-4 text-green-600" />
+                    <CheckCircle className="w-6 h-6 text-green-600" />
                   </div>
                   <div>
                     <p className="text-sm text-gray-600">Completed</p>
@@ -765,9 +826,9 @@ export default function ReportsPage() {
 
             <Card className="bg-white rounded-lg border border-[var(--color-border)] py-4 flex flex-col sm:flex-row gap-4">
               <CardContent>
-                <div className="flex items-center space-x-2">
+                <div className="flex items-center space-x-4">
                   <div className="p-2 bg-purple-100 rounded-lg">
-                    <TrendingUp className="w-4 h-4 text-purple-600" />
+                    <TrendingUp className="w-6 h-6 text-purple-600" />
                   </div>
                   <div>
                     <p className="text-sm text-gray-600">Completion Rate</p>
@@ -779,9 +840,9 @@ export default function ReportsPage() {
 
             <Card className="bg-white rounded-lg border border-[var(--color-border)] py-4 flex flex-col sm:flex-row gap-4">
               <CardContent>
-                <div className="flex items-center space-x-2">
+                <div className="flex items-center space-x-4">
                   <div className="p-2 bg-orange-100 rounded-lg">
-                    <Clock className="w-4 h-4 text-orange-600" />
+                    <Clock className="w-6 h-6 text-orange-600" />
                   </div>
                   <div>
                     <p className="text-sm text-gray-600">On-Time Rate</p>
