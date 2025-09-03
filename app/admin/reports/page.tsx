@@ -43,6 +43,85 @@ import {
 import { useRouter } from "next/navigation"
 import * as XLSX from 'xlsx'
 
+// Helper functions for formatting and styling
+const formatResponsibility = (responsibility: string) => {
+  // Convert kebab-case or snake_case to proper display format
+  return responsibility
+    .replace(/[-_]/g, ' ')
+    .replace(/\b\w/g, l => l.toUpperCase())
+    .replace(/\bDaa\b/g, 'DAA') // Special case for DAA
+}
+
+const formatCategory = (category: string) => {
+  // Convert kebab-case to proper display format
+  return category
+    .replace(/-/g, ' ')
+    .replace(/\b\w/g, l => l.toUpperCase())
+    .replace(/\bFos\b/g, 'FOS') // Special case for FOS
+}
+
+const formatStatus = (status: string) => {
+  // Convert snake_case to proper display format
+  return status
+    .replace(/_/g, ' ')
+    .replace(/\b\w/g, l => l.toUpperCase())
+}
+
+// Helper to get responsibility badge color (consistent hash-based coloring)
+const getResponsibilityBadgeColor = (responsibility: string) => {
+  const colors = [
+    'bg-blue-100 text-blue-800 border-blue-200',
+    'bg-sky-100 text-sky-800 border-sky-200',
+    'bg-green-100 text-green-800 border-green-200',
+    'bg-teal-100 text-teal-800 border-teal-200',
+    'bg-emerald-100 text-emerald-800 border-emerald-200',
+    'bg-purple-100 text-purple-800 border-purple-200',
+    'bg-indigo-100 text-indigo-800 border-indigo-200',
+    'bg-pink-100 text-pink-800 border-pink-200',
+    'bg-rose-100 text-rose-800 border-rose-200',
+    'bg-orange-100 text-orange-800 border-orange-200'
+  ]
+  // Simple hash function to consistently assign colors
+  let hash = 0
+  for (let i = 0; i < responsibility.length; i++) {
+    hash = ((hash << 5) - hash + responsibility.charCodeAt(i)) & 0xffffffff
+  }
+  return colors[Math.abs(hash) % colors.length]
+}
+
+// Helper to get category badge color
+const getCategoryBadgeColor = (category: string) => {
+  const colorMap: Record<string, string> = {
+    'stock-control': 'bg-blue-50 text-blue-700 border-blue-100',
+    'compliance': 'bg-red-50 text-red-700 border-red-100',
+    'cleaning': 'bg-green-50 text-green-700 border-green-100',
+    'pharmacy-services': 'bg-purple-50 text-purple-700 border-purple-100',
+    'fos-operations': 'bg-amber-50 text-amber-700 border-amber-100',
+    'dispensary-operations': 'bg-teal-50 text-teal-700 border-teal-100',
+    'general-pharmacy-operations': 'bg-cyan-50 text-cyan-700 border-cyan-100',
+    'business-management': 'bg-indigo-50 text-indigo-700 border-indigo-100'
+  }
+  return colorMap[category] || 'bg-gray-50 text-gray-700 border-gray-100'
+}
+
+// Helper to get status badge color
+const getStatusBadgeColor = (status: string) => {
+  switch (status) {
+    case 'done':
+      return 'bg-green-100 text-green-800 border-green-200'
+    case 'overdue':
+      return 'bg-red-100 text-red-800 border-red-200'
+    case 'missed':
+      return 'bg-gray-100 text-gray-800 border-gray-200'
+    case 'due_today':
+      return 'bg-blue-100 text-blue-800 border-blue-200'
+    case 'not_due':
+      return 'bg-slate-100 text-slate-800 border-slate-200'
+    default:
+      return 'bg-blue-100 text-blue-800 border-blue-200'
+  }
+}
+
 interface Position {
   id: string
   name: string
@@ -299,7 +378,7 @@ export default function ReportsPage() {
 
     // Prepare pie chart data for task status
     const statusData = Object.entries(reportData.taskSummary.statusCounts || {}).map(([status, count]) => ({
-      name: status.charAt(0).toUpperCase() + status.slice(1),
+      name: formatStatus(status),
       value: count,
       color: COLORS[status as keyof typeof COLORS] || COLORS.primary
     }))
@@ -393,15 +472,46 @@ export default function ReportsPage() {
               {reportData.outstandingTasks.outstandingTasks.slice(0, 10).map((task) => (
                 <TableRow key={task.id}>
                   <TableCell className="font-medium">{task.master_tasks.title}</TableCell>
-                  <TableCell>{task.master_tasks.responsibility?.join(', ') || 'N/A'}</TableCell>
-                  <TableCell>{task.master_tasks.categories?.join(', ') || 'N/A'}</TableCell>
                   <TableCell>
-                    <Badge className={
-                      task.status === 'overdue' 
-                        ? 'bg-red-100 text-red-800 border-red-200'
-                        : 'bg-gray-100 text-gray-800 border-gray-200'
-                    }>
-                      {task.status}
+                    <div className="flex flex-wrap gap-1">
+                      {task.master_tasks.responsibility && task.master_tasks.responsibility.length > 0 ? (
+                        task.master_tasks.responsibility.map((resp: string, index: number) => (
+                          <Badge 
+                            key={index}
+                            variant="outline" 
+                            className={`text-xs ${getResponsibilityBadgeColor(resp)}`}
+                          >
+                            {formatResponsibility(resp)}
+                          </Badge>
+                        ))
+                      ) : (
+                        <span className="text-gray-500 text-sm">N/A</span>
+                      )}
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex flex-wrap gap-1">
+                      {task.master_tasks.categories && task.master_tasks.categories.length > 0 ? (
+                        task.master_tasks.categories.map((cat: string, index: number) => (
+                          <Badge 
+                            key={index}
+                            variant="outline" 
+                            className={`text-xs ${getCategoryBadgeColor(cat)}`}
+                          >
+                            {formatCategory(cat)}
+                          </Badge>
+                        ))
+                      ) : (
+                        <span className="text-gray-500 text-sm">N/A</span>
+                      )}
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    <Badge 
+                      variant="outline"
+                      className={`text-xs ${getStatusBadgeColor(task.status)}`}
+                    >
+                      {formatStatus(task.status)}
                     </Badge>
                   </TableCell>
                   <TableCell>{new Date(task.due_date).toLocaleDateString()}</TableCell>
@@ -645,8 +755,40 @@ export default function ReportsPage() {
                   {reportData.missedTasks.missedTasks.map((task) => (
                     <TableRow key={task.id}>
                       <TableCell className="font-medium">{task.master_tasks.title}</TableCell>
-                      <TableCell>{task.master_tasks.responsibility?.join(', ') || 'N/A'}</TableCell>
-                      <TableCell>{task.master_tasks.categories?.join(', ') || 'N/A'}</TableCell>
+                      <TableCell>
+                        <div className="flex flex-wrap gap-1">
+                          {task.master_tasks.responsibility && task.master_tasks.responsibility.length > 0 ? (
+                            task.master_tasks.responsibility.map((resp: string, index: number) => (
+                              <Badge 
+                                key={index}
+                                variant="outline" 
+                                className={`text-xs ${getResponsibilityBadgeColor(resp)}`}
+                              >
+                                {formatResponsibility(resp)}
+                              </Badge>
+                            ))
+                          ) : (
+                            <span className="text-gray-500 text-sm">N/A</span>
+                          )}
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex flex-wrap gap-1">
+                          {task.master_tasks.categories && task.master_tasks.categories.length > 0 ? (
+                            task.master_tasks.categories.map((cat: string, index: number) => (
+                              <Badge 
+                                key={index}
+                                variant="outline" 
+                                className={`text-xs ${getCategoryBadgeColor(cat)}`}
+                              >
+                                {formatCategory(cat)}
+                              </Badge>
+                            ))
+                          ) : (
+                            <span className="text-gray-500 text-sm">N/A</span>
+                          )}
+                        </div>
+                      </TableCell>
                       <TableCell>{new Date(task.due_date).toLocaleDateString()}</TableCell>
                     </TableRow>
                   ))}
