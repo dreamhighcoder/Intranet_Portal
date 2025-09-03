@@ -313,7 +313,7 @@ export default function ReportsPage() {
     return (
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
         {/* Task Status Distribution */}
-        <Card>
+        <Card className="bg-white border border-[var(--color-border)]">
           <CardHeader>
             <CardTitle className="flex items-center space-x-2">
               <PieChartIcon className="w-5 h-5" />
@@ -344,7 +344,7 @@ export default function ReportsPage() {
         </Card>
 
         {/* Missed Tasks by Position */}
-        <Card>
+        <Card className="bg-white border border-[var(--color-border)]">
           <CardHeader>
             <CardTitle className="flex items-center space-x-2">
               <BarChart3 className="w-5 h-5" />
@@ -371,7 +371,7 @@ export default function ReportsPage() {
     if (!reportData.outstandingTasks?.outstandingTasks) return null
 
     return (
-      <Card className="mt-6">
+      <Card className="bg-white border border-[var(--color-border)] mt-6 gap-2">
         <CardHeader>
           <CardTitle className="flex items-center space-x-2">
             <AlertTriangle className="w-5 h-5" />
@@ -445,7 +445,7 @@ export default function ReportsPage() {
         </div>
 
         {/* Filters */}
-        <Card className="mb-6">
+        <Card className="bg-white rounded-lg border border-[var(--color-border)] py-4 gap-4 mb-6">
           <CardContent>
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
               {/* Date Range */}
@@ -562,8 +562,8 @@ export default function ReportsPage() {
         {/* KPI Cards */}
         {reportData.completionRate && (
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-            <Card>
-              <CardContent className="p-4">
+            <Card className="bg-white rounded-lg border border-[var(--color-border)] py-4 flex flex-col sm:flex-row gap-4">
+              <CardContent>
                 <div className="flex items-center space-x-2">
                   <div className="p-2 bg-blue-100 rounded-lg">
                     <FileText className="w-4 h-4 text-blue-600" />
@@ -576,8 +576,8 @@ export default function ReportsPage() {
               </CardContent>
             </Card>
 
-            <Card>
-              <CardContent className="p-4">
+            <Card className="bg-white rounded-lg border border-[var(--color-border)] py-4 flex flex-col sm:flex-row gap-4">
+              <CardContent>
                 <div className="flex items-center space-x-2">
                   <div className="p-2 bg-green-100 rounded-lg">
                     <CheckCircle className="w-4 h-4 text-green-600" />
@@ -590,8 +590,8 @@ export default function ReportsPage() {
               </CardContent>
             </Card>
 
-            <Card>
-              <CardContent className="p-4">
+            <Card className="bg-white rounded-lg border border-[var(--color-border)] py-4 flex flex-col sm:flex-row gap-4">
+              <CardContent>
                 <div className="flex items-center space-x-2">
                   <div className="p-2 bg-purple-100 rounded-lg">
                     <TrendingUp className="w-4 h-4 text-purple-600" />
@@ -604,8 +604,8 @@ export default function ReportsPage() {
               </CardContent>
             </Card>
 
-            <Card>
-              <CardContent className="p-4">
+            <Card className="bg-white rounded-lg border border-[var(--color-border)] py-4 flex flex-col sm:flex-row gap-4">
+              <CardContent>
                 <div className="flex items-center space-x-2">
                   <div className="p-2 bg-orange-100 rounded-lg">
                     <Clock className="w-4 h-4 text-orange-600" />

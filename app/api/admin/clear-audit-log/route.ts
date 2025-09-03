@@ -1,55 +1,21 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabase } from '@/lib/supabase'
-import { createServerClient } from '@supabase/ssr'
-import { cookies } from 'next/headers'
+import { requireAuth } from '@/lib/auth-middleware'
+import { createClient } from '@supabase/supabase-js'
+
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
+const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
+const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey)
 
 export async function DELETE(request: NextRequest) {
   try {
-    // Create Supabase client with user context for auth check
-    const cookieStore = await cookies()
-    const supabaseAuth = createServerClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      {
-        cookies: {
-          getAll() {
-            return cookieStore.getAll()
-          },
-          setAll(cookiesToSet) {
-            try {
-              cookiesToSet.forEach(({ name, value, options }) =>
-                cookieStore.set(name, value, options)
-              )
-            } catch {
-              // The `setAll` method was called from a Server Component.
-              // This can be ignored if you have middleware refreshing
-              // user sessions.
-            }
-          },
-        },
-      }
-    )
-
-    // Get the current user
-    const { data: { user }, error: authError } = await supabaseAuth.auth.getUser()
+    // Require authentication and admin role
+    const user = await requireAuth(request)
     
-    if (authError || !user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
-
-    // Check if user is admin
-    const { data: userProfile, error: profileError } = await supabase
-      .from('user_profiles')
-      .select('role')
-      .eq('id', user.id)
-      .single()
-
-    if (profileError || !userProfile || userProfile.role !== 'admin') {
+    if (user.role !== 'admin') {
       return NextResponse.json({ error: 'Admin access required' }, { status: 403 })
     }
-
     // Get current count before deletion
-    const { count: currentCount, error: countError } = await supabase
+    const { count: currentCount, error: countError } = await supabaseAdmin
       .from('audit_log')
       .select('*', { count: 'exact', head: true })
 
@@ -59,7 +25,7 @@ export async function DELETE(request: NextRequest) {
     }
 
     // Delete all audit log records
-    const { error: deleteError } = await supabase
+    const { error: deleteError } = await supabaseAdmin
       .from('audit_log')
       .delete()
       .neq('id', '00000000-0000-0000-0000-000000000000') // This will match all records
@@ -70,7 +36,7 @@ export async function DELETE(request: NextRequest) {
     }
 
     // Verify deletion
-    const { count: finalCount, error: finalCountError } = await supabase
+    const { count: finalCount, error: finalCountError } = await supabaseAdmin
       .from('audit_log')
       .select('*', { count: 'exact', head: true })
 
