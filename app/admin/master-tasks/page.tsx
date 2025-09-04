@@ -521,41 +521,37 @@ const TaskDetailsModal = ({ task, positions }: { task: MasterTask, positions: Po
       {/* Scrollable Content */}
       <div className="flex-1 overflow-y-auto px-1 py-4 space-y-6">
         {/* Basic Information */}
-        <Card>
-          <CardHeader>
+        <Card className="border-l-4 border-l-blue-500 gap-2">
+          <CardHeader className="flex flex-col sm:flex-row justify-between">
             <CardTitle className="flex items-center space-x-2">
               <CheckCircle2 className="h-5 w-5" />
               <span>Basic Information</span>
             </CardTitle>
+            <Badge className={task.publish_status === 'active' ? 'bg-green-100 text-green-800 border border-green-200' :
+              task.publish_status === 'draft' ? 'bg-yellow-100 text-yellow-800 border border-yellow-200' :
+                'bg-gray-100 text-gray-800 border border-gray-200'}>
+              {task.publish_status}
+            </Badge>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
               <div className="items-center  p-4 bg-gray-50 rounded-md border border-gray-100 shadow-sm">
                 <label className="text-sm font-medium text-gray-600">Title</label>
                 <p className="text-sm mt-1 font-medium">{task.title}</p>
               </div>
-              <div className="flex items-center justify-between p-4 bg-gray-50 rounded-md border border-gray-100 shadow-sm">
-                <label className="text-sm font-medium text-gray-600">Status</label>
-                <div className="mt-1">
-                  <Badge className={task.publish_status === 'active' ? 'bg-green-100 text-green-800 border border-green-200' :
-                    task.publish_status === 'draft' ? 'bg-yellow-100 text-yellow-800 border border-yellow-200' :
-                      'bg-gray-100 text-gray-800 border border-gray-200'}>
-                    {task.publish_status}
-                  </Badge>
+              {task.description && (
+                <div className="relative lg:col-span-3 items-center p-4 bg-gray-50 rounded-md border border-gray-100 shadow-sm">
+                  <label className="text-sm font-medium text-gray-600">Description</label>
+                  <p className="text-sm mt-1 bg-gray-50 rounded-md">{task.description}</p>
                 </div>
-              </div>
+              )}
+
             </div>
-            {task.description && (
-              <div className="items-center p-4 bg-gray-50 rounded-md border border-gray-100 shadow-sm">
-                <label className="text-sm font-medium text-gray-600">Description</label>
-                <p className="text-sm mt-1 bg-gray-50 rounded-md">{task.description}</p>
-              </div>
-            )}
           </CardContent>
         </Card>
 
         {/* Assignment & Responsibilities */}
-        <Card>
+        <Card className="border-l-4 border-l-indigo-500 gap-2">
           <CardHeader>
             <CardTitle className="flex items-center space-x-2">
               <Users className="h-5 w-5" />
@@ -615,7 +611,7 @@ const TaskDetailsModal = ({ task, positions }: { task: MasterTask, positions: Po
         </Card>
 
         {/* Scheduling */}
-        <Card>
+        <Card className="border-l-4 border-l-green-500 gap-2">
           <CardHeader>
             <CardTitle className="flex items-center space-x-2">
               <Calendar className="h-5 w-5" />
@@ -623,7 +619,22 @@ const TaskDetailsModal = ({ task, positions }: { task: MasterTask, positions: Po
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+              <div className="relative lg:col-span-2 items-center p-4 bg-gray-50 rounded-md border border-gray-100 shadow-sm">
+                <label className="text-sm font-medium text-gray-600">Frequencies</label>
+                <div className="flex flex-wrap gap-1 mt-1">
+                  {task.frequencies && task.frequencies.length > 0 ? (
+                    task.frequencies.map((freq, index) => (
+                      <Badge key={index} variant="outline" className={getFrequencyBadgeColor(freq)}>
+                        {formatFrequency(freq)}
+                      </Badge>
+                    ))
+                  ) : (
+                    <span className="text-sm text-gray-400">No frequencies set</span>
+                  )}
+                </div>
+              </div>
+
               <div className="items-center  p-4 bg-gray-50 rounded-md border border-gray-100 shadow-sm">
                 <label className="text-sm font-medium text-gray-600">Timing</label>
                 <p className="text-sm mt-1">
@@ -644,59 +655,8 @@ const TaskDetailsModal = ({ task, positions }: { task: MasterTask, positions: Po
                 <label className="text-sm font-medium text-gray-600">Due Time</label>
                 <p className="text-sm mt-1 flex items-center gap-1">
                   <Clock className="h-3 w-3" />
-                  {(task as any).default_due_time || 'Not specified'}
+                  {task.due_time || 'Not specified'}
                 </p>
-              </div>
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-1 gap-4">
-              <div className="items-center  p-4 bg-gray-50 rounded-md border border-gray-100 shadow-sm">
-                <label className="text-sm font-medium text-gray-600">Frequencies</label>
-                <div className="flex flex-wrap gap-1 mt-1">
-                  {task.frequencies && task.frequencies.length > 0 ? (
-                    task.frequencies.map((freq, index) => (
-                      <Badge key={index} variant="outline" className={getFrequencyBadgeColor(freq)}>
-                        {formatFrequency(freq)}
-                      </Badge>
-                    ))
-                  ) : (
-                    <span className="text-sm text-gray-400">No frequencies set</span>
-                  )}
-                </div>
-              </div>
-            </div>
-
-            {/* Advanced Scheduling */}
-
-          </CardContent>
-        </Card>
-
-        {/* Advanced Options */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center space-x-2">
-              <Tag className="h-5 w-5" />
-              <span>Advanced Options</span>
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="flex items-center justify-between p-4 bg-gray-50 rounded-md border border-gray-100 shadow-sm">
-                <div>
-                  <span className="text-sm font-medium">Sticky Once Off</span>
-                  <p className="text-xs text-gray-500 mt-1">Task will remain visible after completion</p>
-                </div>
-                <Badge variant={task.sticky_once_off ? "default" : "outline"} className="ml-2">
-                  {task.sticky_once_off ? "Enabled" : "Disabled"}
-                </Badge>
-              </div>
-              <div className="flex items-center justify-between p-4 bg-gray-50 rounded-md border border-gray-100 shadow-sm">
-                <div>
-                  <span className="text-sm font-medium">Allow Edit When Locked</span>
-                  <p className="text-xs text-gray-500 mt-1">Task can be edited even when locked</p>
-                </div>
-                <Badge variant={task.allow_edit_when_locked ? "default" : "outline"} className="ml-2">
-                  {task.allow_edit_when_locked ? "Enabled" : "Disabled"}
-                </Badge>
               </div>
             </div>
           </CardContent>
@@ -704,7 +664,7 @@ const TaskDetailsModal = ({ task, positions }: { task: MasterTask, positions: Po
 
         {/* Date Settings */}
         {(task.due_date || task.start_date || task.end_date || task.publish_delay) && (
-          <Card>
+          <Card className="border-l-4 border-l-indigo-500 gap-2">
             <CardHeader>
               <CardTitle className="flex items-center space-x-2">
                 <CalendarDays className="h-5 w-5" />
@@ -743,10 +703,8 @@ const TaskDetailsModal = ({ task, positions }: { task: MasterTask, positions: Po
           </Card>
         )}
 
-
-
         {/* Metadata */}
-        <Card>
+        <Card className="border-l-4 border-l-yellow-500 gap-2">
           <CardHeader>
             <CardTitle className="flex items-center space-x-2">
               <Info className="h-5 w-5" />
@@ -1569,15 +1527,15 @@ export default function AdminMasterTasksPage() {
       // 2. Sort by position display_order (responsibility)
       const aResponsibility = (a.responsibility || [])[0] || ''
       const bResponsibility = (b.responsibility || [])[0] || ''
-      
+
       if (aResponsibility !== bResponsibility) {
         // Find the positions for these responsibilities
         const aPosition = positions.find(p => nameToResponsibilityValue(p.name) === aResponsibility)
         const bPosition = positions.find(p => nameToResponsibilityValue(p.name) === bResponsibility)
-        
+
         const aOrder = aPosition?.display_order || 999
         const bOrder = bPosition?.display_order || 999
-        
+
         if (aOrder !== bOrder) return aOrder - bOrder
       }
 
@@ -1638,7 +1596,7 @@ export default function AdminMasterTasksPage() {
       await masterTasksApi.reorder(orderArray)
 
       // Update the local tasks state with the new custom_order values
-      setTasks(prevTasks => 
+      setTasks(prevTasks =>
         prevTasks.map(task => ({
           ...task,
           custom_order: customOrderMap[task.id] ?? task.custom_order
@@ -1735,12 +1693,12 @@ export default function AdminMasterTasksPage() {
       })
     } else {
       // No manual sorting, use customOrderMap or fallback to default sorting
-      
+
       // If customOrderMap is empty or not ready, use base default sorting
       if (Object.keys(customOrderMap).length === 0) {
         return getBaseSortedTasks(filtered)
       }
-      
+
       // Use customOrderMap (which contains either database custom_order or default order)
       return [...filtered].sort((a, b) => {
         const aOrder = customOrderMap[a.id]
