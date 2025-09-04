@@ -1431,9 +1431,9 @@ export default function RoleChecklistPage() {
         </div>
 
         {/* Task List */}
-        <Card className="card-surface mb-6">
+        <Card className="card-surface mb-6 gap-4">
           <CardHeader>
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between space-y-2 sm:space-y-0">
+            <div className="flex flex-col lg:flex-row sm:items-center sm:justify-between space-y-2 sm:space-y-0 gap-4">
               <div className="flex flex-col sm:flex-row sm:items-center space-y-2 sm:space-y-0 gap-4">
                 <CardTitle className="text-lg lg:text-xl mb-1">
                   Tasks ({filteredAndSortedTasks.length === 0 ? '0' : `${startIndex + 1}-${Math.min(endIndex, filteredAndSortedTasks.length)}`} of {filteredAndSortedTasks.length})
@@ -1462,7 +1462,7 @@ export default function RoleChecklistPage() {
 
               <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
                 {/* Timing Toggle Buttons */}
-                <div className="flex space-x-1 bg-gray-100 px-2 py-1 rounded-lg gap-1">
+                <div className="flex flex-col sm:flex-row space-x-1 bg-gray-100 px-2 py-1 rounded-lg gap-1">
                   <button
                     onClick={() => setSelectedTiming("opening")}
                     className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${selectedTiming === "opening"
@@ -1500,7 +1500,6 @@ export default function RoleChecklistPage() {
                     Closing
                   </button>
                 </div>
-
               </div>
             </div>
           </CardHeader>
@@ -1673,10 +1672,10 @@ export default function RoleChecklistPage() {
                 </div>
 
                 {/* Mobile/Tablet Card Layout */}
-                <div className="xl:hidden space-y-4 p-4">
+                <div className="xl:hidden space-y-4 px-4">
                   {paginatedTasks.map((task) => (
                     <Card key={`${task.id}-${refreshKey}`} className="border border-gray-200">
-                      <CardContent className="p-4">
+                      <CardContent className="px-4">
                         <div className="space-y-3">
                           {/* Title and Description */}
                           <div>
@@ -1741,7 +1740,6 @@ export default function RoleChecklistPage() {
                               </div>
                             </div>
                           </div>
-
 
                           {/* Actions */}
                           <div className="flex space-x-2 grid grid-cols-2 gap-2">
@@ -1828,8 +1826,6 @@ export default function RoleChecklistPage() {
             )}
           </CardContent>
         </Card>
-
-
 
         {/* Finish Button - Auto-logout when all tasks completed (only for non-admin users) */}
         {!isAdmin && allTasksCompleted && (
