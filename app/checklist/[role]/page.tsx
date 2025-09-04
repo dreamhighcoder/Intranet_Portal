@@ -167,6 +167,71 @@ const formatResponsibility = (responsibility: string) => {
     .join(' ')
 }
 
+// Calculate dynamic task status based on frequency, completion, and current time
+const calculateDynamicTaskStatus = (task: ChecklistTask, currentDate: string): string => {
+  try {
+    const australianNow = getAustralianNow()
+    const australianToday = getAustralianToday()
+    const taskDate = parseAustralianDate(task.date)
+    const todayDate = parseAustralianDate(australianToday)
+    
+    // If task is completed, return completed
+    if (task.is_completed_for_position || task.status === "completed") {
+      return "completed"
+    }
+    
+    // If task date is in the future, it's not due yet
+    if (taskDate > todayDate) {
+      return "not_due_yet"
+    }
+    
+    // If task date is today
+    if (taskDate.getTime() === todayDate.getTime()) {
+      // Check if we have a due time
+      if (task.master_task?.due_time) {
+        const dueTime = createAustralianDateTime(currentDate, task.master_task.due_time)
+        
+        // If current time is before due time, it's not due yet
+        if (australianNow < dueTime) {
+          return "not_due_yet"
+        }
+        
+        // If current time is past due time but still same day, it's overdue
+        if (australianNow >= dueTime) {
+          // Check if it's past 23:59 of the due date (missed)
+          const endOfDay = createAustralianDateTime(currentDate, "23:59")
+          if (australianNow > endOfDay) {
+            return "missed"
+          }
+          return "overdue"
+        }
+      } else {
+        // No specific due time, so it's due today
+        return "due_today"
+      }
+    }
+    
+    // If task date is in the past
+    if (taskDate < todayDate) {
+      // Check if it was missed (past 23:59 of the due date)
+      const endOfDueDate = createAustralianDateTime(task.date, "23:59")
+      if (australianNow > endOfDueDate) {
+        return "missed"
+      }
+      return "overdue"
+    }
+    
+    return "due_today"
+  } catch (error) {
+    console.error('Error calculating dynamic task status:', error, task)
+    // Fallback to basic status logic
+    if (task.is_completed_for_position || task.status === "completed") {
+      return "completed"
+    }
+    return "due_today"
+  }
+}
+
 const renderBadgesWithTruncation = (
   items: string[],
   maxVisible: number = 2,
@@ -1097,23 +1162,10 @@ export default function RoleChecklistPage() {
         }
       }
 
-      // Status filter
+      // Status filter - use dynamic status calculation
       if (selectedStatus !== "all") {
-        if (selectedStatus === "overdue") {
-          if (task.status === "completed") return false
-          if (task.master_task?.due_time) {
-            const dueTime = createAustralianDateTime(currentDate, task.master_task.due_time)
-            const now = getAustralianNow()
-            return now > dueTime
-          }
-          return false
-        }
-        if (selectedStatus === "due_today") {
-          return task.status !== "completed"
-        }
-        if (selectedStatus === "completed") {
-          return task.status === "completed"
-        }
+        const dynamicStatus = calculateDynamicTaskStatus(task, currentDate)
+        return dynamicStatus === selectedStatus
       }
       return true
     })
@@ -1255,23 +1307,9 @@ export default function RoleChecklistPage() {
       const completions = task.position_completions || []
 
       if (completions.length === 0) {
-        // No completions - check if overdue using Australian timezone
-        if (task.master_task?.due_time) {
-          const dueTime = createAustralianDateTime(currentDate, task.master_task.due_time)
-          const now = getAustralianNow()
-          if (now > dueTime) {
-            return (
-              <Badge className="bg-red-100 text-red-800 border-red-200">
-                ⚠️ Overdue
-              </Badge>
-            )
-          }
-        }
-        return (
-          <Badge className="bg-orange-100 text-orange-800 border-orange-200">
-            ⏰ Due Today
-          </Badge>
-        )
+        // No completions - use dynamic status calculation
+        const dynamicStatus = calculateDynamicTaskStatus(task, currentDate)
+        return getStatusBadgeByStatus(dynamicStatus)
       }
 
       // Show position completion badges with truncation
@@ -1296,34 +1334,50 @@ export default function RoleChecklistPage() {
     }
 
     // For specific position view (admin with specific filter or regular user)
-    const isCompletedForPosition = task.is_completed_for_position || task.status === "completed"
+    const dynamicStatus = calculateDynamicTaskStatus(task, currentDate)
+    return getStatusBadgeByStatus(dynamicStatus)
+  }
 
-    if (isCompletedForPosition) {
-      return (
-        <Badge className="bg-green-100 text-green-800 border-green-200">
-          ✓ Done
-        </Badge>
-      )
-    }
-
-    // Check if overdue using Australian timezone
-    if (task.master_task?.due_time) {
-      const dueTime = createAustralianDateTime(currentDate, task.master_task.due_time)
-      const now = getAustralianNow()
-      if (now > dueTime) {
+  // Helper function to get status badge by status string
+  const getStatusBadgeByStatus = (status: string) => {
+    switch (status) {
+      case "completed":
+        return (
+          <Badge className="bg-green-100 text-green-800 border-green-200">
+            ✓ Done
+          </Badge>
+        )
+      case "not_due_yet":
+        return (
+          <Badge className="bg-blue-100 text-blue-800 border-blue-200">
+            📅 Not Due Yet
+          </Badge>
+        )
+      case "due_today":
+        return (
+          <Badge className="bg-orange-100 text-orange-800 border-orange-200">
+            ⏰ Due Today
+          </Badge>
+        )
+      case "overdue":
         return (
           <Badge className="bg-red-100 text-red-800 border-red-200">
             ⚠️ Overdue
           </Badge>
         )
-      }
+      case "missed":
+        return (
+          <Badge className="bg-gray-800 text-white border-gray-600">
+            ❌ Missed
+          </Badge>
+        )
+      default:
+        return (
+          <Badge className="bg-orange-100 text-orange-800 border-orange-200">
+            ⏰ Due Today
+          </Badge>
+        )
     }
-
-    return (
-      <Badge className="bg-orange-100 text-orange-800 border-orange-200">
-        ⏰ Due Today
-      </Badge>
-    )
   }
 
   const allTasksCompleted = filteredAndSortedTasks.length > 0 && filteredAndSortedTasks.every((task) =>
@@ -1446,8 +1500,10 @@ export default function RoleChecklistPage() {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">All Statuses</SelectItem>
+                    <SelectItem value="not_due_yet">Not Due Yet</SelectItem>
                     <SelectItem value="due_today">Due Today</SelectItem>
                     <SelectItem value="overdue">Overdue</SelectItem>
+                    <SelectItem value="missed">Missed</SelectItem>
                     <SelectItem value="completed">Completed</SelectItem>
                   </SelectContent>
                 </Select>
@@ -1782,7 +1838,7 @@ export default function RoleChecklistPage() {
                               </Button>
                             ) : (
                               <>
-                                {task.status === "completed" ? (
+                                {(task.is_completed_for_position || task.status === "completed") ? (
                                   <Button
                                     type="button"
                                     size="sm"
