@@ -671,6 +671,7 @@ export default function RoleChecklistPage() {
   const [taskCounts, setTaskCounts] = useState({
     total: 0,
     done: 0,
+    not_due_yet: 0,
     due_today: 0,
     overdue: 0,
     missed: 0
@@ -1231,6 +1232,27 @@ export default function RoleChecklistPage() {
   const endIndex = startIndex + tasksPerPage
   const paginatedTasks = filteredAndSortedTasks.slice(startIndex, endIndex)
 
+  // Recalculate summary counts whenever the visible tasks or date change
+  useEffect(() => {
+    const counts = {
+      total: filteredAndSortedTasks.length,
+      done: 0,
+      not_due_yet: 0,
+      due_today: 0,
+      overdue: 0,
+      missed: 0,
+    }
+    filteredAndSortedTasks.forEach(task => {
+      const status = calculateDynamicTaskStatus(task, currentDate)
+      if (status === 'completed') counts.done += 1
+      else if (status === 'not_due_yet') counts.not_due_yet += 1
+      else if (status === 'due_today') counts.due_today += 1
+      else if (status === 'overdue') counts.overdue += 1
+      else if (status === 'missed') counts.missed += 1
+    })
+    setTaskCounts(counts)
+  }, [filteredAndSortedTasks, currentDate])
+
   // Reset to first page when filters change
   useEffect(() => {
     setCurrentPage(1)
@@ -1381,7 +1403,7 @@ export default function RoleChecklistPage() {
   }
 
   const allTasksCompleted = filteredAndSortedTasks.length > 0 && filteredAndSortedTasks.every((task) =>
-    task.is_completed_for_position || task.status === "completed"
+    calculateDynamicTaskStatus(task, currentDate) === "completed"
   )
 
   return (
@@ -1404,7 +1426,30 @@ export default function RoleChecklistPage() {
                   })}
                 </h1>
                 <p className="text-white/90 text-sm lg:text-base">
-                  {filteredAndSortedTasks.length} tasks • {filteredAndSortedTasks.filter((t) => t.status === "completed").length} completed
+                  {(() => {
+                    const statusCounts = {
+                      not_due_yet: 0,
+                      due_today: 0,
+                      overdue: 0,
+                      missed: 0,
+                      completed: 0
+                    }
+                    
+                    filteredAndSortedTasks.forEach(task => {
+                      const status = calculateDynamicTaskStatus(task, currentDate)
+                      statusCounts[status as keyof typeof statusCounts]++
+                    })
+                    
+                    const parts = [`${filteredAndSortedTasks.length} tasks`]
+                    
+                    if (statusCounts.completed > 0) parts.push(`${statusCounts.completed} completed`)
+                    if (statusCounts.not_due_yet > 0) parts.push(`${statusCounts.not_due_yet} not due yet`)
+                    if (statusCounts.due_today > 0) parts.push(`${statusCounts.due_today} due today`)
+                    if (statusCounts.overdue > 0) parts.push(`${statusCounts.overdue} overdue`)
+                    if (statusCounts.missed > 0) parts.push(`${statusCounts.missed} missed`)
+                    
+                    return parts.join(' • ')
+                  })()}
                   {totalPages > 1 && (
                     <span className="ml-2">
                       • Page {currentPage} of {totalPages}
@@ -1935,11 +1980,17 @@ export default function RoleChecklistPage() {
               <span className="text-green-600">
                 {taskCounts.done} Done
               </span>
+              <span className="text-blue-600">
+                {taskCounts.not_due_yet} Not Due Yet
+              </span>
               <span className="text-orange-600">
                 {taskCounts.due_today} Due Today
               </span>
               <span className="text-red-600">
                 {taskCounts.overdue} Overdue
+              </span>
+              <span className="text-gray-700">
+                {taskCounts.missed} Missed
               </span>
             </div>
           </div>
