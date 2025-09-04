@@ -1592,7 +1592,7 @@ export default function RoleChecklistPage() {
                 <div className="flex flex-col sm:flex-row space-x-1 bg-gray-100 px-2 py-1 rounded-lg gap-1">
                   <button
                     onClick={() => setSelectedTiming("opening")}
-                    className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${selectedTiming === "opening"
+                    className={`px-3 py-1 rounded-lg text-sm font-medium transition-colors ${selectedTiming === "opening"
                       ? "bg-white text-[var(--color-primary)] shadow-sm"
                       : "bg-gray-50 border border-white text-gray-600 hover:text-gray-900"
                       }`}
@@ -1601,7 +1601,7 @@ export default function RoleChecklistPage() {
                   </button>
                   <button
                     onClick={() => setSelectedTiming("anytime_during_day")}
-                    className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${selectedTiming === "anytime_during_day"
+                    className={`px-3 py-1 rounded-lg text-sm font-medium transition-colors ${selectedTiming === "anytime_during_day"
                       ? "bg-white text-[var(--color-primary)] shadow-sm"
                       : "bg-gray-50 border border-white text-gray-600 hover:text-gray-900"
                       }`}
@@ -1610,7 +1610,7 @@ export default function RoleChecklistPage() {
                   </button>
                   <button
                     onClick={() => setSelectedTiming("before_order_cut_off")}
-                    className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${selectedTiming === "before_order_cut_off"
+                    className={`px-3 py-1 rounded-lg text-sm font-medium transition-colors ${selectedTiming === "before_order_cut_off"
                       ? "bg-white text-[var(--color-primary)] shadow-sm"
                       : "bg-gray-50 border border-white text-gray-600 hover:text-gray-900"
                       }`}
@@ -1619,7 +1619,7 @@ export default function RoleChecklistPage() {
                   </button>
                   <button
                     onClick={() => setSelectedTiming("closing")}
-                    className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${selectedTiming === "closing"
+                    className={`px-3 py-1 rounded-lg text-sm font-medium transition-colors ${selectedTiming === "closing"
                       ? "bg-white text-[var(--color-primary)] shadow-sm"
                       : "bg-gray-50 border border-white text-gray-600 hover:text-gray-900"
                       }`}
