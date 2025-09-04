@@ -8,11 +8,13 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Separator } from '@/components/ui/separator'
 import { Clock, User, Calendar, CheckCircle, XCircle, AlertTriangle, Tag, FileText, Settings, Hash } from 'lucide-react'
 import { toDisplayFormat } from '@/lib/responsibility-mapper'
+import { getAustralianNow, getAustralianToday, parseAustralianDate, createAustralianDateTime } from '@/lib/timezone-utils'
 
 interface TaskDetailModalProps {
   isOpen: boolean
   onClose: () => void
   task: any
+  currentDate?: string // selected date (YYYY-MM-DD in AU format expected by page)
   onTaskUpdate?: () => void
 }
 
@@ -61,6 +63,33 @@ export default function TaskDetailModal({
     }
   }
 
+  // Advanced cutoff hooks and helpers must be declared before any conditional returns
+  const [holidays, setHolidays] = useState<Set<string>>(new Set())
+  const [holidaysLoaded, setHolidaysLoaded] = useState(false)
+
+  const pad2 = (n: number) => String(n).padStart(2, '0')
+  const formatYMD = (d: Date) => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`
+
+  useEffect(() => {
+    if (!isOpen || !task?.date) return
+    const year = new Date(task.date).getFullYear()
+    const years = [year - 1, year, year + 1]
+    Promise.all(
+      years.map(y =>
+        fetch(`/api/public-holidays?year=${y}`)
+          .then(r => (r.ok ? r.json() : []))
+          .catch(() => [])
+      )
+    ).then(all => {
+      const s = new Set<string>()
+      all.flat().forEach((h: any) => {
+        if (h?.date) s.add(String(h.date))
+      })
+      setHolidays(s)
+      setHolidaysLoaded(true)
+    })
+  }, [isOpen, task?.date])
+
   const formatTimestamp = (timestamp: string) => {
     const date = new Date(timestamp)
     return date.toLocaleString('en-AU', {
@@ -96,6 +125,232 @@ export default function TaskDetailModal({
   }
 
   if (!task) return null
+
+  // Dynamic status calculation mirroring page logic
+  const calculateDynamicTaskStatus = (t: any, dateStr: string): string => {
+    try {
+      const australianNow = getAustralianNow()
+      const australianToday = getAustralianToday()
+      const taskDate = parseAustralianDate(t.date)
+      const todayDate = parseAustralianDate(australianToday)
+
+      if (t.is_completed_for_position || t.status === 'completed') return 'completed'
+
+      if (taskDate > todayDate) return 'not_due_yet'
+
+      if (taskDate.getTime() === todayDate.getTime()) {
+        if (t.master_task?.due_time) {
+          const dueTime = createAustralianDateTime(dateStr || t.date, t.master_task.due_time)
+          if (australianNow < dueTime) return 'not_due_yet'
+          const endOfDay = createAustralianDateTime(dateStr || t.date, '23:59')
+          if (australianNow > endOfDay) return 'missed'
+          return 'overdue'
+        }
+        return 'due_today'
+      }
+
+      if (taskDate < todayDate) {
+        const endOfDueDate = createAustralianDateTime(t.date, '23:59')
+        if (australianNow > endOfDueDate) return 'missed'
+        return 'overdue'
+      }
+
+      return 'due_today'
+    } catch (e) {
+      console.error('Modal status calc error', e)
+      return t.status === 'completed' ? 'completed' : 'due_today'
+    }
+  }
+
+  const status = calculateDynamicTaskStatus(task, (typeof window === 'undefined' ? task?.date : undefined) || (typeof currentDate === 'string' && currentDate ? currentDate : task?.date || ''))
+
+  // Business-day helpers and cutoff calculators (non-hook)
+  const isSunday = (d: Date) => d.getDay() === 0
+  const isHoliday = (d: Date) => holidays.has(formatYMD(d))
+  const isBusinessDay = (d: Date) => !isSunday(d) && !isHoliday(d)
+  const nextBusinessDay = (d: Date) => { const x = new Date(d); do { x.setDate(x.getDate() + 1) } while (!isBusinessDay(x)); return x }
+  const prevBusinessDay = (d: Date) => { const x = new Date(d); do { x.setDate(x.getDate() - 1) } while (!isBusinessDay(x)); return x }
+  const getWeekMonday = (d: Date) => { const x = new Date(d); const day = x.getDay(); const diff = day === 0 ? -6 : 1 - day; x.setDate(x.getDate() + diff); return x }
+  const getWeekSaturday = (d: Date) => { const x = new Date(d); const day = x.getDay(); const diff = 6 - (day === 0 ? 7 : day); x.setDate(x.getDate() + diff); return x }
+  const getLastSaturdayOfMonth = (d: Date) => { const x = new Date(d.getFullYear(), d.getMonth() + 1, 0); while (x.getDay() !== 6) x.setDate(x.getDate() - 1); return x }
+  const addBusinessDays = (d: Date, n: number) => { let x = new Date(d); let added = 0; while (added < n) { x = nextBusinessDay(x); added++ } return x }
+
+  const nowAU = getAustralianNow()
+  const dueTimeStr: string | undefined = task?.master_task?.due_time || undefined
+
+  const formatAUDate = (d?: Date | null) =>
+    d ? d.toLocaleDateString('en-AU', { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' }) : '—'
+  const formatAUTime = (d?: Date | null) =>
+    d ? d.toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit', hour12: true }) : '—'
+
+  function computeFrequencyCutoffs(freq: string) {
+    const instanceDate = parseAustralianDate(task.date)
+    const weekSat = getWeekSaturday(instanceDate)
+    const weekMon = getWeekMonday(instanceDate)
+
+    const r: any = { frequency: freq }
+
+    switch (freq) {
+      case 'once_off':
+      case 'once_off_sticky': {
+        const dueDate = (task as any).master_task?.due_date ? parseAustralianDate((task as any).master_task.due_date) : instanceDate
+        r.appearance = instanceDate
+        r.dueDate = dueDate
+        r.dueTime = dueTimeStr
+        r.lockDate = null
+        r.carryStart = instanceDate
+        r.carryEnd = null
+        return r
+      }
+      case 'every_day': {
+        r.appearance = instanceDate
+        r.dueDate = instanceDate
+        r.dueTime = dueTimeStr
+        r.lockDate = instanceDate
+        r.lockTime = '23:59'
+        return r
+      }
+      case 'once_weekly': {
+        let appear = new Date(weekMon)
+        while (!isBusinessDay(appear) && appear <= weekSat) { appear.setDate(appear.getDate() + 1) }
+        let due = new Date(weekSat)
+        while (!isBusinessDay(due) && due >= weekMon) { due.setDate(due.getDate() - 1) }
+        r.appearance = appear
+        r.carryStart = appear
+        r.carryEnd = due
+        r.dueDate = due
+        r.dueTime = dueTimeStr
+        r.lockDate = due
+        r.lockTime = '23:59'
+        return r
+      }
+      case 'monday':
+      case 'tuesday':
+      case 'wednesday':
+      case 'thursday':
+      case 'friday':
+      case 'saturday': {
+        const targetIdx: number = ({ monday: 1, tuesday: 2, wednesday: 3, thursday: 4, friday: 5, saturday: 6 } as any)[freq]
+        const sched = new Date(weekMon)
+        sched.setDate(weekMon.getDate() + (targetIdx - 1))
+        let due = new Date(sched)
+        if (targetIdx === 1) {
+          while (!isBusinessDay(due) && due <= weekSat) due.setDate(due.getDate() + 1)
+        } else {
+          let shifted = new Date(due)
+          while (!isBusinessDay(shifted) && shifted >= weekMon) shifted.setDate(shifted.getDate() - 1)
+          if (!isBusinessDay(due)) {
+            if (shifted < weekMon) {
+              shifted = new Date(due)
+              while (!isBusinessDay(shifted) && shifted <= weekSat) shifted.setDate(shifted.getDate() + 1)
+            }
+            due = shifted
+          }
+        }
+        let carryEnd = new Date(weekSat)
+        while (!isBusinessDay(carryEnd) && carryEnd >= weekMon) carryEnd.setDate(carryEnd.getDate() - 1)
+        r.appearance = due
+        r.dueDate = due
+        r.dueTime = dueTimeStr
+        r.carryStart = due
+        r.carryEnd = carryEnd
+        r.lockDate = carryEnd
+        r.lockTime = '23:59'
+        return r
+      }
+      case 'start_of_every_month':
+      case 'start_of_month_jan':
+      case 'start_of_month_feb':
+      case 'start_of_month_mar':
+      case 'start_of_month_apr':
+      case 'start_of_month_may':
+      case 'start_of_month_jun':
+      case 'start_of_month_jul':
+      case 'start_of_month_aug':
+      case 'start_of_month_sep':
+      case 'start_of_month_oct':
+      case 'start_of_month_nov':
+      case 'start_of_month_dec': {
+        const first = new Date(instanceDate.getFullYear(), instanceDate.getMonth(), 1)
+        let appear = new Date(first)
+        if (appear.getDay() === 0) appear.setDate(appear.getDate() + 1)
+        if (appear.getDay() === 6) appear.setDate(appear.getDate() + 2)
+        while (!isBusinessDay(appear)) appear = nextBusinessDay(appear)
+        const due = addBusinessDays(appear, 5)
+        let carryEnd = getLastSaturdayOfMonth(instanceDate)
+        while (!isBusinessDay(carryEnd)) carryEnd = prevBusinessDay(carryEnd)
+        r.appearance = appear
+        r.carryStart = appear
+        r.carryEnd = carryEnd
+        r.dueDate = due
+        r.dueTime = dueTimeStr
+        r.lockDate = carryEnd
+        r.lockTime = '23:59'
+        return r
+      }
+      case 'once_monthly': {
+        const first = new Date(instanceDate.getFullYear(), instanceDate.getMonth(), 1)
+        let appear = new Date(first)
+        if (appear.getDay() === 0) appear.setDate(appear.getDate() + 1)
+        if (appear.getDay() === 6) appear.setDate(appear.getDate() + 2)
+        while (!isBusinessDay(appear)) appear = nextBusinessDay(appear)
+        let due = getLastSaturdayOfMonth(instanceDate)
+        while (!isBusinessDay(due)) due = prevBusinessDay(due)
+        r.appearance = appear
+        r.carryStart = appear
+        r.carryEnd = due
+        r.dueDate = due
+        r.dueTime = dueTimeStr
+        r.lockDate = due
+        r.lockTime = '23:59'
+        return r
+      }
+      case 'end_of_every_month':
+      case 'end_of_month_jan':
+      case 'end_of_month_feb':
+      case 'end_of_month_mar':
+      case 'end_of_month_apr':
+      case 'end_of_month_may':
+      case 'end_of_month_jun':
+      case 'end_of_month_jul':
+      case 'end_of_month_aug':
+      case 'end_of_month_sep':
+      case 'end_of_month_oct':
+      case 'end_of_month_nov':
+      case 'end_of_month_dec': {
+        let due = getLastSaturdayOfMonth(instanceDate)
+        while (!isBusinessDay(due)) due = prevBusinessDay(due)
+        let appear = new Date(due)
+        appear.setDate(appear.getDate() - ((appear.getDay() + 6) % 7))
+        const hasFiveDays = (start: Date, end: Date) => { let cur = new Date(start); let count = 0; while (cur <= end) { if (isBusinessDay(cur)) count++; cur.setDate(cur.getDate() + 1) } return count >= 5 }
+        while (!hasFiveDays(appear, due)) appear.setDate(appear.getDate() - 7)
+        while (!isBusinessDay(appear)) appear = nextBusinessDay(appear)
+        let carryEnd = getWeekSaturday(appear)
+        if (carryEnd > due) carryEnd = due
+        while (!isBusinessDay(carryEnd)) carryEnd = prevBusinessDay(carryEnd)
+        r.appearance = appear
+        r.carryStart = appear
+        r.carryEnd = carryEnd
+        r.dueDate = due
+        r.dueTime = dueTimeStr
+        r.lockDate = due
+        r.lockTime = '23:59'
+        return r
+      }
+      default: {
+        r.appearance = instanceDate
+        r.dueDate = instanceDate
+        r.dueTime = dueTimeStr
+        r.lockDate = instanceDate
+        r.lockTime = '23:59'
+        return r
+      }
+    }
+  }
+
+  const frequencyCutoffs = Array.isArray(task?.master_task?.frequencies)
+    ? task.master_task.frequencies.map((f: string) => computeFrequencyCutoffs(f))
+    : []
 
   // Category display names and colors
   const CATEGORY_CONFIG = {
@@ -401,19 +656,39 @@ export default function TaskDetailModal({
               </CardHeader>
               <CardContent>
                 {/* Current Status Summary */}
-                <div className={`p-4 rounded-lg border mb-6 ${task.status === 'completed'
-                  ? 'bg-green-50 border-green-200'
-                  : 'bg-orange-50 border-orange-200'
+                <div className={`p-4 rounded-lg border mb-6 ${
+                  status === 'completed' ? 'bg-green-50 border-green-200' :
+                  status === 'not_due_yet' ? 'bg-blue-50 border-blue-200' :
+                  status === 'overdue' ? 'bg-red-50 border-red-200' :
+                  status === 'missed' ? 'bg-gray-50 border-gray-200' :
+                  'bg-orange-50 border-orange-200'
                   }`}>
                   <div className="flex items-center space-x-2 mb-3">
-                    {task.status === 'completed' ? (
+                    {status === 'completed' ? (
                       <CheckCircle className="h-5 w-5 text-green-600" />
+                    ) : status === 'overdue' ? (
+                      <AlertTriangle className="h-5 w-5 text-red-600" />
+                    ) : status === 'missed' ? (
+                      <XCircle className="h-5 w-5 text-gray-700" />
+                    ) : status === 'not_due_yet' ? (
+                      <Clock className="h-5 w-5 text-blue-600" />
                     ) : (
                       <Clock className="h-5 w-5 text-orange-600" />
                     )}
-                    <span className={`font-semibold text-lg ${task.status === 'completed' ? 'text-green-800' : 'text-orange-800'
+                    <span className={`font-semibold text-lg ${
+                      status === 'completed' ? 'text-green-800' :
+                      status === 'not_due_yet' ? 'text-blue-800' :
+                      status === 'overdue' ? 'text-red-800' :
+                      status === 'missed' ? 'text-gray-800' :
+                      'text-orange-800'
                       }`}>
-                      Current Status: {task.status === 'completed' ? 'Completed' : 'Pending'}
+                      Current Status: {
+                        status === 'completed' ? 'Completed' :
+                        status === 'not_due_yet' ? 'Not Due Yet' :
+                        status === 'overdue' ? 'Overdue' :
+                        status === 'missed' ? 'Missed' :
+                        'Due Today'
+                      }
                     </span>
                   </div>
 
@@ -453,12 +728,90 @@ export default function TaskDetailModal({
                     </div>
                   )}
 
-                  {task.status !== 'completed' && (
-                    <p className="text-orange-700 text-sm">
-                      This task is currently pending completion.
+                  {status !== 'completed' && (
+                    <p className="text-sm ${status === 'overdue' ? 'text-red-700' : status === 'missed' ? 'text-gray-700' : status === 'not_due_yet' ? 'text-blue-700' : 'text-orange-700'}">
+                      {status === 'overdue' && 'This task is overdue.'}
+                      {status === 'missed' && 'This task was missed and is locked.'}
+                      {status === 'not_due_yet' && 'This task is not due yet.'}
+                      {status === 'due_today' && 'This task is due today.'}
                     </p>
                   )}
                 </div>
+
+                {/* Timing & Cutoffs (per frequency) */}
+                {Array.isArray(frequencyCutoffs) && frequencyCutoffs.length > 0 && (
+                  <div className="mt-4 space-y-3">
+                    <div className="flex items-center space-x-2">
+                      <Clock className="h-5 w-5 text-gray-700" />
+                      <span className="font-medium text-gray-800">Timing & Cutoffs (Australia/Sydney)</span>
+                    </div>
+
+                    {!holidaysLoaded && (
+                      <div className="text-sm text-gray-600">Loading holiday data for precise cutoffs...</div>
+                    )}
+
+                    {frequencyCutoffs.map((fc: any, idx: number) => (
+                      <div key={idx} className="p-3 rounded-lg border bg-white">
+                        <div className="text-sm font-semibold text-gray-800 mb-2">
+                          Frequency: {fc.frequency?.replace(/_/g, ' ').replace(/\b\w/g, (m: string) => m.toUpperCase())}
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm">
+                          <div className="flex items-center justify-between">
+                            <span className="text-gray-600">Appearance</span>
+                            <span className="text-gray-900 font-medium">{formatAUDate(fc.appearance)}</span>
+                          </div>
+
+                          <div className="flex items-center justify-between">
+                            <span className="text-gray-600">Due date</span>
+                            <span className="text-gray-900 font-medium">{formatAUDate(fc.dueDate)}</span>
+                          </div>
+
+                          <div className="flex items-center justify-between">
+                            <span className="text-gray-600">Due time</span>
+                            <span className="text-gray-900 font-medium">
+                              {fc.dueTime ? fc.dueTime : '—'}
+                              {fc.dueDate && fc.dueTime && (
+                                <span className={`ml-2 px-2 py-0.5 rounded text-xs border ${
+                                  nowAU >= new Date(`${formatYMD(fc.dueDate)}T${fc.dueTime}:00`)
+                                    ? 'bg-red-50 text-red-700 border-red-200'
+                                    : 'bg-blue-50 text-blue-700 border-blue-200'
+                                }`}>
+                                  {nowAU >= new Date(`${formatYMD(fc.dueDate)}T${fc.dueTime}:00`) ? 'Passed' : 'Upcoming'}
+                                </span>
+                              )}
+                            </span>
+                          </div>
+
+                          <div className="flex items-center justify-between">
+                            <span className="text-gray-600">Lock cutoff</span>
+                            <span className="text-gray-900 font-medium">
+                              {fc.lockDate ? `${formatAUDate(fc.lockDate)} 11:59 PM` : 'Never locks'}
+                              {fc.lockDate && (
+                                <span className={`ml-2 px-2 py-0.5 rounded text-xs border ${
+                                  nowAU > new Date(`${formatYMD(fc.lockDate)}T23:59:00`)
+                                    ? 'bg-gray-100 text-gray-800 border-gray-200'
+                                    : 'bg-green-50 text-green-700 border-green-200'
+                                }`}>
+                                  {nowAU > new Date(`${formatYMD(fc.lockDate)}T23:59:00`) ? 'Passed' : 'Upcoming'}
+                                </span>
+                              )}
+                            </span>
+                          </div>
+
+                          <div className="flex items-center justify-between">
+                            <span className="text-gray-600">Carry window</span>
+                            <span className="text-gray-900 font-medium">
+                              {fc.carryStart ? formatAUDate(fc.carryStart) : '—'}
+                              {' '} - {' '}
+                              {fc.carryEnd ? formatAUDate(fc.carryEnd) : (fc.carryEnd === null ? 'Indefinite' : '—')}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </CardContent>
             </Card>
           </div>

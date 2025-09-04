@@ -2002,10 +2002,9 @@ export default function RoleChecklistPage() {
         isOpen={isDetailModalOpen}
         onClose={handleCloseDetailModal}
         task={selectedTask}
+        currentDate={currentDate}
         onTaskUpdate={() => setRefreshKey(prev => prev + 1)}
       />
-
-
     </div>
   )
 }
