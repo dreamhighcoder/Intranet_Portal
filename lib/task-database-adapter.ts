@@ -171,12 +171,17 @@ export class TaskDatabaseAdapter {
   
   /**
    * Load active master tasks from database and convert to engine format
+   * Only includes tasks that are active AND past their publish_delay date
    */
-  async loadActiveMasterTasks(): Promise<MasterTask[]> {
+  async loadActiveMasterTasks(forDate?: string): Promise<MasterTask[]> {
+    const { getAustralianToday } = await import('./timezone-utils')
+    const checkDate = forDate || getAustralianToday()
+    
     const { data: dbTasks, error } = await supabase
       .from('master_tasks')
       .select('*')
       .eq('publish_status', 'active')
+      .or(`publish_delay.is.null,publish_delay.lte.${checkDate}`) // Only include tasks past their publish delay
       .order('title')
 
     if (error) {

@@ -35,6 +35,7 @@ import {
 export enum NewFrequencyType {
   // Basic frequencies
   ONCE_OFF = 'once_off',
+  ONCE_OFF_STICKY = 'once_off_sticky',
   EVERY_DAY = 'every_day',
   ONCE_WEEKLY = 'once_weekly',
   
@@ -287,6 +288,7 @@ export class NewRecurrenceEngine {
   } {
     switch (frequency) {
       case NewFrequencyType.ONCE_OFF:
+      case NewFrequencyType.ONCE_OFF_STICKY:
         return this.processOnceOff(task, date)
       
       case NewFrequencyType.EVERY_DAY:
@@ -355,25 +357,25 @@ export class NewRecurrenceEngine {
     originalAppearanceDate?: string
   } {
     // Once-off behavior:
-    // - When task is Active, it should appear immediately and remain visible until its Due Date
-    // - publish_delay is used only to schedule activation (handled elsewhere), not to offset appearance
+    // - Appears on the day it becomes active (first eligible day)
+    // - Same instance appears every day until Done
+    // - Never auto-locks, keeps appearing indefinitely until completed
     if (!task.due_date) {
       return { shouldAppear: false, isCarryOver: false, dueDate: '' }
     }
 
     const dueDate = parseAustralianDate(task.due_date)
-
-    // Appear on any eligible day up to and including the due date
-    if (date <= dueDate) {
-      return {
-        shouldAppear: true,
-        // If the appearance date is before due date, treat as carry-over until due date
-        isCarryOver: date < dueDate,
-        dueDate: formatAustralianDate(dueDate),
-      }
+    
+    // For once-off tasks, we need to determine the first appearance date
+    // This would be the day the task became active (handled by activation logic)
+    // For now, assume it appears from the current date onwards until due date and beyond
+    
+    // Once-off tasks appear indefinitely until completed, even past due date
+    return {
+      shouldAppear: true,
+      isCarryOver: false, // Once-off tasks don't have traditional carry behavior
+      dueDate: formatAustralianDate(dueDate),
     }
-
-    return { shouldAppear: false, isCarryOver: false, dueDate: '' }
   }
 
   /**
@@ -531,6 +533,7 @@ export class NewRecurrenceEngine {
   /**
    * 5) Start of Every Month
    * - Appear: 1st; if Sat/Sun → first Monday after; if that day is a PH → next non-PH weekday.
+   * - Carry: Reappears daily until the last Saturday of the month (or earlier if PH).
    * - Due: 5 full workdays from appearance, excluding weekends & PHs; if lands on PH → extend to next weekday.
    */
   private processStartOfMonth(task: MasterTask, date: Date): {
@@ -553,8 +556,14 @@ export class NewRecurrenceEngine {
     }
 
     const dueDate = this.addWorkdaysExcludingWeekends(appearanceDate, 5)
+    
+    // Carry until last Saturday of the month (or earlier if PH)
+    const lastDayOfMonth = new Date(date.getFullYear(), date.getMonth() + 1, 0)
+    const lastSaturday = this.getLastSaturdayOfMonth(date)
+    const carryUntil = this.findPreviousBusinessDay(lastSaturday)
 
-    if (date >= appearanceDate && date <= dueDate) {
+    // Appear from appearance date until the end of month cutoff (continues even after due date)
+    if (date >= appearanceDate && date <= carryUntil) {
       return {
         shouldAppear: true,
         isCarryOver: date.getTime() > appearanceDate.getTime(),
@@ -593,8 +602,13 @@ export class NewRecurrenceEngine {
     }
 
     const dueDate = this.addWorkdaysExcludingWeekends(appearanceDate, 5)
+    
+    // Carry until last Saturday of the month (or earlier if PH)
+    const lastSaturday = this.getLastSaturdayOfMonth(date)
+    const carryUntil = this.findPreviousBusinessDay(lastSaturday)
 
-    if (date >= appearanceDate && date <= dueDate) {
+    // Appear from appearance date until the end of month cutoff (continues even after due date)
+    if (date >= appearanceDate && date <= carryUntil) {
       return {
         shouldAppear: true,
         isCarryOver: date.getTime() > appearanceDate.getTime(),
@@ -876,6 +890,16 @@ export class NewRecurrenceEngine {
     const day = lastDay.getDay();
     const diff = lastDay.getDate() - day + (day === 0 ? -6 : 1);
     return new Date(lastDay.setDate(diff));
+  }
+
+  private getLastSaturdayOfMonth(date: Date): Date {
+    const lastDay = new Date(date.getFullYear(), date.getMonth() + 1, 0);
+    const day = lastDay.getDay();
+    // Calculate days to subtract to get to Saturday (6)
+    const diff = day === 0 ? 1 : (7 - day + 6) % 7;
+    const lastSaturday = new Date(lastDay);
+    lastSaturday.setDate(lastDay.getDate() - diff);
+    return lastSaturday;
   }
 }
 ""

@@ -139,7 +139,7 @@ export class NewTaskGenerator {
 
     try {
       // Step 1: Get all active master tasks using the database adapter
-      const masterTasks = await this.adapter.loadActiveMasterTasks()
+      const masterTasks = await this.adapter.loadActiveMasterTasks(date)
 
       if (masterTasks.length === 0) {
         this.log('info', 'No active master tasks found')

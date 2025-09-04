@@ -126,6 +126,21 @@ export async function PUT(
 
 
 
+    // Get the current task to check if publish_status is changing
+    const { data: currentTask, error: fetchError } = await supabase
+      .from('master_tasks')
+      .select('publish_status')
+      .eq('id', params.id)
+      .single()
+
+    if (fetchError) {
+      console.error('Error fetching current task:', fetchError)
+      return NextResponse.json({ 
+        error: 'Failed to fetch current task',
+        details: fetchError.message
+      }, { status: 500 })
+    }
+
     let { data: masterTask, error } = await supabase
       .from('master_tasks')
       .update(updateData)
@@ -148,6 +163,29 @@ export async function PUT(
         details: error.message,
         code: error.code
       }, { status: 500 })
+    }
+
+    // Check if task was just activated and trigger frequency logic immediately
+    const wasActivated = currentTask.publish_status !== 'active' && publish_status === 'active'
+    
+    if (wasActivated) {
+      try {
+        console.log('Master task [id] PUT - Task was activated, triggering frequency logic')
+        const { runNewDailyGeneration } = await import('@/lib/new-task-generator')
+        const { getAustralianToday } = await import('@/lib/timezone-utils')
+        
+        // Generate instances for today and potentially future dates
+        const generationResult = await runNewDailyGeneration(getAustralianToday(), {
+          testMode: false,
+          dryRun: false,
+          forceRegenerate: false
+        })
+        
+        console.log('Master task [id] PUT - Frequency logic triggered, generated instances:', generationResult.totalInstances)
+      } catch (generationError) {
+        console.error('Master task [id] PUT - Error triggering frequency logic:', generationError)
+        // Don't fail the update if instance generation fails, but log the error
+      }
     }
 
     console.log('Master task [id] PUT - Successfully updated task')
