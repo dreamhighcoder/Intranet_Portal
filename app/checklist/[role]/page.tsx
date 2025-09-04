@@ -484,6 +484,7 @@ const Pagination = ({
   return (
     <div className="flex items-center justify-center space-x-2 py-4">
       <Button
+        type="button"
         variant="outline"
         size="sm"
         onClick={() => onPageChange(currentPage - 1)}
@@ -499,6 +500,7 @@ const Pagination = ({
             <span className="px-3 py-1 text-gray-500">...</span>
           ) : (
             <Button
+              type="button"
               variant={currentPage === page ? "default" : "outline"}
               size="sm"
               onClick={() => onPageChange(page as number)}
@@ -512,6 +514,7 @@ const Pagination = ({
       ))}
 
       <Button
+        type="button"
         variant="outline"
         size="sm"
         onClick={() => onPageChange(currentPage + 1)}
@@ -580,7 +583,9 @@ export default function RoleChecklistPage() {
   const [searchTerm, setSearchTerm] = useState("")
   const [refreshKey, setRefreshKey] = useState(0)
   const [tasks, setTasks] = useState<ChecklistTask[]>([])
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(true) // Initial page load
+  const [tasksLoading, setTasksLoading] = useState(false) // Task reloading
+  const [hasInitiallyLoaded, setHasInitiallyLoaded] = useState(false) // Track if we've loaded at least once
   const [taskCounts, setTaskCounts] = useState({
     total: 0,
     done: 0,
@@ -647,20 +652,63 @@ export default function RoleChecklistPage() {
     loadResponsibilities()
   }, [isAdmin])
 
+  // Add global error handler for debugging
+  useEffect(() => {
+    const handleError = (event: ErrorEvent) => {
+      console.error('Global error caught:', event.error)
+    }
+    const handleUnhandledRejection = (event: PromiseRejectionEvent) => {
+      console.error('Unhandled promise rejection:', event.reason)
+    }
+    
+    window.addEventListener('error', handleError)
+    window.addEventListener('unhandledrejection', handleUnhandledRejection)
+    
+    return () => {
+      window.removeEventListener('error', handleError)
+      window.removeEventListener('unhandledrejection', handleUnhandledRejection)
+    }
+  }, [])
+
   // Load tasks when date, refresh key, role, or responsibility changes
   useEffect(() => {
+    console.log('🔄 LOAD TASKS useEffect triggered - dependency changed')
+    console.log('📊 Dependencies:', { refreshKey, isLoading, user: !!user, role, isAdmin, currentDate })
+    console.log('📊 Current tasks count:', tasks.length)
+    
     const loadTasks = async () => {
-      if (isLoading || !user || !role) {
+      // Don't load if auth is still loading
+      if (isLoading) {
+        console.log('Skipping task load - auth still loading')
+        return
+      }
+
+      // If no user or role, set loading to false and return
+      if (!user || !role) {
+        console.log('Skipping task load - no user or role:', 'user:', !!user, 'role:', role)
+        setLoading(false)
         return
       }
 
       // Additional check to ensure user is properly authenticated
       if (!user.isAuthenticated) {
         console.log('User not authenticated, skipping task load')
+        setLoading(false)
         return
       }
 
-      setLoading(true)
+      console.log('🚀 Starting task load for role:', role, 'date:', currentDate)
+      console.log('⏳ Setting task loading to true...')
+      console.log('📊 hasInitiallyLoaded:', hasInitiallyLoaded)
+
+      // Use different loading states for initial load vs task reload
+      if (!hasInitiallyLoaded) {
+        console.log('🔄 First load - using full page loading')
+        setLoading(true) // Initial load - show full page loading
+      } else {
+        console.log('🔄 Subsequent load - using task overlay loading')
+        setTasksLoading(true) // Task reload - show overlay
+      }
       try {
         // Normalize role to ensure it's in the kebab-case format
         const normalizedRole = toKebabCase(role);
@@ -674,11 +722,17 @@ export default function RoleChecklistPage() {
         // Add admin mode for admins
         if (isAdmin) {
           params.append('admin_mode', 'true')
-          // Pass the selected responsibility to enable position-specific completion logic
-          params.append('responsibility', selectedResponsibility)
+          // Note: responsibility filtering is now handled client-side only
         }
 
         console.log('Fetching tasks with params:', params.toString())
+        console.log('📅 Current date being used for API call:', currentDate)
+        console.log('User details:', {
+          id: user.id,
+          role: user.role,
+          isAuthenticated: user.isAuthenticated,
+          displayName: user.displayName
+        })
 
         const data = await authenticatedGet(`/api/checklist?${params.toString()}`)
 
@@ -697,7 +751,16 @@ export default function RoleChecklistPage() {
         }
 
         console.log('Tasks received:', data.data?.length || 0)
-        setTasks(data.data || [])
+        console.log('📋 Setting tasks in state...')
+        const newTasks = data.data || []
+        setTasks(newTasks)
+        console.log('✅ Tasks set in state successfully, new count:', newTasks.length)
+        
+        // Mark as initially loaded after first successful load
+        if (!hasInitiallyLoaded) {
+          console.log('✅ Marking as initially loaded')
+          setHasInitiallyLoaded(true)
+        }
 
         // Calculate task counts
         const counts = {
@@ -743,31 +806,57 @@ export default function RoleChecklistPage() {
           toastError("Error", "Failed to load tasks. Please try again.")
         }
       } finally {
+        console.log('🏁 Finally block - resetting loading states')
         setLoading(false)
+        setTasksLoading(false)
+        console.log('✅ Loading states reset')
       }
     }
 
     loadTasks()
-  }, [currentDate, selectedResponsibility, refreshKey, isLoading, user, role, isAdmin])
+  }, [refreshKey, isLoading, user, role, isAdmin, currentDate])
 
   useEffect(() => {
+    console.log('🔄 URL params useEffect triggered')
     const dateParam = searchParams.get("date")
+    console.log('📅 Date param from URL:', dateParam, 'Current date:', currentDate)
+    
+    // Only update from URL if it's different and not empty
     if (dateParam && dateParam !== currentDate) {
+      console.log('📅 URL date param changed, updating currentDate from', currentDate, 'to', dateParam)
       setCurrentDate(dateParam)
     }
     
     // Handle responsibility filter from URL parameter (for admin navigation from calendar)
     const responsibilityParam = searchParams.get("responsibility_filter")
     if (responsibilityParam && isAdmin && responsibilityParam !== selectedResponsibility) {
+      console.log('🎯 Updating responsibility filter from URL:', responsibilityParam)
       setSelectedResponsibility(responsibilityParam)
     }
-  }, [searchParams, currentDate, isAdmin, selectedResponsibility])
+  }, [searchParams, isAdmin]) // Keep minimal dependencies to prevent loops
 
   const handleDateChange = (date: string) => {
-    setCurrentDate(date)
-    const params = new URLSearchParams(searchParams.toString())
-    params.set("date", date)
-    router.push(`/checklist/${role}?${params.toString()}`)
+    try {
+      console.log('🗓️ handleDateChange called with:', date)
+      console.log('📅 Current date before change:', currentDate)
+      
+      // Only update if the date is actually different
+      if (date === currentDate) {
+        console.log('📅 Date unchanged, skipping update')
+        return
+      }
+      
+      console.log('🔄 About to update URL and trigger state change...')
+      
+      // Update the URL - this will trigger the searchParams useEffect which will update the state
+      const newSearchParams = new URLSearchParams(searchParams.toString())
+      newSearchParams.set('date', date)
+      router.replace(`${window.location.pathname}?${newSearchParams.toString()}`, { scroll: false })
+      
+      console.log('✅ URL updated, state change will follow via useEffect')
+    } catch (error) {
+      console.error('❌ Error in handleDateChange:', error)
+    }
   }
 
   const handleTaskComplete = async (taskId: string) => {
@@ -1087,10 +1176,8 @@ export default function RoleChecklistPage() {
     return list.sort()
   }, [tasks])
 
-  // Show loading if auth is still loading OR local loading OR user is not authenticated
-  const shouldShowLoading = isLoading || loading || (!user || !user.isAuthenticated)
-
-  if (shouldShowLoading && isLoading) {
+  // Show loading spinner for authentication
+  if (isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
@@ -1103,7 +1190,8 @@ export default function RoleChecklistPage() {
     )
   }
 
-  if (shouldShowLoading && loading && user && user.isAuthenticated) {
+  // Show full-page loading spinner for initial load
+  if (loading && user && user.isAuthenticated) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
@@ -1258,7 +1346,7 @@ export default function RoleChecklistPage() {
 
         {/* Date Navigator */}
         <div className="mb-6">
-          <DateNavigator currentDate={currentDate} onDateChange={handleDateChange} />
+          <DateNavigator currentDate={currentDate} onDateChange={handleDateChange} isLoading={tasksLoading} />
         </div>
 
         {/* Filters */}
@@ -1465,6 +1553,7 @@ export default function RoleChecklistPage() {
                               {/* Hide Done/Undo buttons for admins; show only details */}
                               {isAdmin ? (
                                 <Button
+                                  type="button"
                                   size="sm"
                                   variant="ghost"
                                   onClick={() => handleViewDetails(task)}
@@ -1478,6 +1567,7 @@ export default function RoleChecklistPage() {
                                 <>
                                   {(task.is_completed_for_position || task.status === "completed") ? (
                                     <Button
+                                      type="button"
                                       size="sm"
                                       variant="outline"
                                       onClick={() => handleTaskUndo(task.id)}
@@ -1495,6 +1585,7 @@ export default function RoleChecklistPage() {
                                     </Button>
                                   ) : (
                                     <Button
+                                      type="button"
                                       size="sm"
                                       onClick={() => handleTaskComplete(task.id)}
                                       disabled={processingTasks.has(task.id)}
@@ -1511,6 +1602,7 @@ export default function RoleChecklistPage() {
                                     </Button>
                                   )}
                                   <Button
+                                    type="button"
                                     size="sm"
                                     variant="ghost"
                                     onClick={() => handleViewDetails(task)}
@@ -1606,6 +1698,7 @@ export default function RoleChecklistPage() {
                             {isAdmin ? (
                               // Admin: only show details
                               <Button
+                                type="button"
                                 size="sm"
                                 variant="outline"
                                 onClick={() => handleViewDetails(task)}
@@ -1619,6 +1712,7 @@ export default function RoleChecklistPage() {
                               <>
                                 {task.status === "completed" ? (
                                   <Button
+                                    type="button"
                                     size="sm"
                                     variant="outline"
                                     onClick={() => handleTaskUndo(task.id)}
@@ -1636,6 +1730,7 @@ export default function RoleChecklistPage() {
                                   </Button>
                                 ) : (
                                   <Button
+                                    type="button"
                                     size="sm"
                                     onClick={() => handleTaskComplete(task.id)}
                                     disabled={processingTasks.has(task.id)}
@@ -1652,6 +1747,7 @@ export default function RoleChecklistPage() {
                                   </Button>
                                 )}
                                 <Button
+                                  type="button"
                                   size="sm"
                                   variant="outline"
                                   onClick={() => handleViewDetails(task)}
@@ -1683,6 +1779,8 @@ export default function RoleChecklistPage() {
           </CardContent>
         </Card>
 
+
+
         {/* Finish Button - Auto-logout when all tasks completed (only for non-admin users) */}
         {!isAdmin && allTasksCompleted && (
           <div className="text-center mb-6">
@@ -1692,7 +1790,7 @@ export default function RoleChecklistPage() {
                 <p className="text-[var(--color-text-secondary)] mb-4">
                   Great job! You've completed all your tasks for today.
                 </p>
-                <Button onClick={handleFinish} className="bg-green-600 hover:bg-green-700 text-white">
+                <Button type="button" onClick={handleFinish} className="bg-green-600 hover:bg-green-700 text-white">
                   <LogOut className="h-4 w-4 mr-2" />
                   Finish & Logout
                 </Button>

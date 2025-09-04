@@ -4,18 +4,29 @@ import { Button } from "@/components/ui/button"
 import { Calendar } from "@/components/ui/calendar"
 import { formatDate, getDateNavigation, formatLocalDate } from "@/lib/task-utils"
 import { parseAustralianDate } from "@/lib/timezone-utils"
-import { ChevronLeft, ChevronRight, CalendarIcon } from "lucide-react"
+import { ChevronLeft, ChevronRight, CalendarIcon, Loader2 } from "lucide-react"
 import { useState, useEffect, useRef } from "react"
 
 interface DateNavigatorProps {
   currentDate: string
   onDateChange: (date: string) => void
+  isLoading?: boolean
 }
 
-export function DateNavigator({ currentDate, onDateChange }: DateNavigatorProps) {
+export function DateNavigator({ currentDate, onDateChange, isLoading = false }: DateNavigatorProps) {
   const [isCalendarOpen, setIsCalendarOpen] = useState(false)
+  const [loadingButton, setLoadingButton] = useState<string | null>(null)
   const mobileCalendarRef = useRef<HTMLDivElement | null>(null)
   const desktopCalendarRef = useRef<HTMLDivElement | null>(null)
+
+  // Reset loading button state when loading completes
+  useEffect(() => {
+    console.log('🔄 DateNavigator isLoading changed:', isLoading)
+    if (!isLoading) {
+      console.log('✅ Resetting loading button state')
+      setLoadingButton(null)
+    }
+  }, [isLoading])
 
   // Close calendar when clicking outside (both mobile and desktop)
   useEffect(() => {
@@ -41,10 +52,19 @@ export function DateNavigator({ currentDate, onDateChange }: DateNavigatorProps)
 
   const handleDateSelect = (date: Date | undefined) => {
     if (date) {
+      setLoadingButton('calendar')
       // Use local date to avoid timezone shifting to previous/next day
       onDateChange(formatLocalDate(date))
       setIsCalendarOpen(false)
     }
+  }
+
+  const handleButtonClick = (buttonType: string, action: () => void) => {
+    console.log('🔘 DateNavigator button clicked:', buttonType)
+    setLoadingButton(buttonType)
+    console.log('⏳ Loading button set to:', buttonType)
+    action()
+    console.log('✅ Action executed for button:', buttonType)
   }
 
   return (
@@ -52,27 +72,55 @@ export function DateNavigator({ currentDate, onDateChange }: DateNavigatorProps)
       {/* Mobile Layout */}
       <div className="flex flex-col space-y-3 sm:hidden">
         <div className="flex items-center justify-between">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => onDateChange(previous)}
-            className="flex items-center space-x-1 flex-1 mr-2"
+          <button
+            type="button"
+            className="flex items-center space-x-1 flex-1 mr-2 p-2 border rounded cursor-pointer hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
+            disabled={isLoading && loadingButton === 'previous'}
+            onClick={(e) => {
+              e.preventDefault()
+              e.stopPropagation()
+              handleButtonClick('previous', () => onDateChange(previous))
+            }}
           >
-            <ChevronLeft className="w-4 h-4" />
-            <span className="hidden xs:inline">Previous</span>
-            <span className="xs:hidden">Prev</span>
-          </Button>
+            {isLoading && loadingButton === 'previous' ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" />
+                <span className="hidden xs:inline">Loading...</span>
+                <span className="xs:hidden">Loading...</span>
+              </>
+            ) : (
+              <>
+                <ChevronLeft className="w-4 h-4" />
+                <span className="hidden xs:inline">Previous</span>
+                <span className="xs:hidden">Prev</span>
+              </>
+            )}
+          </button>
 
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => onDateChange(next)}
-            className="flex items-center space-x-1 flex-1 ml-2"
+          <button
+            type="button"
+            className="flex items-center space-x-1 flex-1 ml-2 p-2 border rounded cursor-pointer hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
+            disabled={isLoading && loadingButton === 'next'}
+            onClick={(e) => {
+              e.preventDefault()
+              e.stopPropagation()
+              handleButtonClick('next', () => onDateChange(next))
+            }}
           >
-            <span className="hidden xs:inline">Next</span>
-            <span className="xs:hidden">Next</span>
-            <ChevronRight className="w-4 h-4" />
-          </Button>
+            {isLoading && loadingButton === 'next' ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" />
+                <span className="hidden xs:inline">Loading...</span>
+                <span className="xs:hidden">Loading...</span>
+              </>
+            ) : (
+              <>
+                <span className="hidden xs:inline">Next</span>
+                <span className="xs:hidden">Next</span>
+                <ChevronRight className="w-4 h-4" />
+              </>
+            )}
+          </button>
         </div>
 
         <div className="flex items-center justify-center relative" ref={mobileCalendarRef}>
@@ -80,10 +128,24 @@ export function DateNavigator({ currentDate, onDateChange }: DateNavigatorProps)
             type="button"
             variant="outline"
             className="flex items-center space-x-2 bg-transparent w-full justify-center"
-            onClick={() => setIsCalendarOpen((v) => !v)}
+            disabled={isLoading && loadingButton === 'calendar'}
+            onClick={(e) => {
+              e.preventDefault()
+              e.stopPropagation()
+              setIsCalendarOpen((v) => !v)
+            }}
           >
-            <CalendarIcon className="w-4 h-4" />
-            <span className="font-medium text-sm sm:text-base">{formatDate(currentDate)}</span>
+            {isLoading && loadingButton === 'calendar' ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" />
+                <span className="font-medium text-sm sm:text-base">Loading...</span>
+              </>
+            ) : (
+              <>
+                <CalendarIcon className="w-4 h-4" />
+                <span className="font-medium text-sm sm:text-base">{formatDate(currentDate)}</span>
+              </>
+            )}
           </Button>
           {isCalendarOpen && (
             <div className="absolute top-full mt-2 z-[9999]">
@@ -96,14 +158,25 @@ export function DateNavigator({ currentDate, onDateChange }: DateNavigatorProps)
 
         {!isToday && (
           <div className="flex justify-center">
-            <Button
-              variant="default"
-              size="sm"
-              onClick={() => onDateChange(today)}
-              className="bg-[var(--color-primary)] hover:bg-[var(--color-primary)]/90 text-white px-6"
+            <button
+              type="button"
+              className="px-6 py-2 bg-blue-600 text-white rounded cursor-pointer hover:bg-blue-700 text-center disabled:opacity-50 disabled:cursor-not-allowed"
+              disabled={isLoading && loadingButton === 'today'}
+              onClick={(e) => {
+                e.preventDefault()
+                e.stopPropagation()
+                handleButtonClick('today', () => onDateChange(today))
+              }}
             >
-              Today
-            </Button>
+              {isLoading && loadingButton === 'today' ? (
+                <div className="flex items-center space-x-2">
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  <span>Loading...</span>
+                </div>
+              ) : (
+                'Today'
+              )}
+            </button>
           </div>
         )}
       </div>
@@ -112,13 +185,28 @@ export function DateNavigator({ currentDate, onDateChange }: DateNavigatorProps)
       <div className="hidden sm:flex items-center justify-between">
         <div className="flex items-center space-x-4">
           <Button
+            type="button"
             variant="outline"
             size="sm"
-            onClick={() => onDateChange(previous)}
+            disabled={isLoading && loadingButton === 'previous'}
+            onClick={(e) => {
+              e.preventDefault()
+              e.stopPropagation()
+              handleButtonClick('previous', () => onDateChange(previous))
+            }}
             className="flex items-center space-x-1"
           >
-            <ChevronLeft className="w-4 h-4" />
-            <span>Previous</span>
+            {isLoading && loadingButton === 'previous' ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" />
+                <span>Loading...</span>
+              </>
+            ) : (
+              <>
+                <ChevronLeft className="w-4 h-4" />
+                <span>Previous</span>
+              </>
+            )}
           </Button>
 
           <div className="relative" ref={desktopCalendarRef}>
@@ -126,10 +214,24 @@ export function DateNavigator({ currentDate, onDateChange }: DateNavigatorProps)
               type="button"
               variant="outline"
               className="flex items-center space-x-2 bg-transparent"
-              onClick={() => setIsCalendarOpen((v) => !v)}
+              disabled={isLoading && loadingButton === 'calendar'}
+              onClick={(e) => {
+                e.preventDefault()
+                e.stopPropagation()
+                setIsCalendarOpen((v) => !v)
+              }}
             >
-              <CalendarIcon className="w-4 h-4" />
-              <span className="font-medium">{formatDate(currentDate)}</span>
+              {isLoading && loadingButton === 'calendar' ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  <span className="font-medium">Loading...</span>
+                </>
+              ) : (
+                <>
+                  <CalendarIcon className="w-4 h-4" />
+                  <span className="font-medium">{formatDate(currentDate)}</span>
+                </>
+              )}
             </Button>
             {isCalendarOpen && (
               <div className="absolute top-full mt-2 z-[9999]">
@@ -140,21 +242,54 @@ export function DateNavigator({ currentDate, onDateChange }: DateNavigatorProps)
             )}
           </div>
 
-          <Button variant="outline" size="sm" onClick={() => onDateChange(next)} className="flex items-center space-x-1">
-            <span>Next</span>
-            <ChevronRight className="w-4 h-4" />
+          <Button 
+            type="button" 
+            variant="outline" 
+            size="sm" 
+            disabled={isLoading && loadingButton === 'next'}
+            onClick={(e) => {
+              e.preventDefault()
+              e.stopPropagation()
+              handleButtonClick('next', () => onDateChange(next))
+            }} 
+            className="flex items-center space-x-1"
+          >
+            {isLoading && loadingButton === 'next' ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" />
+                <span>Loading...</span>
+              </>
+            ) : (
+              <>
+                <span>Next</span>
+                <ChevronRight className="w-4 h-4" />
+              </>
+            )}
           </Button>
         </div>
 
         <div className="flex items-center space-x-2">
           {!isToday && (
             <Button
+              type="button"
               variant="default"
               size="sm"
-              onClick={() => onDateChange(today)}
+              disabled={isLoading && loadingButton === 'today'}
+              onClick={(e) => {
+                e.preventDefault()
+                e.stopPropagation()
+                handleButtonClick('today', () => onDateChange(today))
+              }}
               className="bg-[var(--color-primary)] hover:bg-[var(--color-primary)]/90 text-white"
             >
-              Today
+              {isLoading && loadingButton === 'today' ? (
+                <div className="flex items-center space-x-2">
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  <span>Loading...</span>
+                </div>
+              ) : (
+                'Today'
+              )}
             </Button>
           )}
         </div>
