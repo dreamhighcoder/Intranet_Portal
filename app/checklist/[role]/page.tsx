@@ -12,7 +12,7 @@ import { Badge } from '@/components/ui/badge'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Input } from '@/components/ui/input'
-import { Check, X, Eye, LogOut, Settings, ChevronRight, Search, Clock } from 'lucide-react'
+import { Check, X, Eye, LogOut, Settings, ChevronRight, Search, Clock, Users } from 'lucide-react'
 import Link from 'next/link'
 import { toastError, toastSuccess } from '@/hooks/use-toast'
 import { toKebabCase } from '@/lib/responsibility-mapper'
@@ -286,31 +286,22 @@ const getFrequencyBadgeColor = (frequency: string | null | undefined) => {
   return colorMap[frequency] || 'bg-indigo-100 text-indigo-800 border-indigo-200'
 }
 
-// Helper to render shared responsibilities with +(...) truncation and color badges
+// Helper to render shared responsibilities with user icon and count
 const renderSharedResponsibilities = (
   responsibilities: string[] = [],
   currentRoleKebab: string,
   maxVisible: number = 2
 ) => {
-  const others = (responsibilities || []).filter(r => toKebabCase(r) !== currentRoleKebab)
-  if (others.length === 0) {
-    return <span className="text-xs text-gray-400">None</span>
+  const totalResponsibilities = responsibilities?.length || 0
+  if (totalResponsibilities <= 1) {
+    return null
   }
-  const visible = others.slice(0, maxVisible)
-  const hidden = Math.max(others.length - maxVisible, 0)
+  
   return (
-    <>
-      {visible.map((item, index) => (
-        <Badge key={index} className={`text-xs ${getResponsibilityColor(item)}`}>
-          {formatResponsibility(item)}
-        </Badge>
-      ))}
-      {hidden > 0 && (
-        <Badge variant="outline" className="text-xs bg-gray-50 text-gray-600">
-          + {hidden}
-        </Badge>
-      )}
-    </>
+    <div className="flex items-center gap-2">
+      <Users className="h-5 w-5 text-blue-500" />
+      <span className="text-sm text-gray-700">({totalResponsibilities})</span>
+    </div>
   )
 }
 
