@@ -733,15 +733,6 @@ const TaskDetailsModal = ({ task, positions }: { task: MasterTask, positions: Po
           </CardContent>
         </Card>
       </div>
-
-      {/* Fixed Footer */}
-      <div className="flex-shrink-0 pt-4 border-t mt-auto">
-        <div className="flex justify-end">
-          <Button variant="outline" onClick={() => document.querySelector('[data-state="open"] button[aria-label="Close"]')?.dispatchEvent(new MouseEvent('click', { bubbles: true }))}>
-            Close
-          </Button>
-        </div>
-      </div>
     </DialogContent>
   )
 }
