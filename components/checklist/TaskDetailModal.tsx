@@ -496,26 +496,28 @@ export default function TaskDetailModal({
               <CardHeader className="pb-0">
                 <CardTitle className="text-xl text-gray-900 flex items-start justify-between">
                   <span className="flex-1">{task.master_task?.title}</span>
-                  <div className="flex flex-wrap gap-1 ml-2">
-                    {task.position_completions && task.position_completions.length > 0 ? (
-                      task.position_completions.map((completion: any, index: number) => (
-                        <Badge key={index} className="bg-green-100 text-green-800 border-green-200 text-xs">
-                          ✓ {completion.position_name.replace(/-/g, ' ').replace(/\b\w/g, (l: string) => l.toUpperCase())}
-                        </Badge>
-                      ))
-                    ) : (
-                      <Badge className="bg-orange-100 text-orange-800 border-orange-200">
-                        Pending
-                      </Badge>
-                    )}
+                  <div className="ml-2">
+                    <Badge className={
+                      status === 'completed' ? 'bg-green-100 text-green-800 border-green-200' :
+                        status === 'overdue' ? 'bg-red-100 text-red-800 border-red-200' :
+                          status === 'missed' ? 'bg-gray-100 text-gray-800 border-gray-200' :
+                            status === 'not_due_yet' ? 'bg-blue-100 text-blue-800 border-blue-200' :
+                              'bg-orange-100 text-orange-800 border-orange-200'
+                    }>
+                      {status === 'completed' ? 'Completed' :
+                        status === 'overdue' ? 'Overdue' :
+                          status === 'missed' ? 'Missed' :
+                            status === 'not_due_yet' ? 'Not Due Yet' :
+                              'Due Today'}
+                    </Badge>
                   </div>
                 </CardTitle>
               </CardHeader>
-              <CardContent className="space-y-6">
+              <CardContent className="space-y-4">
                 {/* Description */}
                 {task.master_task?.description && (
-                  <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
-                    <div className="flex items-center space-x-2 mb-2">
+                  <div className="bg-blue-50 px-4 py-3 rounded-lg border border-blue-200">
+                    <div className="flex items-center space-x-2 mb-1">
                       <FileText className="h-4 w-4 text-blue-600" />
                       <span className="font-medium text-blue-800">Description</span>
                     </div>
@@ -525,7 +527,7 @@ export default function TaskDetailModal({
 
                 {/* Basic Information Grid */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                  <div className="bg-purple-50 p-4 rounded-lg border border-purple-200">
+                  <div className="bg-purple-50 px-4 py-3 rounded-lg border border-purple-200">
                     <div className="flex items-center space-x-2 mb-1">
                       <Calendar className="h-4 w-4 text-purple-600" />
                       <span className="font-medium text-purple-800">Task Date</span>
@@ -539,7 +541,7 @@ export default function TaskDetailModal({
                       })}
                     </p>
                   </div>
-                  <div className="bg-purple-50 p-4 rounded-lg border border-purple-200">
+                  <div className="bg-purple-50 px-4 py-3 rounded-lg border border-purple-200">
                     <div className="flex items-center space-x-2 mb-1">
                       <Clock className="h-4 w-4 text-purple-600" />
                       <span className="font-medium text-purple-800">Timing</span>
@@ -548,7 +550,7 @@ export default function TaskDetailModal({
                       {task.master_task?.timing?.replace(/_/g, ' ').replace(/\b\w/g, (l: string) => l.toUpperCase()) || 'Not specified'}
                     </p>
                   </div>
-                  <div className="bg-purple-50 p-4 rounded-lg border border-purple-200">
+                  <div className="bg-purple-50 px-4 py-3 rounded-lg border border-purple-200">
                     <div className="flex items-center space-x-2 mb-1">
                       <Clock className="h-4 w-4 text-purple-600" />
                       <span className="font-medium text-purple-800">Due Time</span>
@@ -564,10 +566,10 @@ export default function TaskDetailModal({
 
                   {/* Responsibilities */}
                   {task.master_task?.responsibility && task.master_task.responsibility.length > 0 && (
-                    <div className="bg-green-50 p-4 rounded-lg border border-green-200">
-                      <div className="flex items-center space-x-2 mb-3">
+                    <div className="bg-green-50 px-4 py-3 rounded-lg border border-green-200">
+                      <div className="flex items-center space-x-2 mb-2">
                         <User className="h-4 w-4 text-green-600" />
-                        <span className="font-medium text-green-800">All Responsibilities</span>
+                        <span className="font-medium text-green-800">Responsibilities</span>
                       </div>
                       <div className="flex flex-wrap gap-2">
                         {task.master_task.responsibility.map((resp: string, index: number) => (
@@ -581,8 +583,8 @@ export default function TaskDetailModal({
 
                   {/* Categories */}
                   {task.master_task?.categories && task.master_task.categories.length > 0 && (
-                    <div className="bg-green-50 p-4 rounded-lg border border-green-200">
-                      <div className="flex items-center space-x-2 mb-3">
+                    <div className="bg-green-50 px-4 py-3 rounded-lg border border-green-200">
+                      <div className="flex items-center space-x-2 mb-2">
                         <Tag className="h-4 w-4 text-green-600" />
                         <span className="font-medium text-green-800">Categories</span>
                       </div>
@@ -601,8 +603,8 @@ export default function TaskDetailModal({
 
                   {/* Frequencies */}
                   {task.master_task?.frequencies && Object.keys(task.master_task.frequencies).length > 0 && (
-                    <div className="bg-green-50 p-4 rounded-lg border border-green-200">
-                      <div className="flex items-center space-x-2 mb-3">
+                    <div className="bg-green-50 px-4 py-3 rounded-lg border border-green-200">
+                      <div className="flex items-center space-x-2 mb-2">
                         <Settings className="h-4 w-4 text-green-600" />
                         <span className="font-medium text-green-800">Frequencies</span>
                       </div>
@@ -619,8 +621,8 @@ export default function TaskDetailModal({
 
                 {/* Task Payload */}
                 {task.payload && Object.keys(task.payload).length > 0 && (
-                  <div className="bg-rose-50 p-4 rounded-lg border border-rose-200">
-                    <div className="flex items-center space-x-2 mb-3">
+                  <div className="bg-rose-50 px-4 py-3 rounded-lg border border-rose-200">
+                    <div className="flex items-center space-x-2 mb-2">
                       <FileText className="h-4 w-4 text-rose-600" />
                       <span className="font-medium text-rose-800">Task Payload</span>
                     </div>
@@ -634,7 +636,7 @@ export default function TaskDetailModal({
 
                 {/* Notes */}
                 {task.notes && (
-                  <div className="bg-amber-50 p-4 rounded-lg border border-amber-200">
+                  <div className="bg-amber-50 px-4 py-3 rounded-lg border border-amber-200">
                     <div className="flex items-center space-x-2 mb-2">
                       <FileText className="h-4 w-4 text-amber-600" />
                       <span className="font-medium text-amber-800">Notes</span>
@@ -647,7 +649,7 @@ export default function TaskDetailModal({
             </Card>
 
             {/* Completion History */}
-            <Card className="border-l-4 border-l-indigo-500">
+            <Card className="border-l-4 border-l-indigo-500 gap-2">
               <CardHeader>
                 <CardTitle className="text-lg flex items-center space-x-2">
                   <Clock className="h-5 w-5 text-indigo-600" />
@@ -656,12 +658,11 @@ export default function TaskDetailModal({
               </CardHeader>
               <CardContent>
                 {/* Current Status Summary */}
-                <div className={`p-4 rounded-lg border mb-6 ${
-                  status === 'completed' ? 'bg-green-50 border-green-200' :
-                  status === 'not_due_yet' ? 'bg-blue-50 border-blue-200' :
-                  status === 'overdue' ? 'bg-red-50 border-red-200' :
-                  status === 'missed' ? 'bg-gray-50 border-gray-200' :
-                  'bg-orange-50 border-orange-200'
+                <div className={`px-4 py-3 rounded-lg border mb-6 ${status === 'completed' ? 'bg-green-50 border-green-200' :
+                    status === 'not_due_yet' ? 'bg-blue-50 border-blue-200' :
+                      status === 'overdue' ? 'bg-red-50 border-red-200' :
+                        status === 'missed' ? 'bg-gray-100 border' :
+                          'bg-orange-50 border-orange-200'
                   }`}>
                   <div className="flex items-center space-x-2 mb-3">
                     {status === 'completed' ? (
@@ -675,19 +676,18 @@ export default function TaskDetailModal({
                     ) : (
                       <Clock className="h-5 w-5 text-orange-600" />
                     )}
-                    <span className={`font-semibold text-lg ${
-                      status === 'completed' ? 'text-green-800' :
-                      status === 'not_due_yet' ? 'text-blue-800' :
-                      status === 'overdue' ? 'text-red-800' :
-                      status === 'missed' ? 'text-gray-800' :
-                      'text-orange-800'
+                    <span className={`font-semibold text-lg ${status === 'completed' ? 'text-green-800' :
+                        status === 'not_due_yet' ? 'text-blue-800' :
+                          status === 'overdue' ? 'text-red-800' :
+                            status === 'missed' ? 'text-gray-800' :
+                              'text-orange-800'
                       }`}>
                       Current Status: {
                         status === 'completed' ? 'Completed' :
-                        status === 'not_due_yet' ? 'Not Due Yet' :
-                        status === 'overdue' ? 'Overdue' :
-                        status === 'missed' ? 'Missed' :
-                        'Due Today'
+                          status === 'not_due_yet' ? 'Not Due Yet' :
+                            status === 'overdue' ? 'Overdue' :
+                              status === 'missed' ? 'Missed' :
+                                'Due Today'
                       }
                     </span>
                   </div>
@@ -695,7 +695,7 @@ export default function TaskDetailModal({
                   {task.status === 'completed' && task.completed_at && (
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                       {task.position_completions.map((completion: any, index: number) => (
-                        <div key={index} className="bg-white p-4 rounded-lg border border-green-200">
+                        <div key={index} className="bg-white px-4 py-3 rounded-lg border border-green-200">
                           <div className="flex items-start justify-between">
                             <div className="flex-1">
                               <div className="flex items-center space-x-2 mb-2">
@@ -741,17 +741,17 @@ export default function TaskDetailModal({
                 {/* Timing & Cutoffs (per frequency) */}
                 {Array.isArray(frequencyCutoffs) && frequencyCutoffs.length > 0 && (
                   <div className="mt-4 space-y-3">
-                    <div className="flex items-center space-x-2">
-                      <Clock className="h-5 w-5 text-gray-700" />
-                      <span className="font-medium text-gray-800">Timing & Cutoffs (Australia/Sydney)</span>
-                    </div>
+                    <CardTitle className="text-lg flex items-center space-x-2">
+                      <Clock className="h-5 w-5 text-indigo-600" />
+                      <span>Timing & Cutoffs (Australia/Sydney)s</span>
+                    </CardTitle>
 
                     {!holidaysLoaded && (
                       <div className="text-sm text-gray-600">Loading holiday data for precise cutoffs...</div>
                     )}
 
                     {frequencyCutoffs.map((fc: any, idx: number) => (
-                      <div key={idx} className="p-3 rounded-lg border bg-white">
+                      <div key={idx} className="bg-pink-50 px-4 py-3 rounded-lg border border-pink-200">
                         <div className="text-sm font-semibold text-gray-800 mb-2">
                           Frequency: {fc.frequency?.replace(/_/g, ' ').replace(/\b\w/g, (m: string) => m.toUpperCase())}
                         </div>
@@ -772,11 +772,10 @@ export default function TaskDetailModal({
                             <span className="text-gray-900 font-medium">
                               {fc.dueTime ? fc.dueTime : '—'}
                               {fc.dueDate && fc.dueTime && (
-                                <span className={`ml-2 px-2 py-0.5 rounded text-xs border ${
-                                  nowAU >= new Date(`${formatYMD(fc.dueDate)}T${fc.dueTime}:00`)
+                                <span className={`ml-2 px-2 py-0.5 rounded text-xs border ${nowAU >= new Date(`${formatYMD(fc.dueDate)}T${fc.dueTime}:00`)
                                     ? 'bg-red-50 text-red-700 border-red-200'
                                     : 'bg-blue-50 text-blue-700 border-blue-200'
-                                }`}>
+                                  }`}>
                                   {nowAU >= new Date(`${formatYMD(fc.dueDate)}T${fc.dueTime}:00`) ? 'Passed' : 'Upcoming'}
                                 </span>
                               )}
@@ -788,11 +787,10 @@ export default function TaskDetailModal({
                             <span className="text-gray-900 font-medium">
                               {fc.lockDate ? `${formatAUDate(fc.lockDate)} 11:59 PM` : 'Never locks'}
                               {fc.lockDate && (
-                                <span className={`ml-2 px-2 py-0.5 rounded text-xs border ${
-                                  nowAU > new Date(`${formatYMD(fc.lockDate)}T23:59:00`)
+                                <span className={`ml-2 px-2 py-0.5 rounded text-xs border ${nowAU > new Date(`${formatYMD(fc.lockDate)}T23:59:00`)
                                     ? 'bg-gray-100 text-gray-800 border-gray-200'
                                     : 'bg-green-50 text-green-700 border-green-200'
-                                }`}>
+                                  }`}>
                                   {nowAU > new Date(`${formatYMD(fc.lockDate)}T23:59:00`) ? 'Passed' : 'Upcoming'}
                                 </span>
                               )}
