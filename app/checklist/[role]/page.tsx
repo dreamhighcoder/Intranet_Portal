@@ -375,24 +375,59 @@ const getFrequencyRankForDay = (frequencies: string[] = [], dateStr: string) => 
   let rank = 9999
   const update = (r: number) => { if (r < rank) rank = r }
 
+  // Based on requirements: Once Off, Every Day, Once Weekly, Monday ~ Saturday, Once Monthly, Start of Every Month, Start of Month (Jan) ~ Start of Month (Dec), End of Every Month, End of Month (Jan) ~ End of Month (Dec)
+  
   // 1) Once Off
   if (lower.includes('once_off') || lower.includes('once_off_sticky')) update(1)
   // 2) Every Day
   if (lower.includes('every_day')) update(2)
   // 3) Once Weekly
   if (lower.includes('once_weekly') || lower.includes('weekly')) update(3)
-  // 4) Specific weekday (for the current day) or specific_weekdays hint
-  if (lower.includes(dowNames[dow]) || lower.includes('specific_weekdays')) update(4)
-  // 5) Once Monthly
-  if (lower.includes('once_monthly')) update(5)
-  // 6) Start of Every Month
-  if (lower.includes('start_of_every_month') || lower.includes('start_every_month')) update(6)
-  // 7) Start of Month (Jan..Dec) for current month
-  if (lower.includes(`start_of_month_${monKey}`)) update(7)
-  // 8) End of Every Month
-  if (lower.includes('end_of_every_month') || lower.includes('end_every_month')) update(8)
-  // 9) End of Month (Jan..Dec) for current month
-  if (lower.includes(`end_of_month_${monKey}`)) update(9)
+  // 4-9) Monday ~ Saturday (specific weekdays)
+  if (lower.includes('monday')) update(4)
+  if (lower.includes('tuesday')) update(5)
+  if (lower.includes('wednesday')) update(6)
+  if (lower.includes('thursday')) update(7)
+  if (lower.includes('friday')) update(8)
+  if (lower.includes('saturday')) update(9)
+  if (lower.includes('sunday')) update(10)
+  if (lower.includes('specific_weekdays')) update(11)
+  // 12) Once Monthly
+  if (lower.includes('once_monthly')) update(12)
+  // 13) Start of Every Month
+  if (lower.includes('start_of_every_month') || lower.includes('start_every_month')) update(13)
+  if (lower.includes('start_certain_months')) update(14)
+  // 15-26) Start of Month (Jan..Dec) - all months, not just current
+  if (lower.includes('start_of_month_jan')) update(15)
+  if (lower.includes('start_of_month_feb')) update(16)
+  if (lower.includes('start_of_month_mar')) update(17)
+  if (lower.includes('start_of_month_apr')) update(18)
+  if (lower.includes('start_of_month_may')) update(19)
+  if (lower.includes('start_of_month_jun')) update(20)
+  if (lower.includes('start_of_month_jul')) update(21)
+  if (lower.includes('start_of_month_aug')) update(22)
+  if (lower.includes('start_of_month_sep')) update(23)
+  if (lower.includes('start_of_month_oct')) update(24)
+  if (lower.includes('start_of_month_nov')) update(25)
+  if (lower.includes('start_of_month_dec')) update(26)
+  if (lower.includes('every_month')) update(27)
+  if (lower.includes('certain_months')) update(28)
+  // 29) End of Every Month
+  if (lower.includes('end_of_every_month') || lower.includes('end_every_month')) update(29)
+  if (lower.includes('end_certain_months')) update(30)
+  // 31-42) End of Month (Jan..Dec) - all months, not just current
+  if (lower.includes('end_of_month_jan')) update(31)
+  if (lower.includes('end_of_month_feb')) update(32)
+  if (lower.includes('end_of_month_mar')) update(33)
+  if (lower.includes('end_of_month_apr')) update(34)
+  if (lower.includes('end_of_month_may')) update(35)
+  if (lower.includes('end_of_month_jun')) update(36)
+  if (lower.includes('end_of_month_jul')) update(37)
+  if (lower.includes('end_of_month_aug')) update(38)
+  if (lower.includes('end_of_month_sep')) update(39)
+  if (lower.includes('end_of_month_oct')) update(40)
+  if (lower.includes('end_of_month_nov')) update(41)
+  if (lower.includes('end_of_month_dec')) update(42)
 
   return rank
 }
@@ -1103,13 +1138,18 @@ export default function RoleChecklistPage() {
         return 1
       }
 
-      // Fallback sorting for tasks without custom_order: due_time, then position display_order, then frequency rank, then description
+      // Fallback sorting for tasks without custom_order: due_time, then frequency rank, then position display_order, then description
       // 2. Sort by due_time (timing)
       const aMin = parseDueTimeToMinutes(a.master_task.due_time)
       const bMin = parseDueTimeToMinutes(b.master_task.due_time)
       if (aMin !== bMin) return aMin - bMin
 
-      // 3. Sort by position display_order (responsibility)
+      // 3. Sort by frequency rank
+      const aRank = getFrequencyRankForDay(a.master_task.frequencies || [], currentDate)
+      const bRank = getFrequencyRankForDay(b.master_task.frequencies || [], currentDate)
+      if (aRank !== bRank) return aRank - bRank
+
+      // 4. Sort by position display_order (responsibility)
       const aResponsibility = (a.master_task.responsibility || [])[0] || ''
       const bResponsibility = (b.master_task.responsibility || [])[0] || ''
 
@@ -1123,11 +1163,6 @@ export default function RoleChecklistPage() {
 
         if (aOrder !== bOrder) return aOrder - bOrder
       }
-
-      // 4. Sort by frequency rank
-      const aRank = getFrequencyRankForDay(a.master_task.frequencies || [], currentDate)
-      const bRank = getFrequencyRankForDay(b.master_task.frequencies || [], currentDate)
-      if (aRank !== bRank) return aRank - bRank
 
       // 5. Sort by task description
       const aDesc = a.master_task.description?.toLowerCase() || ''

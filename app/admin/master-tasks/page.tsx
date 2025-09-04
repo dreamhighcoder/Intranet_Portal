@@ -335,10 +335,13 @@ const getFrequencyRankForDay = (frequencies: string[], date: Date): number => {
   if (!frequencies || frequencies.length === 0) return 999
 
   // Frequency priority order (lower number = higher priority)
+  // Based on requirements: Once Off, Every Day, Once Weekly, Monday ~ Saturday, Once Monthly, Start of Every Month, Start of Month (Jan) ~ Start of Month (Dec), End of Every Month, End of Month (Jan) ~ End of Month (Dec)
   const frequencyRanks: Record<string, number> = {
     'once_off': 1,
-    'once_off_sticky': 2,
-    'every_day': 3,
+    'once_off_sticky': 1, // Same as once_off
+    'every_day': 2,
+    'once_weekly': 3,
+    'weekly': 3, // Same as once_weekly
     'monday': 4,
     'tuesday': 5,
     'wednesday': 6,
@@ -346,18 +349,42 @@ const getFrequencyRankForDay = (frequencies: string[], date: Date): number => {
     'friday': 8,
     'saturday': 9,
     'sunday': 10,
-    'weekly': 11,
-    'specific_weekdays': 12,
-    'once_weekly': 13,
-    'start_every_month': 14,
-    'start_of_every_month': 15,
-    'start_certain_months': 16,
-    'every_month': 17,
-    'certain_months': 18,
-    'once_monthly': 19,
-    'end_every_month': 20,
-    'end_of_every_month': 21,
-    'end_certain_months': 22
+    'specific_weekdays': 11,
+    'once_monthly': 12,
+    'start_every_month': 13,
+    'start_of_every_month': 13, // Same as start_every_month
+    'start_certain_months': 14,
+    // Start of specific months (Jan-Dec)
+    'start_of_month_jan': 15,
+    'start_of_month_feb': 16,
+    'start_of_month_mar': 17,
+    'start_of_month_apr': 18,
+    'start_of_month_may': 19,
+    'start_of_month_jun': 20,
+    'start_of_month_jul': 21,
+    'start_of_month_aug': 22,
+    'start_of_month_sep': 23,
+    'start_of_month_oct': 24,
+    'start_of_month_nov': 25,
+    'start_of_month_dec': 26,
+    'every_month': 27,
+    'certain_months': 28,
+    'end_every_month': 29,
+    'end_of_every_month': 29, // Same as end_every_month
+    'end_certain_months': 30,
+    // End of specific months (Jan-Dec)
+    'end_of_month_jan': 31,
+    'end_of_month_feb': 32,
+    'end_of_month_mar': 33,
+    'end_of_month_apr': 34,
+    'end_of_month_may': 35,
+    'end_of_month_jun': 36,
+    'end_of_month_jul': 37,
+    'end_of_month_aug': 38,
+    'end_of_month_sep': 39,
+    'end_of_month_oct': 40,
+    'end_of_month_nov': 41,
+    'end_of_month_dec': 42
   }
 
   // Get the lowest rank (highest priority) from all frequencies
@@ -1515,7 +1542,12 @@ export default function AdminMasterTasksPage() {
       const bMin = parseDueTimeToMinutes(b.due_time)
       if (aMin !== bMin) return aMin - bMin
 
-      // 2. Sort by position display_order (responsibility)
+      // 2. Sort by frequency rank
+      const aRank = getFrequencyRankForDay(a.frequencies || [], new Date())
+      const bRank = getFrequencyRankForDay(b.frequencies || [], new Date())
+      if (aRank !== bRank) return aRank - bRank
+
+      // 3. Sort by position display_order (responsibility)
       const aResponsibility = (a.responsibility || [])[0] || ''
       const bResponsibility = (b.responsibility || [])[0] || ''
 
@@ -1529,11 +1561,6 @@ export default function AdminMasterTasksPage() {
 
         if (aOrder !== bOrder) return aOrder - bOrder
       }
-
-      // 3. Sort by frequency rank
-      const aRank = getFrequencyRankForDay(a.frequencies || [], new Date())
-      const bRank = getFrequencyRankForDay(b.frequencies || [], new Date())
-      if (aRank !== bRank) return aRank - bRank
 
       // 4. Sort by task description
       const aDesc = a.description?.toLowerCase() || ''
