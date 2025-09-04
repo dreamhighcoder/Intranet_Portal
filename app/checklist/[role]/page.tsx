@@ -1506,7 +1506,7 @@ export default function RoleChecklistPage() {
                   <Table className="table-fixed w-full">
                     <TableHeader>
                       <TableRow>
-                        <TableHead className={isAdmin ? "w-[25%] py-3 bg-gray-50" : "w-[30%] py-3 bg-gray-50"}>
+                        <TableHead className={isAdmin ? "w-[25%] py-3 bg-gray-50" : "w-[31%] py-3 bg-gray-50"}>
                           Title & Description
                         </TableHead>
                         {isAdmin && (
@@ -1515,8 +1515,8 @@ export default function RoleChecklistPage() {
                           </TableHead>
                         )}
                         {!isAdmin && (
-                          <TableHead className="w-[18%] py-3 bg-gray-50">
-                            Shared Responsibilities
+                          <TableHead className="w-[10%] py-3 bg-gray-50 text-center">
+                            Shared
                           </TableHead>
                         )}
                         <TableHead className="w-[17%] py-3 bg-gray-50">
@@ -1562,11 +1562,9 @@ export default function RoleChecklistPage() {
                           )}
                           {/* Shared Responsibilities cell */}
                           {!isAdmin && (
-                            <TableCell className="py-3">
-                              <div className="max-w-full overflow-hidden">
-                                <div className="flex flex-wrap gap-1">
-                                  {renderSharedResponsibilities(task.master_task.responsibility, currentRoleKebab, 2)}
-                                </div>
+                            <TableCell className="py-3 text-center">
+                              <div className="flex justify-center">
+                                {renderSharedResponsibilities(task.master_task.responsibility, currentRoleKebab, 2)}
                               </div>
                             </TableCell>
                           )}
@@ -1577,7 +1575,7 @@ export default function RoleChecklistPage() {
                               </div>
                             </div>
                           </TableCell>
-                          <TableCell className="py-3">
+                          <TableCell className="py-3 text-center">
                             {renderFrequencyWithDetails(task)}
                           </TableCell>
                           <TableCell className="py-3">
