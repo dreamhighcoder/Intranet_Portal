@@ -345,16 +345,6 @@ const renderFrequencyWithDetails = (task: ChecklistTask) => {
           </Badge>
         )}
       </div>
-
-      {/* Timing */}
-      {task.master_task.timing && (
-        <div className="flex items-center gap-1">
-          <Clock className="h-3 w-3 text-gray-400" />
-          <span className="text-xs text-gray-600">
-            {task.master_task.timing.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
-          </span>
-        </div>
-      )}
     </div>
   )
 }
@@ -580,6 +570,7 @@ export default function RoleChecklistPage() {
   const [selectedCategory, setSelectedCategory] = useState("all")
   const [selectedStatus, setSelectedStatus] = useState("all")
   const [selectedResponsibility, setSelectedResponsibility] = useState("all")
+  const [selectedTiming, setSelectedTiming] = useState("opening") // Default to "opening"
   const [searchTerm, setSearchTerm] = useState("")
   const [refreshKey, setRefreshKey] = useState(0)
   const [tasks, setTasks] = useState<ChecklistTask[]>([])
@@ -618,8 +609,8 @@ export default function RoleChecklistPage() {
 
   // Get responsibilities from positions table (ordered by display_order, excluding Administrator)
   const [responsibilitiesFromDb, setResponsibilitiesFromDb] = useState<string[]>([])
-  const [positions, setPositions] = useState<Array<{id: string, name: string, display_order?: number}>>([])
-  
+  const [positions, setPositions] = useState<Array<{ id: string, name: string, display_order?: number }>>([])
+
   useEffect(() => {
     const loadResponsibilities = async () => {
       try {
@@ -632,10 +623,10 @@ export default function RoleChecklistPage() {
             if (ao !== bo) return ao - bo
             return (a.displayName || a.name).localeCompare(b.displayName || b.name)
           })
-        
+
         // Store positions for sorting (needed for all users)
         setPositions(nonAdmin)
-        
+
         // Only set responsibilities dropdown for admin users
         if (isAdmin) {
           const mapped = nonAdmin
@@ -660,10 +651,10 @@ export default function RoleChecklistPage() {
     const handleUnhandledRejection = (event: PromiseRejectionEvent) => {
       console.error('Unhandled promise rejection:', event.reason)
     }
-    
+
     window.addEventListener('error', handleError)
     window.addEventListener('unhandledrejection', handleUnhandledRejection)
-    
+
     return () => {
       window.removeEventListener('error', handleError)
       window.removeEventListener('unhandledrejection', handleUnhandledRejection)
@@ -675,7 +666,7 @@ export default function RoleChecklistPage() {
     console.log('🔄 LOAD TASKS useEffect triggered - dependency changed')
     console.log('📊 Dependencies:', { refreshKey, isLoading, user: !!user, role, isAdmin, currentDate })
     console.log('📊 Current tasks count:', tasks.length)
-    
+
     const loadTasks = async () => {
       // Don't load if auth is still loading
       if (isLoading) {
@@ -755,7 +746,7 @@ export default function RoleChecklistPage() {
         const newTasks = data.data || []
         setTasks(newTasks)
         console.log('✅ Tasks set in state successfully, new count:', newTasks.length)
-        
+
         // Mark as initially loaded after first successful load
         if (!hasInitiallyLoaded) {
           console.log('✅ Marking as initially loaded')
@@ -820,13 +811,13 @@ export default function RoleChecklistPage() {
     console.log('🔄 URL params useEffect triggered')
     const dateParam = searchParams.get("date")
     console.log('📅 Date param from URL:', dateParam, 'Current date:', currentDate)
-    
+
     // Only update from URL if it's different and not empty
     if (dateParam && dateParam !== currentDate) {
       console.log('📅 URL date param changed, updating currentDate from', currentDate, 'to', dateParam)
       setCurrentDate(dateParam)
     }
-    
+
     // Handle responsibility filter from URL parameter (for admin navigation from calendar)
     const responsibilityParam = searchParams.get("responsibility_filter")
     if (responsibilityParam && isAdmin && responsibilityParam !== selectedResponsibility) {
@@ -839,20 +830,20 @@ export default function RoleChecklistPage() {
     try {
       console.log('🗓️ handleDateChange called with:', date)
       console.log('📅 Current date before change:', currentDate)
-      
+
       // Only update if the date is actually different
       if (date === currentDate) {
         console.log('📅 Date unchanged, skipping update')
         return
       }
-      
+
       console.log('🔄 About to update URL and trigger state change...')
-      
+
       // Update the URL - this will trigger the searchParams useEffect which will update the state
       const newSearchParams = new URLSearchParams(searchParams.toString())
       newSearchParams.set('date', date)
       router.replace(`${window.location.pathname}?${newSearchParams.toString()}`, { scroll: false })
-      
+
       console.log('✅ URL updated, state change will follow via useEffect')
     } catch (error) {
       console.error('❌ Error in handleDateChange:', error)
@@ -1064,6 +1055,22 @@ export default function RoleChecklistPage() {
         return false
       }
 
+      // Timing filter
+      if (selectedTiming !== "all") {
+        // Map timing values to match the database values
+        const timingMap: Record<string, string[]> = {
+          'opening': ['opening', 'start_of_day', 'before_opening'],
+          'anytime_during_day': ['anytime_during_day', 'during_business_hours', 'morning', 'afternoon', 'lunch_time'],
+          'before_order_cut_off': ['specific_time'], // Assuming specific_time represents before order cut off
+          'closing': ['closing', 'end_of_day', 'after_closing', 'evening']
+        }
+
+        const allowedTimings = timingMap[selectedTiming] || []
+        if (!allowedTimings.includes(task.master_task.timing)) {
+          return false
+        }
+      }
+
       // Status filter
       if (selectedStatus !== "all") {
         if (selectedStatus === "overdue") {
@@ -1091,12 +1098,12 @@ export default function RoleChecklistPage() {
       // 1. Primary sort: custom_order from master_tasks table
       const aCustomOrder = a.master_task.custom_order
       const bCustomOrder = b.master_task.custom_order
-      
+
       // If both tasks have custom_order, sort by it
       if (typeof aCustomOrder === 'number' && typeof bCustomOrder === 'number') {
         return aCustomOrder - bCustomOrder
       }
-      
+
       // If only one has custom_order, prioritize it (tasks with custom_order come first)
       if (typeof aCustomOrder === 'number' && typeof bCustomOrder !== 'number') {
         return -1
@@ -1104,7 +1111,7 @@ export default function RoleChecklistPage() {
       if (typeof bCustomOrder === 'number' && typeof aCustomOrder !== 'number') {
         return 1
       }
-      
+
       // Fallback sorting for tasks without custom_order: due_time, then position display_order, then frequency rank, then description
       // 2. Sort by due_time (timing)
       const aMin = parseDueTimeToMinutes(a.master_task.due_time)
@@ -1114,15 +1121,15 @@ export default function RoleChecklistPage() {
       // 3. Sort by position display_order (responsibility)
       const aResponsibility = (a.master_task.responsibility || [])[0] || ''
       const bResponsibility = (b.master_task.responsibility || [])[0] || ''
-      
+
       if (aResponsibility !== bResponsibility) {
         // Find the positions for these responsibilities
         const aPosition = positions.find(p => nameToResponsibilityValue(p.name) === aResponsibility)
         const bPosition = positions.find(p => nameToResponsibilityValue(p.name) === bResponsibility)
-        
+
         const aOrder = aPosition?.display_order || 999
         const bOrder = bPosition?.display_order || 999
-        
+
         if (aOrder !== bOrder) return aOrder - bOrder
       }
 
@@ -1138,7 +1145,7 @@ export default function RoleChecklistPage() {
 
       return 0
     })
-  }, [tasks, searchTerm, selectedResponsibility, selectedCategory, selectedStatus, currentDate, isAdmin, positions])
+  }, [tasks, searchTerm, selectedResponsibility, selectedCategory, selectedStatus, selectedTiming, currentDate, isAdmin, positions])
 
   // Pagination calculations
   const totalPages = Math.ceil(filteredAndSortedTasks.length / tasksPerPage)
@@ -1149,7 +1156,7 @@ export default function RoleChecklistPage() {
   // Reset to first page when filters change
   useEffect(() => {
     setCurrentPage(1)
-  }, [searchTerm, selectedResponsibility, selectedCategory, selectedStatus, currentDate])
+  }, [searchTerm, selectedResponsibility, selectedCategory, selectedStatus, selectedTiming, currentDate])
 
   // Get unique categories for filter (use full catalog when empty)
   const uniqueCategories = useMemo(() => {
@@ -1426,29 +1433,73 @@ export default function RoleChecklistPage() {
         {/* Task List */}
         <Card className="card-surface mb-6">
           <CardHeader>
-            <div className="flex flex-col sm:flex-row sm:items-center space-y-2 sm:space-y-0">
-              <CardTitle className="text-lg lg:text-xl mb-1">
-                Tasks ({filteredAndSortedTasks.length === 0 ? '0' : `${startIndex + 1}-${Math.min(endIndex, filteredAndSortedTasks.length)}`} of {filteredAndSortedTasks.length})
-                {totalPages > 1 && (
-                  <span className="text-sm font-normal text-gray-600 ml-2">
-                    - Page {currentPage} of {totalPages}
-                  </span>
-                )}
-              </CardTitle>
-              <div className="mt-2 sm:mt-0 sm:ml-4 flex items-center gap-2">
-                <span className="text-sm text-gray-600">Per page:</span>
-                <Select value={String(tasksPerPage)} onValueChange={(v) => { setTasksPerPage(parseInt(v, 10)); setCurrentPage(1); }}>
-                  <SelectTrigger className="h-8 w-[110px]">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="50">50</SelectItem>
-                    <SelectItem value="100">100</SelectItem>
-                    <SelectItem value="150">150</SelectItem>
-                    <SelectItem value="1000000">View All</SelectItem>
-                  </SelectContent>
-                </Select>
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between space-y-2 sm:space-y-0">
+              <div className="flex flex-col sm:flex-row sm:items-center space-y-2 sm:space-y-0 gap-4">
+                <CardTitle className="text-lg lg:text-xl mb-1">
+                  Tasks ({filteredAndSortedTasks.length === 0 ? '0' : `${startIndex + 1}-${Math.min(endIndex, filteredAndSortedTasks.length)}`} of {filteredAndSortedTasks.length})
+                  {totalPages > 1 && (
+                    <span className="text-sm font-normal text-gray-600 ml-2">
+                      - Page {currentPage} of {totalPages}
+                    </span>
+                  )}
+                </CardTitle>
+                {/* Per Page Selector */}
+                <div className="flex items-center gap-2">
+                  <span className="text-sm text-gray-600">Per page:</span>
+                  <Select value={String(tasksPerPage)} onValueChange={(v) => { setTasksPerPage(parseInt(v, 10)); setCurrentPage(1); }}>
+                    <SelectTrigger className="h-8 w-[110px]">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="50">50</SelectItem>
+                      <SelectItem value="100">100</SelectItem>
+                      <SelectItem value="150">150</SelectItem>
+                      <SelectItem value="1000000">View All</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
 
+              <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
+                {/* Timing Toggle Buttons */}
+                <div className="flex space-x-1 bg-gray-100 px-2 py-1 rounded-lg gap-1">
+                  <button
+                    onClick={() => setSelectedTiming("opening")}
+                    className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${selectedTiming === "opening"
+                      ? "bg-white text-[var(--color-primary)] shadow-sm"
+                      : "bg-gray-50 border border-white text-gray-600 hover:text-gray-900"
+                      }`}
+                  >
+                    Opening
+                  </button>
+                  <button
+                    onClick={() => setSelectedTiming("anytime_during_day")}
+                    className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${selectedTiming === "anytime_during_day"
+                      ? "bg-white text-[var(--color-primary)] shadow-sm"
+                      : "bg-gray-50 border border-white text-gray-600 hover:text-gray-900"
+                      }`}
+                  >
+                    Anytime During Day
+                  </button>
+                  <button
+                    onClick={() => setSelectedTiming("before_order_cut_off")}
+                    className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${selectedTiming === "before_order_cut_off"
+                      ? "bg-white text-[var(--color-primary)] shadow-sm"
+                      : "bg-gray-50 border border-white text-gray-600 hover:text-gray-900"
+                      }`}
+                  >
+                    Before Order Cut Off
+                  </button>
+                  <button
+                    onClick={() => setSelectedTiming("closing")}
+                    className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${selectedTiming === "closing"
+                      ? "bg-white text-[var(--color-primary)] shadow-sm"
+                      : "bg-gray-50 border border-white text-gray-600 hover:text-gray-900"
+                      }`}
+                  >
+                    Closing
+                  </button>
+                </div>
 
               </div>
             </div>
@@ -1465,8 +1516,7 @@ export default function RoleChecklistPage() {
                   <Table className="table-fixed w-full">
                     <TableHeader>
                       <TableRow>
-
-                        <TableHead className={isAdmin ? "w-[23%] py-3 bg-gray-50" : "w-[30%] py-3 bg-gray-50"}>
+                        <TableHead className={isAdmin ? "w-[25%] py-3 bg-gray-50" : "w-[30%] py-3 bg-gray-50"}>
                           Title & Description
                         </TableHead>
                         {isAdmin && (
@@ -1483,7 +1533,7 @@ export default function RoleChecklistPage() {
                           Category
                         </TableHead>
                         <TableHead className="w-[15%] py-3 bg-gray-50">
-                          Frequencies & Timing
+                          Frequencies
                         </TableHead>
                         <TableHead className="w-[7%] py-3 bg-gray-50 text-left">
                           Due Time
@@ -1667,7 +1717,7 @@ export default function RoleChecklistPage() {
 
                           <div className="space-y-3 text-sm grid sm:grid-cols-2 gap-2">
                             <div>
-                              <span className="text-gray-500">Frequencies & Timing:</span>
+                              <span className="text-gray-500">Frequencies:</span>
                               <div className="mt-1">
                                 {renderFrequencyWithDetails(task)}
                               </div>
