@@ -7,7 +7,9 @@ import {
   fromAustralianTime, 
   getAustralianDateRange, 
   isAustralianTimePast,
-  parseAustralianDate 
+  parseAustralianDate,
+  formatAustralianDate,
+  toAustralianTime
 } from '@/lib/timezone-utils'
 import { NewRecurrenceEngine, NewFrequencyType, type MasterTask as NewMasterTask } from '@/lib/new-recurrence-engine'
 import { HolidayChecker } from '@/lib/holiday-checker'
@@ -144,6 +146,8 @@ async function generateTaskOccurrences(startDate: string, endDate: string, posit
       categories,
       publish_status,
       publish_delay,
+      start_date,
+      end_date,
       due_date,
       due_time,
       frequencies,
@@ -235,6 +239,30 @@ async function generateTaskOccurrences(startDate: string, endDate: string, posit
 
     // Check each date in the range
     for (const dateStr of dateRange) {
+      // First check visibility window (never show before creation/publish/start; hide after end)
+      let visibilityStart: Date | null = null
+      let visibilityEnd: Date | null = null
+      try {
+        const createdAtIso = task.created_at as string | undefined
+        const publishDelay = task.publish_delay as string | undefined // YYYY-MM-DD
+        const startDate = (task as any).start_date as string | undefined // YYYY-MM-DD
+        const endDate = (task as any).end_date as string | undefined // YYYY-MM-DD
+
+        const startCandidates: Date[] = []
+        if (createdAtIso) {
+          const createdAtAU = toAustralianTime(new Date(createdAtIso))
+          startCandidates.push(parseAustralianDate(formatAustralianDate(createdAtAU)))
+        }
+        if (publishDelay) startCandidates.push(parseAustralianDate(publishDelay))
+        if (startDate) startCandidates.push(parseAustralianDate(startDate))
+        if (startCandidates.length > 0) visibilityStart = new Date(Math.max(...startCandidates.map(d => d.getTime())))
+        if (endDate) visibilityEnd = parseAustralianDate(endDate)
+      } catch {}
+
+      const viewDate = parseAustralianDate(dateStr)
+      if (visibilityStart && viewDate < visibilityStart) continue
+      if (visibilityEnd && viewDate > visibilityEnd) continue
+      
       let shouldAppear = false
       
       try {

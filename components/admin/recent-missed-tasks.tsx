@@ -6,7 +6,8 @@ import { Badge } from "@/components/ui/badge"
 import { taskInstancesApi } from "@/lib/api-client"
 import { usePositionAuth } from "@/lib/position-auth-context"
 import { toDisplayFormat } from "@/lib/responsibility-mapper"
-import { getAustralianNow, formatAustralianDate } from "@/lib/timezone-utils"
+// Avoid importing timezone-utils on the client to prevent date-fns-tz bundling issues
+// We'll format AU dates locally using Intl.DateTimeFormat
 
 interface TaskInstance {
   id: string
@@ -45,11 +46,22 @@ export function RecentMissedTasks() {
       try {
         console.log('RecentMissedTasks: Fetching data for authenticated user:', user.displayName)
         
-        // Get date range for last 7 days using Australian timezone
-        const endDate = getAustralianNow()
-        const startDate = new Date(endDate.getTime() - 7 * 24 * 60 * 60 * 1000)
-        
-        const dateRange = `${formatAustralianDate(startDate)},${formatAustralianDate(endDate)}`
+        // Get date range for last 7 days using Australian timezone without importing date-fns-tz on client
+        const tz = 'Australia/Sydney'
+        const now = new Date()
+        const fmt = new Intl.DateTimeFormat('en-CA', { timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit' })
+        const partsToYmd = (d: Date) => {
+          const parts = fmt.formatToParts(d)
+          const y = parts.find(p => p.type === 'year')?.value
+          const m = parts.find(p => p.type === 'month')?.value
+          const day = parts.find(p => p.type === 'day')?.value
+          return `${y}-${m}-${day}`
+        }
+        const endDateYmd = partsToYmd(now)
+        const start = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)
+        const startDateYmd = partsToYmd(start)
+
+        const dateRange = `${startDateYmd},${endDateYmd}`
         
         // Fetch missed and overdue tasks
         const [missedData, overdueData] = await Promise.all([

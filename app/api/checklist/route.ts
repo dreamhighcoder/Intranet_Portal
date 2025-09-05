@@ -9,6 +9,9 @@ import type { ChecklistInstanceStatus } from '@/types/checklist'
 import {
   getAustralianNow,
   createAustralianDateTime,
+  parseAustralianDate,
+  formatAustralianDate,
+  toAustralianTime,
 } from '@/lib/timezone-utils'
 
 // Use service role key to bypass RLS for server-side reads
@@ -56,6 +59,8 @@ export async function GET(request: NextRequest) {
         due_time,
         publish_status,
         publish_delay,
+        start_date,
+        end_date,
         due_date,
         frequencies,
         responsibility,
@@ -89,6 +94,35 @@ export async function GET(request: NextRequest) {
     // Filter tasks based on recurrence rules and date (using frequencies[])
     const filteredTasks = roleFiltered.filter(task => {
       try {
+        // Server-side visibility window enforcement
+        // Determine visibilityStart = max(created_at (AU date), publish_delay, start_date)
+        // and visibilityEnd = end_date; hide outside of this window
+        const toYMD = (d: Date) => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`
+        const parseYMD = (s: string) => new Date(s + 'T00:00:00')
+
+        let visibilityStart: Date | null = null
+        let visibilityEnd: Date | null = null
+        try {
+          const createdAtIso = task.created_at as string | undefined
+          const publishDelay = task.publish_delay as string | undefined // YYYY-MM-DD
+          const startDate = (task as any).start_date as string | undefined // YYYY-MM-DD
+          const endDate = (task as any).end_date as string | undefined // YYYY-MM-DD
+
+          const startCandidates: Date[] = []
+          if (createdAtIso) {
+            const createdAtAU = toAustralianTime(new Date(createdAtIso))
+            startCandidates.push(parseAustralianDate(formatAustralianDate(createdAtAU)))
+          }
+          if (publishDelay) startCandidates.push(parseAustralianDate(publishDelay))
+          if (startDate) startCandidates.push(parseAustralianDate(startDate))
+          if (startCandidates.length > 0) visibilityStart = new Date(Math.max(...startCandidates.map(d => d.getTime())))
+          if (endDate) visibilityEnd = parseAustralianDate(endDate)
+        } catch {}
+
+        const viewDate = parseAustralianDate(validatedDate)
+        if (visibilityStart && viewDate < visibilityStart) return false
+        if (visibilityEnd && viewDate > visibilityEnd) return false
+
         // Convert task to NewMasterTask format for new engine
         const masterTask: NewMasterTask = {
           id: task.id,
@@ -244,6 +278,11 @@ export async function GET(request: NextRequest) {
           categories: task.categories || ['general'],
           frequencies: task.frequencies || [], // Using frequencies from database
           custom_order: task.custom_order,
+          // Provide anchors to the client
+          created_at: task.created_at,
+          publish_delay: task.publish_delay || undefined,
+          start_date: (task as any).start_date || undefined,
+          end_date: (task as any).end_date || undefined,
         },
       }
     })

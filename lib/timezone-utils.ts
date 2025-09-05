@@ -1,243 +1,190 @@
 /**
  * Timezone Utilities for Australian Pharmacy Intranet Portal
- * 
- * This module provides timezone-aware date utilities specifically for Australian operations.
- * All dates are handled in Australian timezone (Australia/Sydney) which automatically
- * handles daylight saving time transitions.
+ * All logic is anchored to Australia/Sydney and DST is handled automatically.
  */
 
-import { format, parseISO, startOfDay, endOfDay } from 'date-fns'
+import {
+  toZonedTime,
+  fromZonedTime,
+  formatInTimeZone,
+} from 'date-fns-tz'
 
-// Australian timezone - this handles both AEST and AEDT automatically
+// Single source of truth
 export const AUSTRALIAN_TIMEZONE = 'Australia/Sydney'
 
 /**
- * Get the current date and time in Australian timezone
+ * Get a Date representing "now" in Australia/Sydney (for display/calcs with formatInTimeZone)
+ * Note: the underlying Date is a UTC instant; use formatInTimeZone to render with TZ.
  */
 export function getAustralianNow(): Date {
-  // Get current UTC time
-  const utcNow = new Date()
-  
-  // Create a date representing the current time in Australian timezone
-  // This uses the Intl API to get the correct Australian time including DST
-  const australianTimeString = utcNow.toLocaleString('en-AU', {
-    timeZone: AUSTRALIAN_TIMEZONE,
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-    hour12: false
-  })
-  
-  // Parse the Australian time string back to a Date object
-  // Format will be: "DD/MM/YYYY, HH:mm:ss"
-  const [datePart, timePart] = australianTimeString.split(', ')
-  const [day, month, year] = datePart.split('/').map(Number)
-  const [hour, minute, second] = timePart.split(':').map(Number)
-  
-  // Create a new Date object representing this Australian time
-  // Note: This creates a Date object that represents the Australian time as if it were local time
-  return new Date(year, month - 1, day, hour, minute, second)
+  return toZonedTime(new Date(), AUSTRALIAN_TIMEZONE)
 }
 
 /**
- * Get the current date in Australian timezone as YYYY-MM-DD string
+ * Get today's date string in Australia/Sydney as YYYY-MM-DD
  */
 export function getAustralianToday(): string {
-  const now = getAustralianNow()
-  return format(now, 'yyyy-MM-dd')
+  return formatInTimeZone(new Date(), AUSTRALIAN_TIMEZONE, 'yyyy-MM-dd')
 }
 
 /**
- * Convert a date to Australian timezone
+ * Convert a UTC Date (or any instant) to a Date projected in Australia/Sydney wall time
+ * Useful for UI rendering with local Australian components
  */
 export function toAustralianTime(date: Date): Date {
-  // Convert the input date to Australian timezone
-  const australianTimeString = date.toLocaleString('en-AU', {
-    timeZone: AUSTRALIAN_TIMEZONE,
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-    hour12: false
-  })
-  
-  // Parse the Australian time string back to a Date object
-  // Format will be: "DD/MM/YYYY, HH:mm:ss"
-  const [datePart, timePart] = australianTimeString.split(', ')
-  const [day, month, year] = datePart.split('/').map(Number)
-  const [hour, minute, second] = timePart.split(':').map(Number)
-  
-  // Create a new Date object representing this Australian time
-  return new Date(year, month - 1, day, hour, minute, second)
+  return toZonedTime(date, AUSTRALIAN_TIMEZONE)
 }
 
 /**
- * Convert an Australian date to UTC
+ * Interpret the given Date's wall time as Australia/Sydney and convert to a UTC instant
+ * Example: a Date whose components represent 2025-09-05 08:00 in Sydney -> corresponding UTC instant
  */
 export function fromAustralianTime(date: Date): Date {
-  // Create a date string in Australian timezone format
-  const year = date.getFullYear()
-  const month = String(date.getMonth() + 1).padStart(2, '0')
-  const day = String(date.getDate()).padStart(2, '0')
-  const hour = String(date.getHours()).padStart(2, '0')
-  const minute = String(date.getMinutes()).padStart(2, '0')
-  const second = String(date.getSeconds()).padStart(2, '0')
-  
-  // Create ISO string assuming this is Australian time
-  const australianISOString = `${year}-${month}-${day}T${hour}:${minute}:${second}`
-  
-  // Parse this as if it were in Australian timezone and get UTC equivalent
-  const tempDate = new Date(australianISOString)
-  const utcEquivalent = new Date(tempDate.toLocaleString('en-US', { timeZone: 'UTC' }))
-  
-  return utcEquivalent
+  const y = date.getFullYear()
+  const m = String(date.getMonth() + 1).padStart(2, '0')
+  const d = String(date.getDate()).padStart(2, '0')
+  const hh = String(date.getHours()).padStart(2, '0')
+  const mm = String(date.getMinutes()).padStart(2, '0')
+  const ss = String(date.getSeconds()).padStart(2, '0')
+  const ms = String(date.getMilliseconds()).padStart(3, '0')
+  const isoLocal = `${y}-${m}-${d}T${hh}:${mm}:${ss}.${ms}`
+  return fromZonedTime(isoLocal, AUSTRALIAN_TIMEZONE)
 }
 
 /**
- * Parse a date string (YYYY-MM-DD) as an Australian date
- * This ensures the date is interpreted in Australian timezone
+ * Parse a YYYY-MM-DD as an Australia/Sydney date at 00:00:00 (returned as a Date with AU wall time projection)
  */
 export function parseAustralianDate(dateString: string): Date {
-  // Parse the date string and create a date at midnight in Australian timezone
-  const [year, month, day] = dateString.split('-').map(Number)
-  
-  // Create a date string that represents midnight in Australian timezone
-  const australianMidnight = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}T00:00:00`
-  
-  // Create a Date object and then convert it to represent Australian time
-  const tempDate = new Date(australianMidnight)
-  
-  // Return a date that represents this day at midnight in Australian context
-  return new Date(year, month - 1, day, 0, 0, 0, 0)
+  // Compute the UTC instant for AU midnight, then project back to AU wall time for UI usage
+  const utcAtAuMidnight = fromZonedTime(`${dateString}T00:00:00.000`, AUSTRALIAN_TIMEZONE)
+  return toZonedTime(utcAtAuMidnight, AUSTRALIAN_TIMEZONE)
 }
 
 /**
- * Format a date as YYYY-MM-DD in Australian timezone
+ * Format a Date as YYYY-MM-DD in Australia/Sydney
  */
 export function formatAustralianDate(date: Date): string {
-  const australianDate = toAustralianTime(date)
-  return format(australianDate, 'yyyy-MM-dd')
+  return formatInTimeZone(date, AUSTRALIAN_TIMEZONE, 'yyyy-MM-dd')
 }
 
 /**
- * Get the start of day for a date in Australian timezone
+ * Get start of day for the given instant, in AU timezone, returned as a Date projected in AU wall time
  */
 export function getAustralianStartOfDay(date: Date): Date {
-  const australianDate = toAustralianTime(date)
-  return startOfDay(australianDate)
+  const auDay = formatInTimeZone(date, AUSTRALIAN_TIMEZONE, 'yyyy-MM-dd')
+  const utcStart = fromZonedTime(`${auDay}T00:00:00.000`, AUSTRALIAN_TIMEZONE)
+  return toZonedTime(utcStart, AUSTRALIAN_TIMEZONE)
 }
 
 /**
- * Get the end of day for a date in Australian timezone
+ * Get end of day for the given instant, in AU timezone, returned as a Date projected in AU wall time
  */
 export function getAustralianEndOfDay(date: Date): Date {
-  const australianDate = toAustralianTime(date)
-  return endOfDay(australianDate)
+  const auDay = formatInTimeZone(date, AUSTRALIAN_TIMEZONE, 'yyyy-MM-dd')
+  const utcEnd = fromZonedTime(`${auDay}T23:59:59.999`, AUSTRALIAN_TIMEZONE)
+  return toZonedTime(utcEnd, AUSTRALIAN_TIMEZONE)
 }
 
 /**
- * Check if a date string represents today in Australian timezone
+ * Check if a date string (YYYY-MM-DD) represents today in AU timezone
  */
 export function isAustralianToday(dateString: string): boolean {
   return dateString === getAustralianToday()
 }
 
 /**
- * Check if a date is in the past relative to Australian timezone
+ * Check if a UTC instant is in the past relative to now, using AU perspective
+ * (Effectively the same as UTC compare, but kept for API compatibility)
  */
 export function isAustralianPast(date: Date): boolean {
-  const now = getAustralianNow()
-  const australianDate = toAustralianTime(date)
-  return australianDate < now
+  // Compare instants; converting to AU maintains clarity of intent
+  const nowZoned = getAustralianNow()
+  const dateZoned = toAustralianTime(date)
+  return dateZoned.getTime() < nowZoned.getTime()
 }
 
 /**
- * Get the day of week for a date in Australian timezone
- * Returns 0 for Sunday, 1 for Monday, etc.
+ * Day of week for an AU date string: 0=Sunday, 1=Monday, ... 6=Saturday
  */
 export function getAustralianDayOfWeek(dateString: string): number {
-  const date = parseAustralianDate(dateString)
-  return date.getDay()
+  // Use noon to avoid edge DST issues
+  const utcNoon = fromZonedTime(`${dateString}T12:00:00.000`, AUSTRALIAN_TIMEZONE)
+  const isoDow = Number(formatInTimeZone(utcNoon, AUSTRALIAN_TIMEZONE, 'i')) // 1=Mon ... 7=Sun
+  return isoDow % 7 // 0=Sun, 1=Mon, ...
 }
 
 /**
- * Create a Date object for a specific time on a given date in Australian timezone
+ * Create a Date for a specific AU date and time (HH:mm), projected in AU wall time
  */
 export function createAustralianDateTime(dateString: string, timeString: string): Date {
-  const date = parseAustralianDate(dateString)
-  const [hours, minutes] = timeString.split(':').map(Number)
-  
-  date.setHours(hours, minutes, 0, 0)
-  return date
+  const utcInstant = fromZonedTime(`${dateString}T${timeString}:00.000`, AUSTRALIAN_TIMEZONE)
+  return toZonedTime(utcInstant, AUSTRALIAN_TIMEZONE)
 }
 
 /**
- * Check if it's currently past a specific time on a given date in Australian timezone
+ * Check if it's currently past a specific time on a given AU date
  */
 export function isAustralianTimePast(dateString: string, timeString: string): boolean {
-  const now = getAustralianNow()
-  const targetDateTime = createAustralianDateTime(dateString, timeString)
-  return now > targetDateTime
+  const targetUtc = fromZonedTime(`${dateString}T${timeString}:00.000`, AUSTRALIAN_TIMEZONE)
+  return new Date().getTime() > targetUtc.getTime()
 }
 
 /**
- * Get a date range in Australian timezone
+ * Get all date strings between two instants inclusive, using AU calendar days
  */
 export function getAustralianDateRange(startDate: Date, endDate: Date): string[] {
+  const startAu = formatInTimeZone(startDate, AUSTRALIAN_TIMEZONE, 'yyyy-MM-dd')
+  const endAu = formatInTimeZone(endDate, AUSTRALIAN_TIMEZONE, 'yyyy-MM-dd')
+
   const dates: string[] = []
-  const current = new Date(toAustralianTime(startDate))
-  const end = toAustralianTime(endDate)
-  
-  while (current <= end) {
-    dates.push(formatAustralianDate(current))
-    current.setDate(current.getDate() + 1)
+  let current = startAu
+
+  while (current <= endAu) {
+    dates.push(current)
+    const nextUtc = fromZonedTime(`${current}T00:00:00.000`, AUSTRALIAN_TIMEZONE)
+    const nextDayUtc = new Date(nextUtc.getTime() + 24 * 60 * 60 * 1000)
+    current = formatInTimeZone(nextDayUtc, AUSTRALIAN_TIMEZONE, 'yyyy-MM-dd')
   }
-  
+
   return dates
 }
 
 /**
- * Return current Australia/Sydney time as a UTC ISO string for storage
+ * Current AU time as a UTC ISO string (useful for storage)
  */
 export function australianNowUtcISOString(): string {
-  const ausNow = getAustralianNow()
-  const utc = fromAustralianTime(ausNow)
+  const utc = fromZonedTime(
+    formatInTimeZone(new Date(), AUSTRALIAN_TIMEZONE, "yyyy-MM-dd'T'HH:mm:ss.SSS"),
+    AUSTRALIAN_TIMEZONE
+  )
   return utc.toISOString()
 }
 
 /**
- * Convert an Australia/Sydney date (YYYY-MM-DD) and time (HH:mm) to a UTC ISO string
+ * Convert AU date (YYYY-MM-DD) and time (HH:mm) to UTC ISO
  */
 export function australianDateTimeToUTCISOString(dateString: string, timeString: string): string {
-  const ausDateTime = createAustralianDateTime(dateString, timeString)
-  const utc = fromAustralianTime(ausDateTime)
-  return utc.toISOString()
+  return fromZonedTime(`${dateString}T${timeString}:00.000`, AUSTRALIAN_TIMEZONE).toISOString()
 }
 
 /**
- * Convert a UTC Date to a Date representing Australia/Sydney wall time (for UI)
+ * Convert a UTC instant to a Date projected in AU wall time (for UI)
  */
 export function utcToAustralian(date: Date): Date {
   return toAustralianTime(date)
 }
 
 /**
- * Debug function to log timezone information
+ * Debug timezone info
  */
 export function debugTimezone(): void {
-  const now = new Date()
-  const utcNow = now.toISOString()
-  const australianNow = getAustralianNow()
-  const australianToday = getAustralianToday()
-  
+  const nowUtc = new Date()
+  const auNow = getAustralianNow()
+  const auToday = getAustralianToday()
+
   console.log('Timezone Debug Info:')
-  console.log('UTC Now:', utcNow)
-  console.log('Australian Now:', australianNow.toISOString())
-  console.log('Australian Today:', australianToday)
-  console.log('Australian Day of Week:', australianNow.getDay())
+  console.log('UTC Now:', nowUtc.toISOString())
+  console.log('AU Now (proj):', formatInTimeZone(nowUtc, AUSTRALIAN_TIMEZONE, "yyyy-MM-dd'T'HH:mm:ssXXX"))
+  console.log('AU Today:', auToday)
+  console.log('AU Day of Week:', getAustralianDayOfWeek(auToday))
 }

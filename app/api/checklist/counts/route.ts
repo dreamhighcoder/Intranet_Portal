@@ -4,7 +4,7 @@ import { NewRecurrenceEngine, type MasterTask as NewMasterTask } from '@/lib/new
 import { createHolidayChecker } from '@/lib/holiday-checker'
 import { ChecklistQuerySchema } from '@/lib/validation-schemas'
 import { toKebabCase, getSearchOptions } from '@/lib/responsibility-mapper'
-import { getAustralianNow, getAustralianToday, createAustralianDateTime } from '@/lib/timezone-utils'
+import { getAustralianNow, getAustralianToday, createAustralianDateTime, parseAustralianDate, formatAustralianDate, toAustralianTime } from '@/lib/timezone-utils'
 
 // Use service role key to bypass RLS for server-side reads (match checklist API)
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
@@ -47,6 +47,8 @@ export async function GET(request: NextRequest) {
         due_time,
         publish_status,
         publish_delay,
+        start_date,
+        end_date,
         due_date,
         frequencies,
         responsibility,
@@ -59,7 +61,17 @@ export async function GET(request: NextRequest) {
 
     if (tasksError) {
       console.error('Error fetching master tasks:', tasksError)
-      return NextResponse.json({ error: 'Failed to fetch tasks' }, { status: 500 })
+      const fallback = { total: 0, newSinceNine: 0, dueToday: 0, overdue: 0, completed: 0 }
+      return NextResponse.json({
+        success: true,
+        data: fallback,
+        meta: {
+          role: validatedRole,
+          date: validatedDate,
+          error: 'master_tasks_query_error',
+          details: tasksError.message || String(tasksError)
+        }
+      })
     }
 
     // Filter tasks by recurrence on the requested date using the same engine as checklist
@@ -67,6 +79,30 @@ export async function GET(request: NextRequest) {
     const recurrenceEngine = new NewRecurrenceEngine(holidayChecker)
 
     const filteredTasks = (masterTasks || []).filter(task => {
+      // First check visibility window (never show before creation/publish/start; hide after end)
+      let visibilityStart: Date | null = null
+      let visibilityEnd: Date | null = null
+      try {
+        const createdAtIso = task.created_at as string | undefined
+        const publishDelay = task.publish_delay as string | undefined // YYYY-MM-DD
+        const startDate = (task as any).start_date as string | undefined // YYYY-MM-DD
+        const endDate = (task as any).end_date as string | undefined // YYYY-MM-DD
+
+        const startCandidates: Date[] = []
+        if (createdAtIso) {
+          const createdAtAU = toAustralianTime(new Date(createdAtIso))
+          startCandidates.push(parseAustralianDate(formatAustralianDate(createdAtAU)))
+        }
+        if (publishDelay) startCandidates.push(parseAustralianDate(publishDelay))
+        if (startDate) startCandidates.push(parseAustralianDate(startDate))
+        if (startCandidates.length > 0) visibilityStart = new Date(Math.max(...startCandidates.map(d => d.getTime())))
+        if (endDate) visibilityEnd = parseAustralianDate(endDate)
+      } catch {}
+
+      const viewDate = parseAustralianDate(validatedDate)
+      if (visibilityStart && viewDate < visibilityStart) return false
+      if (visibilityEnd && viewDate > visibilityEnd) return false
+      
       try {
         const mt: NewMasterTask = {
           id: task.id,
@@ -77,13 +113,14 @@ export async function GET(request: NextRequest) {
           frequencies: (task.frequencies || []) as any,
           timing: task.timing || 'anytime_during_day',
           active: task.publish_status === 'active',
-          publish_delay: task.publish_delay || undefined,
-          due_date: task.due_date || undefined,
+          publish_delay: (task as any).publish_delay || undefined,
+          due_date: (task as any).due_date || undefined,
         }
         return recurrenceEngine.shouldTaskAppearOnDate(mt, validatedDate)
       } catch (err) {
         console.error('Error checking task recurrence:', err)
-        return true
+        // If recurrence fails for one task, skip it rather than failing the whole counts API
+        return false
       }
     })
 
@@ -99,6 +136,7 @@ export async function GET(request: NextRequest) {
 
     if (instancesError) {
       console.error('Error fetching task instances:', instancesError)
+      // Non-fatal: continue with empty instances but expose reason for debugging
     }
 
     const instanceMap = new Map<string, any>()
@@ -194,7 +232,8 @@ export async function GET(request: NextRequest) {
       .overlaps('responsibility', searchRoles)
       .eq('publish_status', 'active')
 
-    const isHoliday = (await createHolidayChecker()).isHoliday(validatedDate)
+    const checker = await createHolidayChecker()
+    const isHoliday = await checker.isHoliday(parseAustralianDate(validatedDate))
 
     return NextResponse.json({
       success: true,
@@ -209,10 +248,15 @@ export async function GET(request: NextRequest) {
     
   } catch (error) {
     console.error('Checklist counts API error:', error)
-    
-    return NextResponse.json({ 
-      error: 'Internal server error',
-      details: error instanceof Error ? error.message : 'Unknown error'
-    }, { status: 500 })
+
+    const fallback = { total: 0, newSinceNine: 0, dueToday: 0, overdue: 0, completed: 0 }
+    return NextResponse.json({
+      success: true,
+      data: fallback,
+      meta: {
+        error: 'unhandled_counts_api_error',
+        details: error instanceof Error ? error.message : 'Unknown error'
+      }
+    })
   }
 }

@@ -5,10 +5,12 @@ import { usePositionAuth } from "@/lib/position-auth-context"
 import Link from "next/link"
 import Image from "next/image"
 import { usePathname, useRouter } from "next/navigation"
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Menu, X, LogOut, User } from "lucide-react"
 import { toastSuccess } from "@/hooks/use-toast"
 import { toKebabCase } from "@/lib/responsibility-mapper"
+import { formatInTimeZone } from 'date-fns-tz'
+import { AUSTRALIAN_TIMEZONE } from '@/lib/timezone-utils'
 
 
 export function Navigation() {
@@ -16,7 +18,19 @@ export function Navigation() {
   const pathname = usePathname()
   const router = useRouter()
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
+  const [auNow, setAuNow] = useState<string>('')
 
+  useEffect(() => {
+    // Initialize and update every 30s for low overhead
+    const update = () => {
+      const nowUtc = new Date()
+      const display = formatInTimeZone(nowUtc, AUSTRALIAN_TIMEZONE, "d MMM yyyy, HH:mm 'AEST'")
+      setAuNow(display)
+    }
+    update()
+    const id = setInterval(update, 30_000)
+    return () => clearInterval(id)
+  }, [])
 
   if (!user) return null
 
@@ -128,7 +142,11 @@ export function Navigation() {
           </div>
 
           {/* Desktop User Menu */}
-          <div className="hidden md:flex items-center space-x-4">
+          <div className="hidden md:flex items-center space-x-6">
+            <div className="text-xs leading-tight text-white/90">
+              <div className="font-medium">Australia/Sydney</div>
+              <div className="tabular-nums">{auNow || '—'}</div>
+            </div>
             <div className="flex items-center space-x-2 text-sm" style={{ color: "white" }}>
               <User className="w-4 h-4" />
               <span>
@@ -193,6 +211,10 @@ export function Navigation() {
               <div className="border-t border-white/20 pt-2 mt-2">
                 <div className="px-3 py-2 text-sm" style={{ color: "white" }}>
                   Welcome, {user.position.displayName === "Administrator" ? "Administrator" : user.position.displayName}
+                </div>
+                <div className="px-3 py-2 text-xs text-white/90">
+                  <div className="font-medium">Australia/Sydney</div>
+                  <div className="tabular-nums">{auNow || '—'}</div>
                 </div>
                 <Button
                   variant="ghost"

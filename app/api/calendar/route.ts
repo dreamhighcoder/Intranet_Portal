@@ -11,7 +11,8 @@ import {
   formatAustralianDate,
   createAustralianDateTime,
   isAustralianTimePast,
-  getAustralianDateRange
+  getAustralianDateRange,
+  toAustralianTime
 } from '@/lib/timezone-utils'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
@@ -182,6 +183,8 @@ export async function GET(request: NextRequest) {
         categories,
         publish_status,
         publish_delay,
+        start_date,
+        end_date,
         due_date,
         frequencies,
         created_at
@@ -284,6 +287,30 @@ export async function GET(request: NextRequest) {
       
       // iterate across date range and add when due
       for (const dateStr of dateRange) {
+        // First check visibility window (never show before creation/publish/start; hide after end)
+        let visibilityStart: Date | null = null
+        let visibilityEnd: Date | null = null
+        try {
+          const createdAtIso = task.created_at as string | undefined
+          const publishDelay = task.publish_delay as string | undefined // YYYY-MM-DD
+          const startDate = (task as any).start_date as string | undefined // YYYY-MM-DD
+          const endDate = (task as any).end_date as string | undefined // YYYY-MM-DD
+
+          const startCandidates: Date[] = []
+          if (createdAtIso) {
+            const createdAtAU = toAustralianTime(new Date(createdAtIso))
+            startCandidates.push(parseAustralianDate(formatAustralianDate(createdAtAU)))
+          }
+          if (publishDelay) startCandidates.push(parseAustralianDate(publishDelay))
+          if (startDate) startCandidates.push(parseAustralianDate(startDate))
+          if (startCandidates.length > 0) visibilityStart = new Date(Math.max(...startCandidates.map(d => d.getTime())))
+          if (endDate) visibilityEnd = parseAustralianDate(endDate)
+        } catch {}
+
+        const viewDate = parseAustralianDate(dateStr)
+        if (visibilityStart && viewDate < visibilityStart) continue
+        if (visibilityEnd && viewDate > visibilityEnd) continue
+        
         let shouldAppear = false
         
         try {
@@ -355,6 +382,32 @@ export async function GET(request: NextRequest) {
         )
         
         if (!alreadyProcessed && calendarMap[instance.instance_date]) {
+          // Apply same visibility filtering to existing instances
+          const masterTask = roleFiltered.find(t => t.id === instance.master_task_id)
+          if (masterTask) {
+            let visibilityStart: Date | null = null
+            let visibilityEnd: Date | null = null
+            try {
+              const createdAtIso = masterTask.created_at as string | undefined
+              const publishDelay = masterTask.publish_delay as string | undefined
+              const startDate = (masterTask as any).start_date as string | undefined
+              const endDate = (masterTask as any).end_date as string | undefined
+
+              const startCandidates: Date[] = []
+              if (createdAtIso) {
+                const createdAtAU = toAustralianTime(new Date(createdAtIso))
+                startCandidates.push(parseAustralianDate(formatAustralianDate(createdAtAU)))
+              }
+              if (publishDelay) startCandidates.push(parseAustralianDate(publishDelay))
+              if (startDate) startCandidates.push(parseAustralianDate(startDate))
+              if (startCandidates.length > 0) visibilityStart = new Date(Math.max(...startCandidates.map(d => d.getTime())))
+              if (endDate) visibilityEnd = parseAustralianDate(endDate)
+            } catch {}
+
+            const instanceDate = parseAustralianDate(instance.instance_date)
+            if (visibilityStart && instanceDate < visibilityStart) continue
+            if (visibilityEnd && instanceDate > visibilityEnd) continue
+          }
           const day = calendarMap[instance.instance_date]
           day.total++
           

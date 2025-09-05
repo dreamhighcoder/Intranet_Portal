@@ -8,7 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Separator } from '@/components/ui/separator'
 import { Clock, User, Calendar, CheckCircle, XCircle, AlertTriangle, Tag, FileText, Settings, Hash } from 'lucide-react'
 import { toDisplayFormat } from '@/lib/responsibility-mapper'
-import { getAustralianNow, getAustralianToday, parseAustralianDate, createAustralianDateTime } from '@/lib/timezone-utils'
+import { getAustralianNow, getAustralianToday, parseAustralianDate, createAustralianDateTime, toAustralianTime, formatAustralianDate } from '@/lib/timezone-utils'
 
 interface TaskDetailModalProps {
   isOpen: boolean
@@ -126,36 +126,156 @@ export default function TaskDetailModal({
 
   if (!task) return null
 
-  // Dynamic status calculation mirroring page logic
+  // Dynamic status calculation mirroring page logic with full frequency handling and selected date
   const calculateDynamicTaskStatus = (t: any, dateStr: string): string => {
     try {
-      const australianNow = getAustralianNow()
-      const australianToday = getAustralianToday()
-      const taskDate = parseAustralianDate(t.date)
-      const todayDate = parseAustralianDate(australianToday)
-
+      // Completed takes precedence
       if (t.is_completed_for_position || t.status === 'completed') return 'completed'
 
-      if (taskDate > todayDate) return 'not_due_yet'
+      const now = getAustralianNow()
+      const todayStr = getAustralianToday()
+      const today = parseAustralianDate(todayStr)
+      const instanceDate = parseAustralianDate(t.date)
 
-      if (taskDate.getTime() === todayDate.getTime()) {
-        if (t.master_task?.due_time) {
-          const dueTime = createAustralianDateTime(dateStr || t.date, t.master_task.due_time)
-          if (australianNow < dueTime) return 'not_due_yet'
-          const endOfDay = createAustralianDateTime(dateStr || t.date, '23:59')
-          if (australianNow > endOfDay) return 'missed'
-          return 'overdue'
+      // Selected date to evaluate status on (AU format expected)
+      const viewDate = parseAustralianDate(dateStr || todayStr)
+      const isViewingToday = viewDate.getTime() === today.getTime()
+
+      // Visibility window anchor (never show before creation/publish/start; hide after end)
+      let visibilityStart: Date | null = null
+      let visibilityEnd: Date | null = null
+      try {
+        const createdAtIso = t?.master_task?.created_at
+        const publishDelay = t?.master_task?.publish_delay // YYYY-MM-DD
+        const startDate = t?.master_task?.start_date // YYYY-MM-DD
+        const endDate = t?.master_task?.end_date // YYYY-MM-DD
+
+        const dates: Date[] = []
+        if (createdAtIso) {
+          const createdAtAU = toAustralianTime(new Date(createdAtIso))
+          dates.push(parseAustralianDate(formatAustralianDate(createdAtAU)))
         }
-        return 'due_today'
+        if (publishDelay) dates.push(parseAustralianDate(publishDelay))
+        if (startDate) dates.push(parseAustralianDate(startDate))
+        if (dates.length > 0) visibilityStart = new Date(Math.max(...dates.map(d => d.getTime())))
+        if (endDate) visibilityEnd = parseAustralianDate(endDate)
+      } catch {}
+
+      if (visibilityStart && viewDate < visibilityStart) return 'not_visible'
+      if (visibilityEnd && viewDate > visibilityEnd) return 'not_visible'
+
+      const pad2 = (n: number) => String(n).padStart(2, '0')
+      const ymd = (d: Date) => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`
+
+      // Use holidays loaded in this modal; fall back to Sunday-only if not available
+      const isHolidayLocal = (d: Date) => holidays.has(ymd(d)) === true
+      const isSunday = (d: Date) => d.getDay() === 0
+      const isBusinessDay = (d: Date) => !isSunday(d) && !isHolidayLocal(d)
+      const nextBusinessDay = (d: Date) => { const x = new Date(d); do { x.setDate(x.getDate() + 1) } while (!isBusinessDay(x)); return x }
+      const prevBusinessDay = (d: Date) => { const x = new Date(d); do { x.setDate(x.getDate() - 1) } while (!isBusinessDay(x)); return x }
+      const getWeekMonday = (d: Date) => { const x = new Date(d); const day = x.getDay(); const diff = day === 0 ? -6 : 1 - day; x.setDate(x.getDate() + diff); return x }
+      const getWeekSaturday = (d: Date) => { const x = new Date(d); const day = x.getDay(); const diff = 6 - (day === 0 ? 7 : day); x.setDate(x.getDate() + diff); return x }
+      const getLastSaturdayOfMonth = (d: Date) => { const x = new Date(d.getFullYear(), d.getMonth() + 1, 0); while (x.getDay() !== 6) x.setDate(x.getDate() - 1); return x }
+      const addBusinessDays = (d: Date, n: number) => { let x = new Date(d); let added = 0; while (added < n) { x = nextBusinessDay(x); added++ } return x }
+
+      // Per-frequency windows (appearance, due, lock)
+      const dueTimeStr: string | undefined = t?.master_task?.due_time || undefined
+      const computeCutoffs = (freq: string) => {
+        const r: any = { frequency: freq }
+        const weekMon = getWeekMonday(instanceDate)
+        const weekSat = getWeekSaturday(instanceDate)
+        switch (freq) {
+          case 'once_off':
+          case 'once_off_sticky': {
+            const dueDate = (t as any).master_task?.due_date ? parseAustralianDate((t as any).master_task.due_date) : instanceDate
+            r.appearance = instanceDate; r.dueDate = dueDate; r.dueTime = dueTimeStr; r.lockDate = dueDate; r.lockTime = '23:59'; r.carryEnd = dueDate; return r
+          }
+          case 'every_day': {
+            r.appearance = instanceDate; r.dueDate = instanceDate; r.dueTime = dueTimeStr; r.lockDate = instanceDate; r.lockTime = '23:59'; r.carryEnd = instanceDate; return r
+          }
+          case 'once_weekly': {
+            let appear = new Date(weekMon)
+            if (isHolidayLocal(appear)) { appear.setDate(appear.getDate() + 1); while (!isBusinessDay(appear) && appear <= weekSat) appear.setDate(appear.getDate() + 1) }
+            let due = new Date(weekSat); while (!isBusinessDay(due) && due >= weekMon) due.setDate(due.getDate() - 1)
+            r.appearance = appear; r.dueDate = due; r.dueTime = dueTimeStr; r.lockDate = due; r.lockTime = '23:59'; r.carryEnd = due; return r
+          }
+          case 'monday': case 'tuesday': case 'wednesday': case 'thursday': case 'friday': case 'saturday': {
+            const idx: any = { monday: 1, tuesday: 2, wednesday: 3, thursday: 4, friday: 5, saturday: 6 }
+            const sched = new Date(weekMon); sched.setDate(weekMon.getDate() + (idx[freq] - 1))
+            let due = new Date(sched)
+            if (idx[freq] === 1) { while (!isBusinessDay(due) && due <= weekSat) due.setDate(due.getDate() + 1) }
+            else {
+              let shifted = new Date(due); while (!isBusinessDay(shifted) && shifted >= weekMon) shifted.setDate(shifted.getDate() - 1)
+              if (!isBusinessDay(due)) { if (shifted < weekMon) { shifted = new Date(due); while (!isBusinessDay(shifted) && shifted <= weekSat) shifted.setDate(shifted.getDate() + 1) } due = shifted }
+            }
+            let carryEnd = new Date(weekSat); while (!isBusinessDay(carryEnd) && carryEnd >= weekMon) carryEnd.setDate(carryEnd.getDate() - 1)
+            r.appearance = due; r.dueDate = due; r.dueTime = dueTimeStr; r.lockDate = carryEnd; r.lockTime = '23:59'; r.carryEnd = carryEnd; return r
+          }
+          case 'start_of_every_month': case 'start_of_month_jan': case 'start_of_month_feb': case 'start_of_month_mar': case 'start_of_month_apr': case 'start_of_month_may': case 'start_of_month_jun': case 'start_of_month_jul': case 'start_of_month_aug': case 'start_of_month_sep': case 'start_of_month_oct': case 'start_of_month_nov': case 'start_of_month_dec': {
+            const first = new Date(instanceDate.getFullYear(), instanceDate.getMonth(), 1)
+            let appear = new Date(first); if (appear.getDay() === 0) appear.setDate(appear.getDate() + 1); if (appear.getDay() === 6) appear.setDate(appear.getDate() + 2); while (!isBusinessDay(appear)) appear = nextBusinessDay(appear)
+            const due = addBusinessDays(appear, 5)
+            let carryEnd = getLastSaturdayOfMonth(instanceDate); while (!isBusinessDay(carryEnd)) carryEnd = prevBusinessDay(carryEnd)
+            r.appearance = appear; r.carryStart = appear; r.carryEnd = carryEnd; r.dueDate = due; r.dueTime = dueTimeStr; r.lockDate = carryEnd; r.lockTime = '23:59'; return r
+          }
+          case 'once_monthly': {
+            const first = new Date(instanceDate.getFullYear(), instanceDate.getMonth(), 1)
+            let appear = new Date(first); if (appear.getDay() === 0) appear.setDate(appear.getDate() + 1); if (appear.getDay() === 6) appear.setDate(appear.getDate() + 2); while (!isBusinessDay(appear)) appear = nextBusinessDay(appear)
+            let due = getLastSaturdayOfMonth(instanceDate); while (!isBusinessDay(due)) due = prevBusinessDay(due)
+            r.appearance = appear; r.carryStart = appear; r.carryEnd = due; r.dueDate = due; r.dueTime = dueTimeStr; r.lockDate = due; r.lockTime = '23:59'; return r
+          }
+          case 'end_of_every_month': case 'end_of_month_jan': case 'end_of_month_feb': case 'end_of_month_mar': case 'end_of_month_apr': case 'end_of_month_may': case 'end_of_month_jun': case 'end_of_month_jul': case 'end_of_month_aug': case 'end_of_month_sep': case 'end_of_month_oct': case 'end_of_month_nov': case 'end_of_month_dec': {
+            let due = getLastSaturdayOfMonth(instanceDate); while (!isBusinessDay(due)) due = prevBusinessDay(due)
+            const lastDay = new Date(instanceDate.getFullYear(), instanceDate.getMonth() + 1, 0)
+            const mondays: Date[] = []; for (let d = 1; d <= lastDay.getDate(); d++) { const t2 = new Date(instanceDate.getFullYear(), instanceDate.getMonth(), d); if (t2.getDay() === 1) mondays.push(t2) }
+            const hasFive = (start: Date, end: Date) => { let cur = new Date(start), c = 0; while (cur <= end) { if (isBusinessDay(cur)) c++; cur.setDate(cur.getDate() + 1) } return c >= 5 }
+            let appear = mondays[0] || new Date(instanceDate.getFullYear(), instanceDate.getMonth(), 1)
+            for (let i = mondays.length - 1; i >= 0; i--) { if (hasFive(mondays[i], due)) { appear = mondays[i]; break } }
+            while (!isBusinessDay(appear)) appear = nextBusinessDay(appear)
+            let carryEnd = getWeekSaturday(appear); if (carryEnd > due) carryEnd = due; while (!isBusinessDay(carryEnd)) carryEnd = prevBusinessDay(carryEnd)
+            r.appearance = appear; r.carryStart = appear; r.carryEnd = carryEnd; r.dueDate = due; r.dueTime = dueTimeStr; r.lockDate = due; r.lockTime = '23:59'; return r
+          }
+          default: { r.appearance = instanceDate; r.dueDate = instanceDate; r.dueTime = dueTimeStr; r.lockDate = instanceDate; r.lockTime = '23:59'; r.carryEnd = instanceDate; return r }
+        }
       }
 
-      if (taskDate < todayDate) {
-        const endOfDueDate = createAustralianDateTime(t.date, '23:59')
-        if (australianNow > endOfDueDate) return 'missed'
-        return 'overdue'
+      const frequencies: string[] = t.master_task?.frequencies || []
+      if (!Array.isArray(frequencies) || frequencies.length === 0) return 'due_today'
+
+      const priority: Record<string, number> = { not_visible: 0, not_due_yet: 1, due_today: 2, overdue: 3, missed: 4 }
+      let best: string | null = null
+
+      for (const f of frequencies) {
+        const c = computeCutoffs(f)
+        const appear: Date = c.appearance
+        const due: Date = c.dueDate
+        const lockDate: Date | null = c.lockDate || null
+        const dueMoment = typeof c.dueTime === 'string' && c.dueTime ? createAustralianDateTime(ymd(due), c.dueTime) : null
+        const lockMoment = lockDate ? createAustralianDateTime(ymd(lockDate), c.lockTime || '23:59') : null
+
+        let st: string = 'not_due_yet'
+
+        if (viewDate < appear) {
+          st = 'not_visible'
+        } else if (ymd(viewDate) === ymd(due)) {
+          if (isViewingToday) {
+            if (lockMoment && now >= lockMoment) st = 'missed'
+            else if (dueMoment && now >= dueMoment) st = 'overdue'
+            else st = 'due_today'
+          } else {
+            st = 'due_today'
+          }
+        } else if (viewDate > due) {
+          if (lockDate && viewDate > lockDate) st = 'missed'
+          else st = 'overdue'
+        } else {
+          st = 'not_due_yet'
+        }
+
+        if (!best || priority[st] > priority[best]) best = st
       }
 
-      return 'due_today'
+      return best || 'due_today'
     } catch (e) {
       console.error('Modal status calc error', e)
       return t.status === 'completed' ? 'completed' : 'due_today'

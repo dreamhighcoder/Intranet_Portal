@@ -10,6 +10,7 @@ import { Label } from "@/components/ui/label"
 import { Separator } from "@/components/ui/separator"
 import { useRouter } from "next/navigation"
 import { Settings, Save, Database, Clock, Calendar } from "lucide-react"
+import { TimezoneHealthCard } from "@/components/admin/timezone-health"
 import { toastSuccess, toastError } from "@/hooks/use-toast"
 
 export default function SettingsPage() {
@@ -111,6 +112,9 @@ export default function SettingsPage() {
               </div>
             </CardContent>
           </Card>
+
+          {/* System Health: Timezone */}
+          <TimezoneHealthCard />
 
           {/* Task Management Settings */}
           <Card className="card-surface">
