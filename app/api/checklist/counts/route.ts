@@ -260,7 +260,10 @@ export async function GET(request: NextRequest) {
         }
 
         // Count as new only if it's the first appearance day AND within the badge display window AND not completed
-        if (isFirstAppearanceDay && activationDateTime && !isCompletedForRole) {
+        // Exclude "Every Day" frequency tasks from being counted as new
+        const hasEveryDayFrequency = (task.frequencies || []).includes('every_day')
+        
+        if (isFirstAppearanceDay && activationDateTime && !isCompletedForRole && !hasEveryDayFrequency) {
           const currentAUTime = getAustralianNow()
           
           // Calculate badge end time as the earliest of:

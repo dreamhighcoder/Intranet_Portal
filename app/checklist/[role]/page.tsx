@@ -1881,7 +1881,7 @@ export default function RoleChecklistPage() {
                               {task.is_new ? (
                                 <span title={getPublishTooltip(task)} className="relative inline-flex">
                                   <span className="absolute inline-flex h-5 w-5 rounded-full bg-blue-400 animate-ping"></span>
-                                  <span className="relative inline-flex items-center justify-center w-5 h-5 rounded-full bg-blue-600 text-white text-[10px] font-bold shadow-lg shadow-blue-300">N</span>
+                                  <span className="relative inline-flex items-center justify-center w-5 h-5 rounded-full bg-blue-600 text-white text-[10px] font-bold">N</span>
                                 </span>
                               ) : (
                                 <span title={getPublishTooltip(task)} className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-gray-100 text-gray-300 text-[10px] font-bold border border-gray-100">

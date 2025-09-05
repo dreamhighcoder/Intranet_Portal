@@ -256,8 +256,11 @@ export async function GET(request: NextRequest) {
       }))
 
       // Compute "New" for 12 hours after activation (and only if not completed)
+      // Exclude "Every Day" frequency tasks from being marked as new
       let is_new = false
-      if (!(isCompletedForCurrentPosition || status === 'completed')) {
+      const hasEveryDayFrequency = (task.frequencies || []).includes('every_day')
+      
+      if (!(isCompletedForCurrentPosition || status === 'completed') && !hasEveryDayFrequency) {
         const toYMD = (d: Date) => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`
         const viewDate = parseAustralianDate(validatedDate)
         const yesterday = new Date(viewDate)
