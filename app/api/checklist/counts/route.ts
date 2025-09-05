@@ -260,7 +260,7 @@ export async function GET(request: NextRequest) {
         }
 
         // Count as new only if it's the first appearance day AND within the badge display window AND not completed
-        if (isFirstAppearanceDay && activationDateTime && !isCompletedForPosition) {
+        if (isFirstAppearanceDay && activationDateTime && !isCompletedForRole) {
           const currentAUTime = getAustralianNow()
           
           // Calculate badge end time as the earliest of:
