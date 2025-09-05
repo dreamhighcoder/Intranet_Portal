@@ -198,31 +198,95 @@ export async function GET(request: NextRequest) {
         if (now > dueDateTime) counts.overdue++
       }
 
-      // New since 9:00am logic (Australian time):
-      const nineAmToday = createAustralianDateTime(getAustralianToday(), '09:00')
-      const baseline = now >= nineAmToday
-        ? nineAmToday
-        : new Date(nineAmToday.getTime() - 24 * 60 * 60 * 1000)
+      // New tasks: align with checklist page "is_new" logic (12 hours after activation, not completed)
+      try {
+        const toYMD = (d: Date) => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`
+        const viewDate = parseAustralianDate(validatedDate)
+        const yesterday = new Date(viewDate)
+        yesterday.setDate(viewDate.getDate() - 1)
 
-      // If we have an instance for today, use its creation time
-      if (instance?.created_at) {
-        const instanceCreated = new Date(instance.created_at)
-        if (instanceCreated >= baseline) counts.newSinceNine++
-      }
+        const mtForEngine: NewMasterTask = {
+          id: task.id,
+          title: task.title || '',
+          description: task.description || '',
+          responsibility: task.responsibility || [],
+          categories: task.categories || [],
+          frequencies: (task.frequencies || []) as any,
+          timing: task.timing || 'anytime_during_day',
+          active: task.publish_status === 'active',
+          publish_delay: (task as any).publish_delay || undefined,
+          due_date: (task as any).due_date || undefined,
+        }
+        const appearsToday = recurrenceEngine.shouldTaskAppearOnDate(mtForEngine, validatedDate)
+        const appearsYesterdayRaw = recurrenceEngine.shouldTaskAppearOnDate(mtForEngine, toYMD(yesterday))
 
-      // If no instance exists yet but the task appears today (e.g., Once Off just activated),
-      // treat activation/creation as "new" if it happened after the baseline. Restrict this
-      // heuristic to once_off to avoid noise on recurring tasks.
-      if (!instance) {
-        const isOnceOff = Array.isArray(task.frequencies) && (task.frequencies as any[]).includes('once_off')
-        if (isOnceOff) {
-          const createdAt = task.created_at ? new Date(task.created_at) : null
-          const updatedAt = task.updated_at ? new Date(task.updated_at) : null
-          if ((createdAt && createdAt >= baseline) || (updatedAt && updatedAt >= baseline)) {
+        // Activation AU date and time (max of created_at AU time, publish_delay + 00:00, start_date + 00:00)
+        let activationDateTime: Date | null = null
+        try {
+          const createdAtIso = task.created_at as string | undefined
+          const publishDelay = task.publish_delay as string | undefined
+          const startDate = (task as any).start_date as string | undefined
+          const anchors: Date[] = []
+          if (createdAtIso) {
+            // Keep full timestamp for created_at
+            anchors.push(toAustralianTime(new Date(createdAtIso)))
+          }
+          if (publishDelay) {
+            // Convert date-only to midnight AU time
+            const publishDate = parseAustralianDate(publishDelay)
+            anchors.push(publishDate)
+          }
+          if (startDate) {
+            // Convert date-only to midnight AU time
+            const startDateParsed = parseAustralianDate(startDate)
+            anchors.push(startDateParsed)
+          }
+          if (anchors.length > 0) activationDateTime = new Date(Math.max(...anchors.map(d => d.getTime())))
+        } catch {}
+
+        const yesterdayDate = parseAustralianDate(toYMD(yesterday))
+        const appearsYesterday = appearsYesterdayRaw && (!activationDateTime || yesterdayDate >= parseAustralianDate(formatAustralianDate(activationDateTime)))
+
+        // Check if this is the first eligible appearance day since activation
+        let isFirstAppearanceDay = false
+        if (appearsToday && !appearsYesterday) {
+          isFirstAppearanceDay = true
+        } else if (instance?.created_at) {
+          // Fallback: instance created today equals first appearance
+          const createdYMD = toYMD(toAustralianTime(new Date(instance.created_at)))
+          if (createdYMD === validatedDate) {
+            isFirstAppearanceDay = true
+          }
+        }
+
+        // Count as new only if it's the first appearance day AND within the badge display window AND not completed
+        if (isFirstAppearanceDay && activationDateTime && !isCompletedForPosition) {
+          const currentAUTime = getAustralianNow()
+          
+          // Calculate badge end time as the earliest of:
+          // 1. 12 hours after activation (default)
+          // 2. Due time (if it falls within 12 hours)
+          let badgeEndTime = new Date(activationDateTime.getTime() + 12 * 60 * 60 * 1000) // 12 hours default
+          
+          // For any task with due_time, check if it falls within 12 hours
+          if (task.due_time) {
+            try {
+              const dueDateTime = createAustralianDateTime(validatedDate, task.due_time)
+              // If due time is within 12 hours of activation, use it as the cutoff
+              if (dueDateTime >= activationDateTime && dueDateTime < badgeEndTime) {
+                badgeEndTime = dueDateTime
+              }
+            } catch {
+              // If due_time parsing fails, keep the default 12-hour window
+            }
+          }
+          
+          // Count as new if current time is within the calculated window
+          if (currentAUTime >= activationDateTime && currentAUTime <= badgeEndTime) {
             counts.newSinceNine++
           }
         }
-      }
+      } catch {}
     })
     
     // Metadata (optional)

@@ -255,7 +255,7 @@ export async function GET(request: NextRequest) {
         is_completed: completion.is_completed
       }))
 
-      // Compute "New" strictly by first appearance day (and only if not completed)
+      // Compute "New" for 12 hours after activation (and only if not completed)
       let is_new = false
       if (!(isCompletedForCurrentPosition || status === 'completed')) {
         const toYMD = (d: Date) => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`
@@ -278,33 +278,70 @@ export async function GET(request: NextRequest) {
         const appearsToday = recurrenceEngine.shouldTaskAppearOnDate(masterTaskForEngine, validatedDate)
         const appearsYesterdayRaw = recurrenceEngine.shouldTaskAppearOnDate(masterTaskForEngine, toYMD(yesterday))
 
-        // Determine activation AU date (max of created_at AU date, publish_delay, start_date)
-        let activationAU: Date | null = null
+        // Determine activation AU date and time (max of created_at AU time, publish_delay + 00:00, start_date + 00:00)
+        let activationDateTime: Date | null = null
         try {
           const createdAtIso = task.created_at as string | undefined
           const publishDelay = task.publish_delay as string | undefined
           const startDate = (task as any).start_date as string | undefined
           const anchors: Date[] = []
           if (createdAtIso) {
-            const createdAtAU = toAustralianTime(new Date(createdAtIso))
-            anchors.push(parseAustralianDate(formatAustralianDate(createdAtAU)))
+            // Keep full timestamp for created_at
+            anchors.push(toAustralianTime(new Date(createdAtIso)))
           }
-          if (publishDelay) anchors.push(parseAustralianDate(publishDelay))
-          if (startDate) anchors.push(parseAustralianDate(startDate))
-          if (anchors.length > 0) activationAU = new Date(Math.max(...anchors.map(d => d.getTime())))
+          if (publishDelay) {
+            // Convert date-only to midnight AU time
+            const publishDate = parseAustralianDate(publishDelay)
+            anchors.push(publishDate)
+          }
+          if (startDate) {
+            // Convert date-only to midnight AU time
+            const startDateParsed = parseAustralianDate(startDate)
+            anchors.push(startDateParsed)
+          }
+          if (anchors.length > 0) activationDateTime = new Date(Math.max(...anchors.map(d => d.getTime())))
         } catch {}
 
         // Treat yesterday as an appearance only if it is on/after activation date
         const yesterdayDate = parseAustralianDate(toYMD(yesterday))
-        const appearsYesterday = appearsYesterdayRaw && (!activationAU || yesterdayDate >= activationAU)
+        const appearsYesterday = appearsYesterdayRaw && (!activationDateTime || yesterdayDate >= parseAustralianDate(formatAustralianDate(activationDateTime)))
 
-        // New if this is the first eligible appearance day since activation
+        // Check if this is the first eligible appearance day since activation
+        let isFirstAppearanceDay = false
         if (appearsToday && !appearsYesterday) {
-          is_new = true
+          isFirstAppearanceDay = true
         } else if (existingInstance?.created_at) {
           // Fallback: instance created today equals first appearance
           const createdYMD = toYMD(toAustralianTime(new Date(existingInstance.created_at)))
           if (createdYMD === validatedDate) {
+            isFirstAppearanceDay = true
+          }
+        }
+
+        // Show "N" badge only if it's the first appearance day AND within the badge display window
+        if (isFirstAppearanceDay && activationDateTime) {
+          const currentAUTime = getAustralianNow()
+          
+          // Calculate badge end time as the earliest of:
+          // 1. 12 hours after activation (default)
+          // 2. Due time (if it falls within 12 hours)
+          let badgeEndTime = new Date(activationDateTime.getTime() + 12 * 60 * 60 * 1000) // 12 hours default
+          
+          // For any task with due_time, check if it falls within 12 hours
+          if (task.due_time) {
+            try {
+              const dueDateTime = createAustralianDateTime(validatedDate, task.due_time)
+              // If due time is within 12 hours of activation, use it as the cutoff
+              if (dueDateTime >= activationDateTime && dueDateTime < badgeEndTime) {
+                badgeEndTime = dueDateTime
+              }
+            } catch {
+              // If due_time parsing fails, keep the default 12-hour window
+            }
+          }
+          
+          // Show badge if current time is within the calculated window
+          if (currentAUTime >= activationDateTime && currentAUTime <= badgeEndTime) {
             is_new = true
           }
         }
