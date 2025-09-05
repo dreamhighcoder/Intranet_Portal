@@ -8,6 +8,7 @@ import { toKebabCase } from '@/lib/responsibility-mapper'
 import type { ChecklistInstanceStatus } from '@/types/checklist'
 import {
   getAustralianNow,
+  getAustralianToday,
   createAustralianDateTime,
   parseAustralianDate,
   formatAustralianDate,
@@ -66,7 +67,8 @@ export async function GET(request: NextRequest) {
         responsibility,
         categories,
         custom_order,
-        created_at
+        created_at,
+        updated_at
       `)
       .eq('publish_status', 'active')
 
@@ -153,7 +155,7 @@ export async function GET(request: NextRequest) {
       // Get task instances
       const { data, error: instancesError } = await supabaseAdmin
         .from('task_instances')
-        .select('id, master_task_id, status, completed_by, completed_at')
+        .select('id, master_task_id, status, completed_by, completed_at, created_at')
         .in('master_task_id', masterTaskIds)
         .eq('instance_date', validatedDate)
 
@@ -253,6 +255,61 @@ export async function GET(request: NextRequest) {
         is_completed: completion.is_completed
       }))
 
+      // Compute "New" strictly by first appearance day (and only if not completed)
+      let is_new = false
+      if (!(isCompletedForCurrentPosition || status === 'completed')) {
+        const toYMD = (d: Date) => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`
+        const viewDate = parseAustralianDate(validatedDate)
+        const yesterday = new Date(viewDate)
+        yesterday.setDate(viewDate.getDate() - 1)
+
+        const masterTaskForEngine: NewMasterTask = {
+          id: task.id,
+          title: task.title || '',
+          description: task.description || '',
+          responsibility: task.responsibility || [],
+          categories: task.categories || [],
+          frequencies: (task.frequencies || []) as any,
+          timing: task.timing || 'anytime_during_day',
+          active: task.publish_status === 'active',
+          publish_delay: task.publish_delay || undefined,
+          due_date: task.due_date || undefined,
+        }
+        const appearsToday = recurrenceEngine.shouldTaskAppearOnDate(masterTaskForEngine, validatedDate)
+        const appearsYesterdayRaw = recurrenceEngine.shouldTaskAppearOnDate(masterTaskForEngine, toYMD(yesterday))
+
+        // Determine activation AU date (max of created_at AU date, publish_delay, start_date)
+        let activationAU: Date | null = null
+        try {
+          const createdAtIso = task.created_at as string | undefined
+          const publishDelay = task.publish_delay as string | undefined
+          const startDate = (task as any).start_date as string | undefined
+          const anchors: Date[] = []
+          if (createdAtIso) {
+            const createdAtAU = toAustralianTime(new Date(createdAtIso))
+            anchors.push(parseAustralianDate(formatAustralianDate(createdAtAU)))
+          }
+          if (publishDelay) anchors.push(parseAustralianDate(publishDelay))
+          if (startDate) anchors.push(parseAustralianDate(startDate))
+          if (anchors.length > 0) activationAU = new Date(Math.max(...anchors.map(d => d.getTime())))
+        } catch {}
+
+        // Treat yesterday as an appearance only if it is on/after activation date
+        const yesterdayDate = parseAustralianDate(toYMD(yesterday))
+        const appearsYesterday = appearsYesterdayRaw && (!activationAU || yesterdayDate >= activationAU)
+
+        // New if this is the first eligible appearance day since activation
+        if (appearsToday && !appearsYesterday) {
+          is_new = true
+        } else if (existingInstance?.created_at) {
+          // Fallback: instance created today equals first appearance
+          const createdYMD = toYMD(toAustralianTime(new Date(existingInstance.created_at)))
+          if (createdYMD === validatedDate) {
+            is_new = true
+          }
+        }
+      }
+
       return {
         id: `${task.id}:${validatedDate}`, // virtual instance id
         master_task_id: task.id,
@@ -268,6 +325,7 @@ export async function GET(request: NextRequest) {
         // Add position-specific completion data
         position_completions: positionCompletionData,
         is_completed_for_position: isCompletedForCurrentPosition,
+        is_new,
         master_task: {
           id: task.id,
           title: task.title,

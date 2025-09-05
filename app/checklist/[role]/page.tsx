@@ -42,6 +42,8 @@ interface ChecklistTask {
   // New position-specific completion data
   position_completions?: PositionCompletion[]
   is_completed_for_position?: boolean
+  // New-task indicator provided by API
+  is_new?: boolean
   master_task: {
     id: string
     title: string
@@ -206,7 +208,7 @@ const calculateDynamicTaskStatus = (task: ChecklistTask, currentDate: string): s
       if (startDate) dates.push(parseAustralianDate(startDate))
       if (dates.length > 0) visibilityStart = new Date(Math.max(...dates.map(d => d.getTime())))
       if (endDate) visibilityEnd = parseAustralianDate(endDate)
-    } catch {}
+    } catch { }
 
     if (visibilityStart && viewDate < visibilityStart) return 'not_visible'
     if (visibilityEnd && viewDate > visibilityEnd) return 'not_visible'
@@ -231,7 +233,7 @@ const calculateDynamicTaskStatus = (task: ChecklistTask, currentDate: string): s
           all.flat().forEach((h: any) => { if (h?.date) win.__ph_holidays_cache.add(String(h.date)) })
           years.forEach((y) => win.__ph_holidays_years.add(y))
         })
-      } catch {}
+      } catch { }
       return Promise.resolve()
     }
 
@@ -490,7 +492,7 @@ const renderSharedResponsibilities = (
   if (totalResponsibilities <= 1) {
     return null
   }
-  
+
   return (
     <div className="flex items-center gap-2">
       <Users className="h-5 w-5 text-blue-500" />
@@ -545,6 +547,66 @@ const parseDueTimeToMinutes = (time?: string | null) => {
   return h * 60 + m
 }
 
+// --- Timing helpers for filtering and Publish column ---
+const OPENING_MIN = 9 * 60 + 30 // 09:30
+const ANYTIME_MIN = 16 * 60 + 30 // 16:30
+const CUTOFF_MIN = 16 * 60 + 55 // 16:55
+const CLOSING_MIN = 17 * 60 // 17:00
+
+const mapTimingToBucket = (timing: string): 'opening' | 'anytime_during_day' | 'before_order_cut_off' | 'closing' => {
+  const t = (timing || '').toLowerCase()
+  if (['opening', 'start_of_day', 'before_opening'].includes(t)) return 'opening'
+  if (['closing', 'end_of_day', 'after_closing', 'evening'].includes(t)) return 'closing'
+  if (['anytime_during_day', 'during_business_hours', 'morning', 'afternoon', 'lunch_time'].includes(t)) return 'anytime_during_day'
+  if (t === 'before_order_cut_off') return 'before_order_cut_off'
+  return 'anytime_during_day'
+}
+
+const getTimingBucket = (task: ChecklistTask): 'opening' | 'anytime_during_day' | 'before_order_cut_off' | 'closing' => {
+  const timing = task?.master_task?.timing || ''
+  // If specific_time is defined, use due_time to decide bucket per business rules
+  if (timing === 'specific_time' && task?.master_task?.due_time) {
+    const mins = parseDueTimeToMinutes(task.master_task.due_time)
+    if (mins < OPENING_MIN) return 'opening'
+    if (mins < ANYTIME_MIN) return 'anytime_during_day'
+    if (mins < CUTOFF_MIN) return 'before_order_cut_off'
+    // from cutoff to closing and beyond -> closing
+    return 'closing'
+  }
+  // Non-specific times map by timing groups
+  return mapTimingToBucket(timing)
+}
+
+const getTimingInitial = (task: ChecklistTask): string => {
+  const b = getTimingBucket(task)
+  if (b === 'opening') return 'O'
+  if (b === 'anytime_during_day') return 'A'
+  if (b === 'before_order_cut_off') return 'B'
+  return 'C'
+}
+
+const getPublishTooltip = (task: ChecklistTask): string => {
+  try {
+    // Prefer created_at (ISO) then publish_delay (date) as the publish anchor
+    const createdIso = task?.master_task?.created_at
+    const publishDelay = task?.master_task?.publish_delay // YYYY-MM-DD
+    let d: Date | null = null
+    if (createdIso) {
+      d = toAustralianTime(new Date(createdIso))
+    } else if (publishDelay) {
+      // combine publishDelay date with 09:00 as a neutral time
+      const dateOnly = parseAustralianDate(publishDelay)
+      d = toAustralianTime(dateOnly)
+    }
+    if (!d) return ''
+    const datePart = formatAustralianDate(d)
+    const timePart = d.toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit' })
+    return `${datePart} ${timePart}`
+  } catch {
+    return ''
+  }
+}
+
 // Helper function to convert position name to responsibility value
 // This must match the nameToResponsibilityValue function in position-utils.ts
 const nameToResponsibilityValue = (positionName: string): string => {
@@ -570,7 +632,7 @@ const getFrequencyRankForDay = (frequencies: string[] = [], dateStr: string) => 
   const update = (r: number) => { if (r < rank) rank = r }
 
   // Based on requirements: Once Off, Every Day, Once Weekly, Monday ~ Saturday, Once Monthly, Start of Every Month, Start of Month (Jan) ~ Start of Month (Dec), End of Every Month, End of Month (Jan) ~ End of Month (Dec)
-  
+
   // 1) Once Off
   if (lower.includes('once_off') || lower.includes('once_off_sticky')) update(1)
   // 2) Every Day
@@ -1276,18 +1338,10 @@ export default function RoleChecklistPage() {
         return false
       }
 
-      // Timing filter
+      // Timing filter (uses due_time when timing is specific_time)
       if (selectedTiming !== "all") {
-        // Map timing values to match the database values
-        const timingMap: Record<string, string[]> = {
-          'opening': ['opening', 'start_of_day', 'before_opening'],
-          'anytime_during_day': ['anytime_during_day', 'during_business_hours', 'morning', 'afternoon', 'lunch_time'],
-          'before_order_cut_off': ['specific_time'], // Assuming specific_time represents before order cut off
-          'closing': ['closing', 'end_of_day', 'after_closing', 'evening']
-        }
-
-        const allowedTimings = timingMap[selectedTiming] || []
-        if (!allowedTimings.includes(task.master_task.timing)) {
+        const bucket = getTimingBucket(task)
+        if (bucket !== selectedTiming) {
           return false
         }
       }
@@ -1566,20 +1620,20 @@ export default function RoleChecklistPage() {
                       missed: 0,
                       completed: 0
                     }
-                    
+
                     filteredAndSortedTasks.forEach(task => {
                       const status = calculateDynamicTaskStatus(task, currentDate)
                       statusCounts[status as keyof typeof statusCounts]++
                     })
-                    
+
                     const parts = [`${filteredAndSortedTasks.length} tasks`]
-                    
+
                     if (statusCounts.completed > 0) parts.push(`${statusCounts.completed} completed`)
                     if (statusCounts.not_due_yet > 0) parts.push(`${statusCounts.not_due_yet} not due yet`)
                     if (statusCounts.due_today > 0) parts.push(`${statusCounts.due_today} due today`)
                     if (statusCounts.overdue > 0) parts.push(`${statusCounts.overdue} overdue`)
                     if (statusCounts.missed > 0) parts.push(`${statusCounts.missed} missed`)
-                    
+
                     return parts.join(' • ')
                   })()}
                   {totalPages > 1 && (
@@ -1759,8 +1813,21 @@ export default function RoleChecklistPage() {
                     Closing
                   </button>
                 </div>
+                            <div className="flex flex-col sm:flex-row space-x-1 bg-gray-100 px-2 py-1 rounded-lg gap-1">
+              <button
+                onClick={() => setSelectedTiming("all")}
+                className={`px-3 py-1 rounded-lg text-sm font-medium transition-colors ${selectedTiming === "all"
+                  ? "bg-white text-[var(--color-primary)] shadow-sm"
+                  : "bg-gray-50 border border-white text-gray-600 hover:text-gray-900"
+                  }`}
+              >
+                View All
+              </button>
+            </div>
+
               </div>
             </div>
+
           </CardHeader>
           <CardContent className="p-0">
             {filteredAndSortedTasks.length === 0 ? (
@@ -1774,6 +1841,7 @@ export default function RoleChecklistPage() {
                   <Table className="table-fixed w-full">
                     <TableHeader>
                       <TableRow>
+                        <TableHead className="w-[4%] py-3 bg-gray-50 text-center">Publish</TableHead>
                         <TableHead className={isAdmin ? "w-[25%] py-3 bg-gray-50" : "w-[31%] py-3 bg-gray-50"}>
                           Title & Description
                         </TableHead>
@@ -1807,16 +1875,33 @@ export default function RoleChecklistPage() {
                           className="hover:bg-gray-50"
                         >
 
+                          {/* Publish column */}
+                          <TableCell className="py-3 text-center">
+                            <div className="flex justify-center">
+                              {task.is_new ? (
+                                <span title={getPublishTooltip(task)} className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-blue-600 text-white text-[10px] font-bold">N</span>
+                              ) : (
+                                <span title={getPublishTooltip(task)} className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-gray-100 text-gray-300 text-[10px] font-bold border border-gray-100">
+                                  {getTimingInitial(task)}
+                                </span>
+                              )}
+                            </div>
+                          </TableCell>
+
                           <TableCell className="py-3">
                             <div className="max-w-full">
-                              {task.master_task.title && task.master_task.title.trim() && (
-                                <div className="font-medium truncate">{task.master_task.title}</div>
-                              )}
-                              {task.master_task.description && (
-                                <div className="text-sm text-gray-600 truncate">
-                                  {task.master_task.description}
+                              <div className="flex items-center gap-2">
+                                <div className="min-w-0">
+                                  {task.master_task.title && task.master_task.title.trim() && (
+                                    <div className="font-medium truncate">{task.master_task.title}</div>
+                                  )}
+                                  {task.master_task.description && (
+                                    <div className="text-sm text-gray-600 truncate">
+                                      {task.master_task.description}
+                                    </div>
+                                  )}
                                 </div>
-                              )}
+                              </div>
                             </div>
                           </TableCell>
                           {isAdmin && (
@@ -1853,7 +1938,11 @@ export default function RoleChecklistPage() {
                               <span className="text-sm text-gray-500">No due time</span>
                             )}
                           </TableCell>
-                          <TableCell className="py-3">{getStatusBadge(task)}</TableCell>
+                          <TableCell className="py-3">
+                            <div className="flex items-center gap-2">
+                              {getStatusBadge(task)}
+                            </div>
+                          </TableCell>
                           <TableCell className="py-3">
                             <div className="flex items-center space-x-2">
                               {/* Hide Done/Undo buttons for admins; show only details */}
@@ -1934,10 +2023,22 @@ export default function RoleChecklistPage() {
                     <Card key={`${task.id}-${refreshKey}`} className="border border-gray-200">
                       <CardContent className="px-4">
                         <div className="space-y-3">
+                          {/* Publish badge */}
+                          <div className="flex justify-start">
+                            {task.is_new ? (
+                              <span title={getPublishTooltip(task)} className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-blue-600 text-white text-[10px] font-bold">N</span>
+                            ) : (
+                              <span title={getPublishTooltip(task)} className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-gray-200 text-gray-700 text-[10px] font-bold border border-gray-300">
+                                {getTimingInitial(task)}
+                              </span>
+                            )}
+                          </div>
                           {/* Title and Description */}
                           <div>
                             {task.master_task.title && task.master_task.title.trim() && (
-                              <h3 className="font-medium text-base truncate">{task.master_task.title}</h3>
+                              <h3 className="font-medium text-base truncate flex items-center gap-2">
+                                <span className="truncate">{task.master_task.title}</span>
+                              </h3>
                             )}
                             {task.master_task.description && (
                               <p className="text-sm text-gray-600 mt-1 truncate">{task.master_task.description}</p>
