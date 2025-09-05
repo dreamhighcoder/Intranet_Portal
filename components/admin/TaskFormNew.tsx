@@ -59,6 +59,7 @@ interface TaskFormProps {
 export default function TaskFormNew({ task, onSubmit, onCancel }: TaskFormProps) {
   const [showConfirmModal, setShowConfirmModal] = useState(false)
   const [responsibilityOptions, setResponsibilityOptions] = useState<{ value: string; label: string }[]>([])
+  const [isTimingAutoUpdate, setIsTimingAutoUpdate] = useState(false) // Flag to prevent infinite loops
 
   const isEditing = !!task
 
@@ -83,6 +84,33 @@ export default function TaskFormNew({ task, onSubmit, onCancel }: TaskFormProps)
   const { watch, setValue, formState: { errors, isValid } } = form
   const frequencies = watch('frequencies')
   const timing = watch('timing')
+  const dueTime = watch('due_time')
+
+  // Function to determine timing based on due time
+  const getTimingFromDueTime = (timeString: string): string => {
+    if (!timeString) return 'opening'
+    
+    // Convert time string to minutes for comparison
+    const [hours, minutes] = timeString.split(':').map(Number)
+    const totalMinutes = hours * 60 + minutes
+    
+    // Define time boundaries in minutes
+    const openingTime = 9 * 60 + 30  // 09:30 = 570 minutes
+    const anytimeDuringDayTime = 16 * 60 + 30  // 16:30 = 990 minutes
+    const beforeOrderCutOffTime = 16 * 60 + 55  // 16:55 = 1015 minutes
+    const closingTime = 17 * 60  // 17:00 = 1020 minutes
+    
+    // Determine timing based on the specified rules
+    if (totalMinutes <= openingTime) {
+      return 'opening'
+    } else if (totalMinutes <= anytimeDuringDayTime) {
+      return 'anytime_during_day'
+    } else if (totalMinutes <= beforeOrderCutOffTime) {
+      return 'before_order_cut_off'
+    } else {
+      return 'closing'
+    }
+  }
 
   // Load dynamic responsibilities from Positions + shared
   useEffect(() => {
@@ -100,10 +128,27 @@ export default function TaskFormNew({ task, onSubmit, onCancel }: TaskFormProps)
 
   // Auto-fill due_time based on timing selection
   useEffect(() => {
-    if (timing && DEFAULT_DUE_TIMES[timing as keyof typeof DEFAULT_DUE_TIMES]) {
+    if (timing && DEFAULT_DUE_TIMES[timing as keyof typeof DEFAULT_DUE_TIMES] && !isTimingAutoUpdate) {
       setValue('due_time', DEFAULT_DUE_TIMES[timing as keyof typeof DEFAULT_DUE_TIMES])
     }
-  }, [timing, setValue])
+  }, [timing, setValue, isTimingAutoUpdate])
+
+  // Auto-update timing based on manual due_time changes
+  useEffect(() => {
+    if (dueTime && !isTimingAutoUpdate) {
+      const newTiming = getTimingFromDueTime(dueTime)
+      const currentTiming = form.getValues('timing')
+      
+      // Only update timing if it's different and the due time doesn't match the default for current timing
+      const currentDefaultTime = DEFAULT_DUE_TIMES[currentTiming as keyof typeof DEFAULT_DUE_TIMES]
+      if (newTiming !== currentTiming && dueTime !== currentDefaultTime) {
+        setIsTimingAutoUpdate(true)
+        setValue('timing', newTiming as any)
+        // Reset the flag after a short delay to allow the timing update to complete
+        setTimeout(() => setIsTimingAutoUpdate(false), 100)
+      }
+    }
+  }, [dueTime, setValue, form, getTimingFromDueTime])
 
   const handleSubmit = (data: TaskFormData) => {
     // Create a base task data object with required fields
@@ -320,7 +365,7 @@ export default function TaskFormNew({ task, onSubmit, onCancel }: TaskFormProps)
                 </div>
                 <div>
                   <p className="text-xs text-muted-foreground mt-1">
-                    Due time is auto-filled based on Timing selection. Can be overridden.
+                    Due time is auto-filled based on Timing selection. Manual changes will update the Timing accordingly.
                   </p>
                 </div>
               </div>

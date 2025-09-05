@@ -659,7 +659,7 @@ export class TaskRecurrenceEngine {
    */
   calculateDueTime(task: MasterTask): string {
     // Use override if present, otherwise use default timing
-    return task.due_time || DEFAULT_DUE_TIMES[task.timing]
+    return task.due_time ?? DEFAULT_DUE_TIMES[task.timing]
   }
 
   /**

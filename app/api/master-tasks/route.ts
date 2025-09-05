@@ -86,10 +86,10 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Failed to fetch master tasks' }, { status: 500 })
     }
 
-    // Add due_time based on timing for each task
+    // Add due_time based on timing for each task (only if due_time is null/undefined)
     const tasksWithDueTime = (masterTasks || []).map(task => ({
       ...task,
-      due_time: task.due_time || DEFAULT_DUE_TIMES[task.timing as keyof typeof DEFAULT_DUE_TIMES] || '17:00'
+      due_time: task.due_time ?? DEFAULT_DUE_TIMES[task.timing as keyof typeof DEFAULT_DUE_TIMES] ?? '17:00'
     }))
 
     console.log('Master tasks GET - Successfully fetched', tasksWithDueTime.length, 'tasks')
