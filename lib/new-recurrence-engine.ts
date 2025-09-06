@@ -242,7 +242,24 @@ export class NewRecurrenceEngine {
    * Check if a task is active and within its valid date range
    */
   private isTaskActiveOnDate(task: MasterTask, date: Date): boolean {
-    if (!task.active) return false
+    // Check if task is active (handle both interface formats)
+    const isActive = (task as any).publish_status === 'active' || task.active === true
+    if (!isActive) return false
+    
+    // Check start_date if present
+    const startDate = (task as any).start_date
+    if (startDate) {
+      const taskStartDate = parseAustralianDate(startDate)
+      if (date < taskStartDate) return false
+    }
+    
+    // Check end_date if present
+    const endDate = (task as any).end_date
+    if (endDate) {
+      const taskEndDate = parseAustralianDate(endDate)
+      if (date > taskEndDate) return false
+    }
+    
     return true
   }
 
@@ -517,12 +534,12 @@ export class NewRecurrenceEngine {
     const weekDue = this.findPreviousBusinessDay(weekSaturday)
     const effectiveDue = weekDue < appearanceDate ? appearanceDate : weekDue
 
-    // Appear each day from appearanceDate through effectiveDue (carry)
-    if (date >= appearanceDate && date <= effectiveDue) {
+    // Weekday tasks should ONLY appear on their designated day (no carry)
+    if (date.getTime() === appearanceDate.getTime()) {
       return {
         shouldAppear: true,
-        isCarryOver: date.getTime() > appearanceDate.getTime(),
-        dueDate: formatAustralianDate(effectiveDue),
+        isCarryOver: false,
+        dueDate: formatAustralianDate(appearanceDate),
         originalAppearanceDate: formatAustralianDate(appearanceDate)
       }
     }
@@ -875,7 +892,9 @@ export class NewRecurrenceEngine {
   private getWeekMonday(date: Date): Date {
     const day = date.getDay();
     const diff = date.getDate() - day + (day === 0 ? -6 : 1);
-    return new Date(date.setDate(diff));
+    const monday = new Date(date);
+    monday.setDate(diff);
+    return monday;
   }
 
   private getWeekSaturday(date: Date): Date {

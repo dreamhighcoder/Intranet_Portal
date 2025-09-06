@@ -76,6 +76,12 @@ export async function GET(request: NextRequest) {
     if (!isAdminRequest) {
       const { getSearchOptions } = await import('@/lib/responsibility-mapper')
       const searchRoles = getSearchOptions(normalizedRole)
+      console.log('Role filtering:', {
+        originalRole: role,
+        normalizedRole,
+        searchRoles,
+        isAdminRequest
+      })
       taskQuery = taskQuery.overlaps('responsibility', searchRoles)
     }
 
@@ -92,6 +98,24 @@ export async function GET(request: NextRequest) {
     // Create holiday helper and recurrence engine for filtering
     const holidayChecker = await createHolidayChecker()
     const recurrenceEngine = new NewRecurrenceEngine(holidayChecker)
+
+    // Debug logging for Saturday date
+    if (validatedDate === '2025-09-06') {
+      console.log('Processing tasks for Saturday 2025-09-06')
+      console.log('Total tasks before filtering:', roleFiltered.length)
+      const saturdayTasks = roleFiltered.filter(task => 
+        task.frequencies && task.frequencies.includes('saturday')
+      )
+      console.log('Saturday frequency tasks found:', saturdayTasks.length)
+      saturdayTasks.forEach(task => {
+        console.log('Saturday task:', {
+          id: task.id,
+          title: task.title,
+          frequencies: task.frequencies,
+          publish_status: task.publish_status
+        })
+      })
+    }
 
     // Filter tasks based on recurrence rules and date (using frequencies[])
     const filteredTasks = roleFiltered.filter(task => {
@@ -139,7 +163,20 @@ export async function GET(request: NextRequest) {
           due_date: task.due_date || undefined,
         }
 
-        return recurrenceEngine.shouldTaskAppearOnDate(masterTask, validatedDate)
+        const shouldAppear = recurrenceEngine.shouldTaskAppearOnDate(masterTask, validatedDate)
+        
+        // Debug logging for Saturday tasks
+        if (masterTask.frequencies.includes('saturday') && validatedDate === '2025-09-06') {
+          console.log('Saturday task server debug:', {
+            taskTitle: masterTask.title,
+            frequencies: masterTask.frequencies,
+            date: validatedDate,
+            shouldAppear,
+            isSundayOrHoliday: recurrenceEngine['isSundayOrHoliday'](parseAustralianDate(validatedDate))
+          })
+        }
+        
+        return shouldAppear
       } catch (error) {
         console.error('Error checking task recurrence:', error)
         return true // Default to showing the task if there's an error

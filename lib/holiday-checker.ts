@@ -72,6 +72,7 @@ export class HolidayChecker implements HolidayChecker {
         console.warn('Failed to load public holidays:', error.message)
         // Continue with empty holidays
       } else if (holidays) {
+        console.log('Loading public holidays:', holidays.length, 'holidays found')
         // Clear existing holidays and add new ones
         this.helper.clearHolidays()
         holidays.forEach(holiday => {
@@ -81,6 +82,14 @@ export class HolidayChecker implements HolidayChecker {
             region: holiday.region || 'National'
           })
         })
+        
+        // Debug: check if 2025-09-06 is in the loaded holidays
+        const sept6Holiday = holidays.find(h => h.date === '2025-09-06')
+        if (sept6Holiday) {
+          console.log('Found 2025-09-06 as holiday:', sept6Holiday)
+        } else {
+          console.log('2025-09-06 is NOT in the loaded holidays')
+        }
       }
 
       this.initialized = true
@@ -133,7 +142,20 @@ export class HolidayChecker implements HolidayChecker {
    */
   isHolidaySync(date: Date): boolean {
     const australianDate = toAustralianTime(date)
-    return this.helper.isHoliday(australianDate)
+    const result = this.helper.isHoliday(australianDate)
+    
+    // Debug logging for Saturday 2025-09-06
+    if (formatAustralianDate(australianDate) === '2025-09-06') {
+      console.log('Holiday check for 2025-09-06:', {
+        originalDate: date.toISOString(),
+        australianDate: australianDate.toISOString(),
+        australianDateFormatted: formatAustralianDate(australianDate),
+        isHoliday: result,
+        initialized: this.initialized
+      })
+    }
+    
+    return result
   }
 
   /**

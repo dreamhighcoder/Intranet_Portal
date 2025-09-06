@@ -277,14 +277,55 @@ const calculateDynamicTaskStatus = (task: ChecklistTask, currentDate: string): s
         case 'monday': case 'tuesday': case 'wednesday': case 'thursday': case 'friday': case 'saturday': {
           const idx: any = { monday: 1, tuesday: 2, wednesday: 3, thursday: 4, friday: 5, saturday: 6 }
           const sched = new Date(weekMon); sched.setDate(weekMon.getDate() + (idx[freq] - 1))
-          let due = new Date(sched)
-          if (idx[freq] === 1) { while (!isBusinessDay(due) && due <= weekSat) due.setDate(due.getDate() + 1) }
-          else {
-            let shifted = new Date(due); while (!isBusinessDay(shifted) && shifted >= weekMon) shifted.setDate(shifted.getDate() - 1)
-            if (!isBusinessDay(due)) { if (shifted < weekMon) { shifted = new Date(due); while (!isBusinessDay(shifted) && shifted <= weekSat) shifted.setDate(shifted.getDate() + 1) } due = shifted }
+          
+          // Debug logging for Saturday frequency
+          if (freq === 'saturday') {
+            console.log('Saturday computeCutoffs debug:', {
+              frequency: freq,
+              instanceDate: ymd(instanceDate),
+              weekMon: ymd(weekMon),
+              weekSat: ymd(weekSat),
+              sched: ymd(sched),
+              isHoliday: isHoliday(sched),
+              isBusinessDay: isBusinessDay(sched)
+            })
           }
-          let carryEnd = new Date(weekSat); while (!isBusinessDay(carryEnd) && carryEnd >= weekMon) carryEnd.setDate(carryEnd.getDate() - 1)
-          r.appearance = clampAppearance(due); r.dueDate = due; r.dueTime = dueTimeStr; r.lockDate = carryEnd; r.lockTime = '23:59'; r.carryEnd = carryEnd; return r
+          
+          // Determine appearance date based on holiday shifting rules
+          let appearanceDate = new Date(sched)
+          if (isHoliday(sched)) {
+            if (idx[freq] === 1) {
+              // Monday: always move forward within the same week
+              while (!isBusinessDay(appearanceDate) && appearanceDate <= weekSat) {
+                appearanceDate.setDate(appearanceDate.getDate() + 1)
+              }
+            } else {
+              // Tue–Sat: prefer nearest earlier within the same week; if none, move forward
+              let shifted = new Date(sched)
+              while (!isBusinessDay(shifted) && shifted >= weekMon) {
+                shifted.setDate(shifted.getDate() - 1)
+              }
+              if (shifted >= weekMon) {
+                appearanceDate = shifted
+              } else {
+                // No earlier business day in week, move forward
+                while (!isBusinessDay(appearanceDate) && appearanceDate <= weekSat) {
+                  appearanceDate.setDate(appearanceDate.getDate() + 1)
+                }
+              }
+            }
+          }
+          
+          // If no valid appearance date found in the week, skip
+          if (appearanceDate.getTime() > weekSat.getTime() || !isBusinessDay(appearanceDate)) {
+            r.appearance = null; r.dueDate = null; r.dueTime = null; r.lockDate = null; r.lockTime = null; r.carryEnd = null; return r
+          }
+          
+          // Due date: last business day of the week (Saturday or earlier if Saturday is holiday)
+          let carryEnd = new Date(weekSat); while (!isBusinessDay(carryEnd) && carryEnd.getTime() >= weekMon.getTime()) carryEnd.setDate(carryEnd.getDate() - 1)
+          const effectiveDue = carryEnd.getTime() < appearanceDate.getTime() ? appearanceDate : carryEnd
+          
+          r.appearance = clampAppearance(appearanceDate); r.dueDate = effectiveDue; r.dueTime = dueTimeStr; r.lockDate = effectiveDue; r.lockTime = '23:59'; r.carryEnd = effectiveDue; return r
         }
         case 'start_of_every_month': case 'start_of_month_jan': case 'start_of_month_feb': case 'start_of_month_mar': case 'start_of_month_apr': case 'start_of_month_may': case 'start_of_month_jun': case 'start_of_month_jul': case 'start_of_month_aug': case 'start_of_month_sep': case 'start_of_month_oct': case 'start_of_month_nov': case 'start_of_month_dec': {
           const first = new Date(instanceDate.getFullYear(), instanceDate.getMonth(), 1)
@@ -326,6 +367,22 @@ const calculateDynamicTaskStatus = (task: ChecklistTask, currentDate: string): s
 
     for (const f of frequencies) {
       const c = computeCutoffs(f)
+      
+      // Debug logging for Saturday tasks
+      if (f === 'saturday') {
+        console.log('Saturday task debug:', {
+          frequency: f,
+          taskTitle: task.master_task?.title,
+          currentDate,
+          cutoffs: c,
+          hasAppearance: !!c.appearance,
+          hasDueDate: !!c.dueDate
+        })
+      }
+      
+      // Skip if no valid cutoffs (e.g., weekday task with no valid appearance date)
+      if (!c.appearance || !c.dueDate) continue
+      
       const appear: Date = c.appearance
       const due: Date = c.dueDate
       const lockDate: Date | null = c.lockDate || null
@@ -1027,6 +1084,20 @@ export default function RoleChecklistPage() {
         console.log('Tasks received:', data.data?.length || 0)
         console.log('📋 Setting tasks in state...')
         const newTasks = data.data || []
+        
+        // Debug logging for Saturday tasks
+        const saturdayTasks = newTasks.filter((task: ChecklistTask) => 
+          task.master_task?.frequencies?.includes('saturday')
+        )
+        if (saturdayTasks.length > 0) {
+          console.log('Saturday tasks from API:', saturdayTasks.map((task: ChecklistTask) => ({
+            title: task.master_task?.title,
+            frequencies: task.master_task?.frequencies,
+            date: task.date,
+            status: task.status
+          })))
+        }
+        
         setTasks(newTasks)
         console.log('✅ Tasks set in state successfully, new count:', newTasks.length)
 
