@@ -2,6 +2,18 @@
 
 A comprehensive Next.js-based intranet portal for pharmacy task management with role-based access control, automated task generation, and comprehensive reporting features.
 
+## ⏰ **CRITICAL: AUSTRALIAN TIMEZONE REQUIREMENT**
+
+**🇦🇺 ALL TIMES IN THIS PROJECT MUST BE AUSTRALIAN TIME (Sydney/Melbourne timezone)**
+
+- **Current time references:** Always use Australian time (AEDT/AEST)
+- **Task scheduling:** All due times and dates are in Australian timezone
+- **Database times:** Stored and processed in Australian timezone
+
+- **Local system time is IRRELEVANT** - only Australian time matters
+
+This is a **MANDATORY** requirement for all development, analysis, and operations.
+
 ## 📋 Overview
 
 This application allows pharmacists to track, manage, and complete daily tasks with:
@@ -97,7 +109,7 @@ This application allows pharmacists to track, manage, and complete daily tasks w
 │   ├── supabase.ts       # Database client configuration
 │   ├── position-auth-context.tsx  # Authentication context
 │   ├── api-client.ts     # API service layer
-│   ├── task-recurrence-status-engine.ts  # Advanced recurrence engine
+│   ├── new-recurrence-engine.ts        # Complete implementation (36 rules)
 │   ├── new-task-generator.ts  # Task generation orchestration
 │   ├── task-database-adapter.ts  # Database integration layer
 │   ├── status-manager.ts # Task status automation
@@ -111,7 +123,6 @@ This application allows pharmacists to track, manage, and complete daily tasks w
 ├── scripts/              # Utility and maintenance scripts
 │   ├── setup-database.ts # Database setup automation
 │   ├── check-schema.ts   # Schema validation
-│   ├── deploy-recurrence-engine.ts  # Production deployment
 │   └── ...               # Other utility scripts
 └── types/                # TypeScript type definitions
 ```
@@ -221,9 +232,6 @@ pnpm run check-schema
 
 # Run database migrations
 pnpm run run-migration
-
-# Deploy recurrence engine updates
-pnpm run deploy-recurrence-engine
 ```
 
 ### Automated Background Jobs
@@ -293,11 +301,11 @@ pnpm run update-statuses-prod
 ### Adding New Recurrence Patterns
 1. **Update Engine Logic:**
    ```typescript
-   // In lib/task-recurrence-status-engine.ts
+   // In lib/new-recurrence-engine.ts
    // Add new frequency type to FrequencyType enum
-   // Implement generation logic in generateInstancesForFrequency()
+   // Implement generation logic in shouldTaskAppearOnDate()
    // Add due date calculation in calculateDueDate()
-   // Define locking behavior in shouldLockInstance()
+   // Define carry behavior in getCarryUntilDate()
    ```
 
 2. **Update UI Components:**
@@ -309,8 +317,8 @@ pnpm run update-statuses-prod
 
 3. **Test Implementation:**
    ```bash
-   # Use deployment script to test new patterns
-   pnpm run deploy-recurrence-engine
+   # Test new patterns using the new recurrence engine
+   # Use the new-recurrence-engine.ts for proper implementation
    ```
 
 ### Database Migrations

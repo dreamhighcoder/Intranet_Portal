@@ -61,7 +61,7 @@ export async function GET(request: NextRequest) {
 
     if (tasksError) {
       console.error('Error fetching master tasks:', tasksError)
-      const fallback = { total: 0, newSinceNine: 0, dueToday: 0, overdue: 0, completed: 0 }
+      const fallback = { total: 0, newSinceNine: 0, dueToday: 0, overdue: 0, missed: 0, completed: 0 }
       return NextResponse.json({
         success: true,
         data: fallback,
@@ -169,6 +169,7 @@ export async function GET(request: NextRequest) {
       newSinceNine: 0,    // tasks that appeared today
       dueToday: 0,        // pending and scheduled for today
       overdue: 0,         // pending and past due time
+      missed: 0,          // tasks that are locked and can no longer be completed
       completed: 0        // completed today by this role
     }
 
@@ -185,17 +186,32 @@ export async function GET(request: NextRequest) {
         return
       }
 
+      // Check instance status if it exists
+      if (instance?.status === 'missed') {
+        counts.missed++
+        return
+      }
+
+      if (instance?.status === 'overdue') {
+        counts.total++
+        counts.overdue++
+        return
+      }
+
       // Pending tasks to do today
       counts.total++
 
-      // Due time calculation: use task.due_time or treat as end-of-day
-      const due = task.due_time ? task.due_time : '23:59'
-      const dueDateTime = createAustralianDateTime(validatedDate, due)
-
-      // Only compute due/overdue for today
-      if (validatedDate === getAustralianToday()) {
+      // Only compute due/overdue for today if no explicit status
+      if (validatedDate === getAustralianToday() && !instance?.status) {
         counts.dueToday++
+        
+        // Due time calculation: use task.due_time or treat as end-of-day
+        const due = task.due_time ? task.due_time : '23:59'
+        const dueDateTime = createAustralianDateTime(validatedDate, due)
+        
         if (now > dueDateTime) counts.overdue++
+      } else if (validatedDate === getAustralianToday()) {
+        counts.dueToday++
       }
 
       // New tasks: align with checklist page "is_new" logic (12 hours after activation, not completed)
@@ -316,7 +332,7 @@ export async function GET(request: NextRequest) {
   } catch (error) {
     console.error('Checklist counts API error:', error)
 
-    const fallback = { total: 0, newSinceNine: 0, dueToday: 0, overdue: 0, completed: 0 }
+    const fallback = { total: 0, newSinceNine: 0, dueToday: 0, overdue: 0, missed: 0, completed: 0 }
     return NextResponse.json({
       success: true,
       data: fallback,

@@ -249,15 +249,13 @@ export async function GET(request: NextRequest) {
     const now = getAustralianNow()
     const checklistData = filteredTasks.map(task => {
       const existingInstance = instanceMap.get(task.id)
-      const dueTime = task.due_time ? createAustralianDateTime(validatedDate, task.due_time) : null
-      const isOverdue = dueTime ? now > dueTime : false
 
       // Get position-specific completions for this task
       const taskCompletions = existingInstance ? completionsByInstanceMap.get(existingInstance.id) || [] : []
       
-      // Determine status based on position-specific completion or existing instance
-      let status: ChecklistInstanceStatus = 'pending'
+      // Determine completion status based on position-specific completion
       let isCompletedForCurrentPosition = false
+      let isCompletedByAnyPosition = false
 
       if (existingInstance) {
         if (!isAdminRequest) {
@@ -265,23 +263,54 @@ export async function GET(request: NextRequest) {
           isCompletedForCurrentPosition = taskCompletions.some(
             (completion) => completion.position_name.toLowerCase().replace(/[^a-z0-9]+/g, '-') === normalizedRole
           )
-          status = isCompletedForCurrentPosition ? 'completed' : (isOverdue ? 'overdue' : 'pending')
         } else {
-          // Admin: completed if any position has completed; otherwise, avoid marking completed from legacy status
-          if (taskCompletions.length > 0) {
-            status = 'completed'
-          } else {
-            const dbStatus = existingInstance.status
-            if (dbStatus === 'overdue') {
-              status = 'overdue'
-            } else {
-              // Treat legacy 'done' without position completions as pending for clarity
-              status = 'pending'
-            }
-          }
+          // Admin: completed if any position has completed
+          isCompletedByAnyPosition = taskCompletions.length > 0
         }
-      } else if (isOverdue) {
-        status = 'overdue'
+      }
+
+      // Convert task to NewMasterTask format for status calculation
+      const masterTaskForStatus: NewMasterTask = {
+        id: task.id,
+        title: task.title || '',
+        description: task.description || '',
+        responsibility: task.responsibility || [],
+        categories: task.categories || [],
+        frequencies: (task.frequencies || []) as any,
+        timing: task.timing || 'anytime_during_day',
+        active: task.publish_status === 'active',
+        publish_delay: task.publish_delay || undefined,
+        due_date: task.due_date || undefined,
+        due_time: task.due_time || undefined,
+        created_at: task.created_at || undefined,
+        start_date: (task as any).start_date || undefined,
+        end_date: (task as any).end_date || undefined,
+      }
+
+      // Calculate proper status using recurrence engine
+      const isCompleted = isAdminRequest ? isCompletedByAnyPosition : isCompletedForCurrentPosition
+      const statusResult = recurrenceEngine.calculateTaskStatus(masterTaskForStatus, validatedDate, now, isCompleted)
+      
+      // Map status to ChecklistInstanceStatus
+      let status: ChecklistInstanceStatus = 'pending'
+      switch (statusResult.status) {
+        case 'completed':
+          status = 'completed'
+          break
+        case 'not_due_yet':
+          status = 'pending'
+          break
+        case 'due_today':
+          status = 'pending'
+          break
+        case 'overdue':
+          status = 'overdue'
+          break
+        case 'missed':
+          status = 'missed'
+          break
+        default:
+          status = 'pending'
       }
 
       // Prepare position completion data for the UI
@@ -403,6 +432,13 @@ export async function GET(request: NextRequest) {
         position_completions: positionCompletionData,
         is_completed_for_position: isCompletedForCurrentPosition,
         is_new,
+        // Add status calculation details
+        detailed_status: statusResult.status,
+        due_date: statusResult.dueDate,
+        due_time: statusResult.dueTime,
+        lock_date: statusResult.lockDate,
+        lock_time: statusResult.lockTime,
+        can_complete: statusResult.canComplete,
         master_task: {
           id: task.id,
           title: task.title,

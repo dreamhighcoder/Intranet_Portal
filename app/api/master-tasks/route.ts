@@ -287,11 +287,30 @@ export async function POST(request: NextRequest) {
 
 
 
-    // After successfully creating the master task, generate task instances
+    // After successfully creating the master task, generate task instances for today and future dates
     try {
-      const { generateInstancesForTask } = await import('@/lib/task-instance-generator')
-      const generationResult = await generateInstancesForTask(masterTask.id)
-      console.log('Task instances generated for new master task:', generationResult)
+      const { runNewDailyGeneration } = await import('@/lib/new-task-generator')
+      const { getAustralianToday } = await import('@/lib/timezone-utils')
+      
+      const today = getAustralianToday()
+      console.log(`Generating task instances for new master task starting from: ${today}`)
+      
+      // Generate instances for today (this will create instances for all active tasks including the new one)
+      const generationResult = await runNewDailyGeneration(today, {
+        testMode: false,
+        dryRun: false,
+        forceRegenerate: false,
+        logLevel: 'info'
+      })
+      
+      console.log('Task instances generated for new master task:', {
+        date: today,
+        totalTasks: generationResult.totalTasks,
+        newInstances: generationResult.newInstances,
+        carryInstances: generationResult.carryInstances,
+        totalInstances: generationResult.totalInstances,
+        errors: generationResult.errors
+      })
     } catch (generationError) {
       console.error('Error generating task instances for new master task:', generationError)
       // Don't fail the master task creation if instance generation fails

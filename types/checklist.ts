@@ -37,7 +37,8 @@ export enum ChecklistInstanceStatus {
   IN_PROGRESS = 'in_progress',
   COMPLETED = 'completed',
   SKIPPED = 'skipped',
-  OVERDUE = 'overdue'
+  OVERDUE = 'overdue',
+  MISSED = 'missed'
 }
 
 /**

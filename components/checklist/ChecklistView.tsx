@@ -162,23 +162,19 @@ export default function ChecklistView({
       // Status filter
       if (selectedStatus !== "all") {
         if (selectedStatus === "overdue") {
-          if (task.status === "completed") return false
-          if (task.master_task?.due_time) {
-            // Compare in Australian timezone
-            const { createAustralianDateTime, getAustralianNow } = await import('@/lib/timezone-utils')
-            const dueTime = createAustralianDateTime(date, task.master_task.due_time)
-            const now = getAustralianNow()
-            return now > dueTime
-          }
-          return false
+          return task.status === "overdue"
+        }
+        
+        if (selectedStatus === "missed") {
+          return task.status === "missed"
         }
         
         if (selectedStatus === "due_today") {
-          return task.status !== "completed"
+          return task.status === "pending" || task.status === "in_progress"
         }
         
         if (selectedStatus === "completed") {
-          return task.status === "completed"
+          return task.status === "completed" || task.status === "done"
         }
       }
 
@@ -196,7 +192,7 @@ export default function ChecklistView({
   }, [tasks])
 
   const getStatusBadge = (task: ChecklistTask) => {
-    if (task.status === "completed") {
+    if (task.status === "completed" || task.status === "done") {
       return (
         <Badge className="bg-green-100 text-green-800 border-green-200">
           ✅ Done
@@ -204,20 +200,34 @@ export default function ChecklistView({
       )
     }
 
-    // Check if overdue
-    if (task.master_task?.due_time) {
-      const dueTime = createAustralianDateTime(date, task.master_task.due_time)
-      const now = getAustralianNow()
-      if (now > dueTime) {
-        return (
-          <Badge className="bg-red-100 text-red-800 border-red-200">
-            <AlertTriangle className="h-3 w-3 mr-1" />
-            Overdue
-          </Badge>
-        )
-      }
+    if (task.status === "missed") {
+      return (
+        <Badge className="bg-gray-100 text-gray-800 border-gray-200">
+          <X className="h-3 w-3 mr-1" />
+          Missed
+        </Badge>
+      )
     }
 
+    if (task.status === "overdue") {
+      return (
+        <Badge className="bg-red-100 text-red-800 border-red-200">
+          <AlertTriangle className="h-3 w-3 mr-1" />
+          Overdue
+        </Badge>
+      )
+    }
+
+    if (task.status === "in_progress") {
+      return (
+        <Badge className="bg-blue-100 text-blue-800 border-blue-200">
+          <Clock className="h-3 w-3 mr-1" />
+          In Progress
+        </Badge>
+      )
+    }
+
+    // Default to pending/due today
     return (
       <Badge className="bg-orange-100 text-orange-800 border-orange-200">
         <Clock className="h-3 w-3 mr-1" />
@@ -278,6 +288,7 @@ export default function ChecklistView({
                 <SelectItem value="all">All Statuses</SelectItem>
                 <SelectItem value="due_today">Due Today</SelectItem>
                 <SelectItem value="overdue">Overdue</SelectItem>
+                <SelectItem value="missed">Missed</SelectItem>
                 <SelectItem value="completed">Completed</SelectItem>
               </SelectContent>
             </Select>
@@ -346,7 +357,7 @@ export default function ChecklistView({
                   {showActions && (
                     <TableCell>
                       <div className="flex items-center space-x-2">
-                        {task.status === "completed" ? (
+                        {task.status === "completed" || task.status === "done" ? (
                           <Button
                             size="sm"
                             variant="outline"
@@ -354,6 +365,16 @@ export default function ChecklistView({
                           >
                             <X className="h-4 w-4 mr-1" />
                             Undo
+                          </Button>
+                        ) : task.status === "missed" ? (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            disabled
+                            className="opacity-50 cursor-not-allowed"
+                          >
+                            <X className="h-4 w-4 mr-1" />
+                            Locked
                           </Button>
                         ) : (
                           <Button

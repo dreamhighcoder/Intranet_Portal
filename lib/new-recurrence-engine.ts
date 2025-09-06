@@ -33,13 +33,13 @@ import {
  * Complete frequency types matching the specification exactly
  */
 export enum NewFrequencyType {
-  // Basic frequencies
+  // Basic frequencies (Rules 1-3)
   ONCE_OFF = 'once_off',
   ONCE_OFF_STICKY = 'once_off_sticky',
   EVERY_DAY = 'every_day',
   ONCE_WEEKLY = 'once_weekly',
   
-  // Specific weekdays
+  // Specific weekdays (Rules 4-9) - ALL 6 WEEKDAYS (Sunday excluded as per spec)
   MONDAY = 'monday',
   TUESDAY = 'tuesday',
   WEDNESDAY = 'wednesday',
@@ -47,51 +47,49 @@ export enum NewFrequencyType {
   FRIDAY = 'friday',
   SATURDAY = 'saturday',
   
-  // Monthly frequencies
-  ONCE_MONTHLY = 'once_monthly',
-  START_OF_EVERY_MONTH = 'start_of_every_month',
+  // Monthly frequencies (Rules 10, 23-24)
+  START_OF_EVERY_MONTH = 'start_of_every_month', // Rule 10
+  ONCE_MONTHLY = 'once_monthly', // Rule 23
+  END_OF_EVERY_MONTH = 'end_of_every_month', // Rule 24
   
-  // Start of specific months
-  START_OF_MONTH_JAN = 'start_of_month_jan',
-  START_OF_MONTH_FEB = 'start_of_month_feb',
-  START_OF_MONTH_MAR = 'start_of_month_mar',
-  START_OF_MONTH_APR = 'start_of_month_apr',
-  START_OF_MONTH_MAY = 'start_of_month_may',
-  START_OF_MONTH_JUN = 'start_of_month_jun',
-  START_OF_MONTH_JUL = 'start_of_month_jul',
-  START_OF_MONTH_AUG = 'start_of_month_aug',
-  START_OF_MONTH_SEP = 'start_of_month_sep',
-  START_OF_MONTH_OCT = 'start_of_month_oct',
-  START_OF_MONTH_NOV = 'start_of_month_nov',
-  START_OF_MONTH_DEC = 'start_of_month_dec',
+  // Start of specific months (Rules 11-22)
+  START_OF_MONTH_JAN = 'start_of_month_jan', // Rule 11
+  START_OF_MONTH_FEB = 'start_of_month_feb', // Rule 12
+  START_OF_MONTH_MAR = 'start_of_month_mar', // Rule 13
+  START_OF_MONTH_APR = 'start_of_month_apr', // Rule 14
+  START_OF_MONTH_MAY = 'start_of_month_may', // Rule 15
+  START_OF_MONTH_JUN = 'start_of_month_jun', // Rule 16
+  START_OF_MONTH_JUL = 'start_of_month_jul', // Rule 17
+  START_OF_MONTH_AUG = 'start_of_month_aug', // Rule 18
+  START_OF_MONTH_SEP = 'start_of_month_sep', // Rule 19
+  START_OF_MONTH_OCT = 'start_of_month_oct', // Rule 20
+  START_OF_MONTH_NOV = 'start_of_month_nov', // Rule 21
+  START_OF_MONTH_DEC = 'start_of_month_dec', // Rule 22
   
-  // End of month frequencies
-  END_OF_EVERY_MONTH = 'end_of_every_month',
-  
-  // End of specific months
-  END_OF_MONTH_JAN = 'end_of_month_jan',
-  END_OF_MONTH_FEB = 'end_of_month_feb',
-  END_OF_MONTH_MAR = 'end_of_month_mar',
-  END_OF_MONTH_APR = 'end_of_month_apr',
-  END_OF_MONTH_MAY = 'end_of_month_may',
-  END_OF_MONTH_JUN = 'end_of_month_jun',
-  END_OF_MONTH_JUL = 'end_of_month_jul',
-  END_OF_MONTH_AUG = 'end_of_month_aug',
-  END_OF_MONTH_SEP = 'end_of_month_sep',
-  END_OF_MONTH_OCT = 'end_of_month_oct',
-  END_OF_MONTH_NOV = 'end_of_month_nov',
-  END_OF_MONTH_DEC = 'end_of_month_dec'
+  // End of specific months (Rules 25-36)
+  END_OF_MONTH_JAN = 'end_of_month_jan', // Rule 25
+  END_OF_MONTH_FEB = 'end_of_month_feb', // Rule 26
+  END_OF_MONTH_MAR = 'end_of_month_mar', // Rule 27
+  END_OF_MONTH_APR = 'end_of_month_apr', // Rule 28
+  END_OF_MONTH_MAY = 'end_of_month_may', // Rule 29
+  END_OF_MONTH_JUN = 'end_of_month_jun', // Rule 30
+  END_OF_MONTH_JUL = 'end_of_month_jul', // Rule 31
+  END_OF_MONTH_AUG = 'end_of_month_aug', // Rule 32
+  END_OF_MONTH_SEP = 'end_of_month_sep', // Rule 33
+  END_OF_MONTH_OCT = 'end_of_month_oct', // Rule 34
+  END_OF_MONTH_NOV = 'end_of_month_nov', // Rule 35
+  END_OF_MONTH_DEC = 'end_of_month_dec' // Rule 36
 }
 
 /**
- * Task status enum matching specification
+ * Task status enum matching specification exactly
  */
 export enum TaskStatus {
-  PENDING = 'pending',
-  IN_PROGRESS = 'in_progress', 
-  OVERDUE = 'overdue',
-  MISSED = 'missed',
-  DONE = 'done'
+  PENDING = 'pending',        // Initial state when created
+  IN_PROGRESS = 'in_progress', // When user starts working on task
+  OVERDUE = 'overdue',        // Past due time but not yet locked
+  MISSED = 'missed',          // Past lock time, instance is locked
+  DONE = 'done'              // Completed by user
 }
 
 /**
@@ -239,6 +237,125 @@ export class NewRecurrenceEngine {
   }
 
   /**
+   * Calculate the current status of a task for a specific date and time
+   */
+  calculateTaskStatus(task: MasterTask, date: string, currentDateTime: Date, isCompleted: boolean = false): {
+    status: 'not_due_yet' | 'due_today' | 'overdue' | 'missed' | 'completed'
+    dueDate: string | null
+    dueTime: string | null
+    lockDate: string | null
+    lockTime: string | null
+    canComplete: boolean
+  } {
+    if (isCompleted) {
+      return {
+        status: 'completed',
+        dueDate: null,
+        dueTime: null,
+        lockDate: null,
+        lockTime: null,
+        canComplete: false
+      }
+    }
+
+    const targetDate = parseAustralianDate(date)
+    const currentAustralianTime = toAustralianTime(currentDateTime)
+    const currentAustralianDate = parseAustralianDate(formatAustralianDate(currentAustralianTime))
+
+    // Find the best status across all frequencies
+    let bestStatus: 'not_due_yet' | 'due_today' | 'overdue' | 'missed' = 'not_due_yet'
+    let bestDueDate: string | null = null
+    let bestDueTime: string | null = null
+    let bestLockDate: string | null = null
+    let bestLockTime: string | null = null
+    let canComplete = true
+
+    const statusPriority = { 'not_due_yet': 1, 'due_today': 2, 'overdue': 3, 'missed': 4 }
+
+    for (const frequency of task.frequencies) {
+      const result = this.processTaskForDate(task, frequency, targetDate)
+      if (!result.shouldAppear) continue
+
+      const dueDate = parseAustralianDate(result.dueDate)
+      const dueTime = (task as any).due_time || '09:30'
+      const dueMoment = createAustralianDateTime(result.dueDate, dueTime)
+
+      // Determine lock time based on frequency
+      let lockMoment: Date | null = null
+      let lockDate: string | null = null
+      let lockTime: string | null = null
+
+      const hasOnceOffFrequency = frequency === NewFrequencyType.ONCE_OFF || frequency === NewFrequencyType.ONCE_OFF_STICKY
+      
+      if (hasOnceOffFrequency) {
+        // Once-off tasks never auto-lock
+        lockMoment = null
+      } else {
+        const hasWeekdayFrequency = [
+          NewFrequencyType.MONDAY, NewFrequencyType.TUESDAY, NewFrequencyType.WEDNESDAY,
+          NewFrequencyType.THURSDAY, NewFrequencyType.FRIDAY, NewFrequencyType.SATURDAY
+        ].includes(frequency)
+        
+        if (hasWeekdayFrequency) {
+          // Weekday tasks lock at 23:59 on Saturday of the same week
+          const weekSaturday = this.getWeekSaturday(targetDate)
+          const saturdayBusinessDay = this.findPreviousBusinessDay(weekSaturday)
+          lockDate = formatAustralianDate(saturdayBusinessDay)
+          lockTime = '23:59'
+          lockMoment = createAustralianDateTime(lockDate, lockTime)
+        } else {
+          // Other tasks lock at 23:59 on their due date
+          lockDate = result.dueDate
+          lockTime = '23:59'
+          lockMoment = createAustralianDateTime(lockDate, lockTime)
+        }
+      }
+
+      // Calculate status for this frequency
+      let frequencyStatus: 'not_due_yet' | 'due_today' | 'overdue' | 'missed' = 'not_due_yet'
+
+      if (currentAustralianDate < dueDate) {
+        frequencyStatus = 'not_due_yet'
+      } else if (currentAustralianDate.getTime() === dueDate.getTime()) {
+        // On due date - check time
+        if (lockMoment && currentAustralianTime >= lockMoment) {
+          frequencyStatus = 'missed'
+        } else if (currentAustralianTime >= dueMoment) {
+          frequencyStatus = 'overdue'
+        } else {
+          frequencyStatus = 'due_today'
+        }
+      } else {
+        // After due date
+        if (lockMoment && currentAustralianTime >= lockMoment) {
+          frequencyStatus = 'missed'
+        } else {
+          frequencyStatus = 'overdue'
+        }
+      }
+
+      // Update best status if this one has higher priority
+      if (statusPriority[frequencyStatus] > statusPriority[bestStatus]) {
+        bestStatus = frequencyStatus
+        bestDueDate = result.dueDate
+        bestDueTime = dueTime
+        bestLockDate = lockDate
+        bestLockTime = lockTime
+        canComplete = frequencyStatus !== 'missed'
+      }
+    }
+
+    return {
+      status: bestStatus,
+      dueDate: bestDueDate,
+      dueTime: bestDueTime,
+      lockDate: bestLockDate,
+      lockTime: bestLockTime,
+      canComplete
+    }
+  }
+
+  /**
    * Check if a task is active and within its valid date range
    */
   private isTaskActiveOnDate(task: MasterTask, date: Date): boolean {
@@ -287,12 +404,138 @@ export class NewRecurrenceEngine {
 
     for (const instance of instances) {
       const result = this.calculateStatusUpdate(instance, currentDateTime, masterTasks)
-      if (result.new_status !== result.old_status) {
+      if (result.updated) {
         results.push(result)
       }
     }
 
     return results
+  }
+
+  /**
+   * Calculate status update for a single task instance
+   */
+  private calculateStatusUpdate(instance: TaskInstance, currentDateTime: Date, masterTasks?: MasterTask[]): StatusUpdateResult {
+    const oldStatus = instance.status
+    let newStatus = oldStatus
+    let locked = instance.locked
+    let updated = false
+    let reason = 'No change needed'
+
+    try {
+      // Skip if already completed
+      if (oldStatus === TaskStatus.DONE) {
+        return {
+          instance_id: instance.id,
+          old_status: oldStatus,
+          new_status: oldStatus,
+          locked,
+          updated: false,
+          reason: 'Task already completed'
+        }
+      }
+
+      // Get master task to determine frequency and lock rules
+      const masterTask = masterTasks?.find(t => t.id === instance.master_task_id)
+      if (!masterTask) {
+        return {
+          instance_id: instance.id,
+          old_status: oldStatus,
+          new_status: oldStatus,
+          locked,
+          updated: false,
+          reason: 'Master task not found'
+        }
+      }
+
+      // Parse dates and times
+      const instanceDate = parseAustralianDate(instance.date)
+      const dueDate = parseAustralianDate(instance.due_date)
+      const currentAustralianTime = toAustralianTime(currentDateTime)
+      const currentAustralianDate = parseAustralianDate(formatAustralianDate(currentAustralianTime))
+
+      // Create due time and lock time
+      const dueTime = instance.due_time_override || instance.due_time || masterTask.timing || '09:30'
+      const dueMoment = createAustralianDateTime(instance.due_date, dueTime)
+      
+      // Determine lock time based on frequency
+      let lockMoment: Date | null = null
+      const hasOnceOffFrequency = masterTask.frequencies.some(f => 
+        f === NewFrequencyType.ONCE_OFF || f === NewFrequencyType.ONCE_OFF_STICKY
+      )
+
+      if (hasOnceOffFrequency) {
+        // Once-off tasks never auto-lock
+        lockMoment = null
+      } else {
+        // Other tasks lock at different times based on frequency
+        const hasWeekdayFrequency = masterTask.frequencies.some(f => 
+          [NewFrequencyType.MONDAY, NewFrequencyType.TUESDAY, NewFrequencyType.WEDNESDAY, 
+           NewFrequencyType.THURSDAY, NewFrequencyType.FRIDAY, NewFrequencyType.SATURDAY].includes(f)
+        )
+        
+        if (hasWeekdayFrequency) {
+          // Weekday tasks lock at 23:59 on Saturday of the same week
+          const weekSaturday = this.getWeekSaturday(instanceDate)
+          lockMoment = createAustralianDateTime(formatAustralianDate(weekSaturday), '23:59')
+        } else {
+          // Other tasks lock at 23:59 on their due date
+          lockMoment = createAustralianDateTime(instance.due_date, '23:59')
+        }
+      }
+
+      // Calculate new status based on current time
+      if (currentAustralianDate < dueDate) {
+        // Before due date
+        newStatus = TaskStatus.PENDING
+        reason = 'Not due yet'
+      } else if (currentAustralianDate.getTime() === dueDate.getTime()) {
+        // On due date - check time
+        if (lockMoment && currentAustralianTime >= lockMoment) {
+          newStatus = TaskStatus.MISSED
+          locked = true
+          reason = 'Missed - past lock time'
+        } else if (currentAustralianTime >= dueMoment) {
+          newStatus = TaskStatus.OVERDUE
+          reason = 'Overdue - past due time'
+        } else {
+          newStatus = TaskStatus.PENDING
+          reason = 'Due today'
+        }
+      } else {
+        // After due date
+        if (lockMoment && currentAustralianTime >= lockMoment) {
+          newStatus = TaskStatus.MISSED
+          locked = true
+          reason = 'Missed - past lock time'
+        } else {
+          newStatus = TaskStatus.OVERDUE
+          reason = 'Overdue - past due date'
+        }
+      }
+
+      // Check if update is needed
+      updated = (newStatus !== oldStatus) || (locked !== instance.locked)
+
+      return {
+        instance_id: instance.id,
+        old_status: oldStatus,
+        new_status: newStatus,
+        locked,
+        updated,
+        reason
+      }
+
+    } catch (error) {
+      return {
+        instance_id: instance.id,
+        old_status: oldStatus,
+        new_status: oldStatus,
+        locked,
+        updated: false,
+        reason: `Error calculating status: ${error instanceof Error ? error.message : 'Unknown error'}`
+      }
+    }
   }
 
   /**
@@ -383,16 +626,52 @@ export class NewRecurrenceEngine {
 
     const dueDate = parseAustralianDate(task.due_date)
     
-    // For once-off tasks, we need to determine the first appearance date
-    // This would be the day the task became active (handled by activation logic)
-    // For now, assume it appears from the current date onwards until due date and beyond
-    
-    // Once-off tasks appear indefinitely until completed, even past due date
-    return {
-      shouldAppear: true,
-      isCarryOver: false, // Once-off tasks don't have traditional carry behavior
-      dueDate: formatAustralianDate(dueDate),
+    // Determine the first appearance date (activation date)
+    // This is the maximum of: created_at (AU date), publish_delay, start_date
+    let firstAppearanceDate: Date | null = null
+    try {
+      const candidates: Date[] = []
+      
+      // Add created_at date (convert to AU date)
+      if ((task as any).created_at) {
+        const createdAtAU = toAustralianTime(new Date((task as any).created_at))
+        candidates.push(parseAustralianDate(formatAustralianDate(createdAtAU)))
+      }
+      
+      // Add publish_delay if present
+      if (task.publish_delay) {
+        candidates.push(parseAustralianDate(task.publish_delay))
+      }
+      
+      // Add start_date if present
+      if ((task as any).start_date) {
+        candidates.push(parseAustralianDate((task as any).start_date))
+      }
+      
+      if (candidates.length > 0) {
+        firstAppearanceDate = new Date(Math.max(...candidates.map(d => d.getTime())))
+      }
+    } catch (error) {
+      // If we can't determine activation date, use today as fallback
+      firstAppearanceDate = date
     }
+    
+    // If no activation date determined, use current date
+    if (!firstAppearanceDate) {
+      firstAppearanceDate = date
+    }
+    
+    // Once-off tasks appear from activation date onwards indefinitely until completed
+    if (date >= firstAppearanceDate) {
+      return {
+        shouldAppear: true,
+        isCarryOver: date.getTime() > firstAppearanceDate.getTime(),
+        dueDate: formatAustralianDate(dueDate),
+        originalAppearanceDate: formatAustralianDate(firstAppearanceDate)
+      }
+    }
+    
+    return { shouldAppear: false, isCarryOver: false, dueDate: '' }
   }
 
   /**
@@ -530,16 +809,18 @@ export class NewRecurrenceEngine {
       return { shouldAppear: false, isCarryOver: false, dueDate: '' }
     }
 
-    // Due date: the scheduled day (after shift), but if carrying through week, cap at last business day before/at Saturday
-    const weekDue = this.findPreviousBusinessDay(weekSaturday)
-    const effectiveDue = weekDue < appearanceDate ? appearanceDate : weekDue
+    // Due date: the scheduled day (after shift) - this is when the task is due
+    const dueDate = appearanceDate
 
-    // Weekday tasks should ONLY appear on their designated day (no carry)
-    if (date.getTime() === appearanceDate.getTime()) {
+    // Carry end: last business day of the week (Saturday or earlier if Saturday is holiday)
+    const carryEndDate = this.findPreviousBusinessDay(weekSaturday)
+
+    // Weekday tasks appear on their designated day and carry through until Saturday of that week
+    if (date >= appearanceDate && date <= carryEndDate) {
       return {
         shouldAppear: true,
-        isCarryOver: false,
-        dueDate: formatAustralianDate(appearanceDate),
+        isCarryOver: date.getTime() > appearanceDate.getTime(),
+        dueDate: formatAustralianDate(dueDate),
         originalAppearanceDate: formatAustralianDate(appearanceDate)
       }
     }

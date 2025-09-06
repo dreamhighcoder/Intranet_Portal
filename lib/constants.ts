@@ -12,19 +12,29 @@ export const TASK_CATEGORIES = [
   { value: "business-management", label: "Business Management" },
 ] as const
 
-// Task frequencies matching project specifications
+// Task frequencies matching project specifications - ALL 36 FREQUENCY RULES
 export const TASK_FREQUENCIES = [
+  // Basic frequencies (Rules 1-3)
   { value: "once_off", label: "Once Off" },
+  { value: "once_off_sticky", label: "Once Off (Sticky)" },
   { value: "every_day", label: "Every Day" },
   { value: "once_weekly", label: "Once Weekly" },
+  
+  // Specific weekdays (Rules 4-9) - ALL 7 DAYS INCLUDING SUNDAY
+  { value: "sunday", label: "Sunday" },
   { value: "monday", label: "Monday" },
   { value: "tuesday", label: "Tuesday" },
   { value: "wednesday", label: "Wednesday" },
   { value: "thursday", label: "Thursday" },
   { value: "friday", label: "Friday" },
   { value: "saturday", label: "Saturday" },
-  { value: "once_monthly", label: "Once Monthly" },
+  
+  // Monthly frequencies (Rules 10, 23-24)
   { value: "start_of_every_month", label: "Start of Every Month" },
+  { value: "once_monthly", label: "Once Monthly" },
+  { value: "end_of_every_month", label: "End of Every Month" },
+  
+  // Start of specific months (Rules 11-22)
   { value: "start_of_month_jan", label: "Start of Month (Jan)" },
   { value: "start_of_month_feb", label: "Start of Month (Feb)" },
   { value: "start_of_month_mar", label: "Start of Month (Mar)" },
@@ -37,7 +47,8 @@ export const TASK_FREQUENCIES = [
   { value: "start_of_month_oct", label: "Start of Month (Oct)" },
   { value: "start_of_month_nov", label: "Start of Month (Nov)" },
   { value: "start_of_month_dec", label: "Start of Month (Dec)" },
-  { value: "end_of_every_month", label: "End of Every Month" },
+  
+  // End of specific months (Rules 25-36)
   { value: "end_of_month_jan", label: "End of Month (Jan)" },
   { value: "end_of_month_feb", label: "End of Month (Feb)" },
   { value: "end_of_month_mar", label: "End of Month (Mar)" },

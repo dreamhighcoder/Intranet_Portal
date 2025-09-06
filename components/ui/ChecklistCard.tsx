@@ -23,6 +23,7 @@ interface TaskCounts {
   newSinceNine: number
   dueToday: number
   overdue: number
+  missed: number
   completed: number
 }
 
@@ -40,6 +41,7 @@ export default function ChecklistCard({
     newSinceNine: 0,
     dueToday: 0,
     overdue: 0,
+    missed: 0,
     completed: 0
   })
   const [loading, setLoading] = useState(true)
@@ -254,6 +256,16 @@ export default function ChecklistCard({
                     <span className="mr-1">⚠️</span> Overdue
                   </span>
                   <Badge className="bg-red-100 text-red-800 font-medium">{taskCounts.overdue}</Badge>
+                </div>
+              )}
+
+              {/* X tasks missed - tasks that are locked and can no longer be completed */}
+              {taskCounts.missed > 0 && (
+                <div className="flex items-center justify-between text-sm px-2 py-1 bg-gray-50 rounded border-l-4 border-gray-400">
+                  <span className="text-gray-700 font-medium flex items-center">
+                    <span className="mr-1">🔒</span> Missed
+                  </span>
+                  <Badge className="bg-gray-100 text-gray-800 font-medium">{taskCounts.missed}</Badge>
                 </div>
               )}
 

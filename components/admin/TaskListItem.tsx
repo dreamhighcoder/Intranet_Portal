@@ -7,8 +7,8 @@ import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
 import { Separator } from '@/components/ui/separator'
-import { createRecurrenceEngine } from '@/lib/recurrence-engine'
-import { createHolidayHelper } from '@/lib/public-holidays'
+import { NewRecurrenceEngine } from '@/lib/new-recurrence-engine'
+import { createHolidayChecker } from '@/lib/holiday-checker'
 import type { MasterChecklistTask, FrequencyRule, FrequencyType } from '@/types/checklist'
 import { toDisplayFormat } from '@/lib/responsibility-mapper'
 import { getAustralianToday, getAustralianNow } from '@/lib/timezone-utils'
@@ -129,28 +129,35 @@ export default function TaskListItem({ task, onEdit, onDelete }: TaskListItemPro
         { date: '2024-12-26', name: 'Boxing Day' }
       ]
       
-      const holidayHelper = createHolidayHelper(sampleHolidays)
-      const recurrenceEngine = createRecurrenceEngine(holidayHelper)
+      const holidayChecker = createHolidayChecker(sampleHolidays)
+      const recurrenceEngine = new NewRecurrenceEngine(holidayChecker)
       
+      // Convert old task format to new format
       const taskForPreview = {
         id: 'preview',
-        frequency_rules: task.frequency_rules,
+        title: task.title,
+        active: true,
+        frequencies: task.frequency_rules?.map(rule => rule.type) || [],
+        timing: 'anytime_during_day',
         start_date: task.start_date || getAustralianToday(),
         end_date: task.end_date
       }
       
-      const australianNow = getAustralianNow()
-      const oneYearFromNow = new Date(australianNow.getTime() + 365 * 24 * 60 * 60 * 1000)
+      // Generate preview for next 30 days
+      const today = getAustralianToday()
+      const previewDates = []
+      for (let i = 0; i < 30; i++) {
+        const date = new Date(today)
+        date.setDate(date.getDate() + i)
+        const dateStr = date.toISOString().split('T')[0]
+        if (recurrenceEngine.shouldTaskAppearOnDate(taskForPreview, dateStr)) {
+          previewDates.push(date)
+        }
+        if (previewDates.length >= 6) break
+      }
       
-      const occurrences = recurrenceEngine.occurrencesBetween(
-        taskForPreview,
-        australianNow,
-        oneYearFromNow
-      )
-      
-      const nextOccurrences = occurrences.slice(0, 6)
-      const formattedOccurrences = nextOccurrences.map(occurrence => 
-        occurrence.date.toLocaleDateString('en-US', { 
+      const formattedOccurrences = previewDates.map(date => 
+        date.toLocaleDateString('en-US', { 
           weekday: 'long', 
           year: 'numeric', 
           month: 'long', 
