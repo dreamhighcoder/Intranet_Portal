@@ -20,7 +20,8 @@ import {
   Clock,
   AlertTriangle,
   XCircle,
-  Users
+  Users,
+  Loader2
 } from "lucide-react"
 import { useRouter } from "next/navigation"
 import { getAustralianToday, formatAustralianDate, toAustralianTime, getAustralianNow, parseAustralianDate } from "@/lib/timezone-utils"
@@ -86,6 +87,7 @@ export default function CalendarPage() {
   const [currentDate, setCurrentDate] = useState(getAustralianNow())
   const [selectedPosition, setSelectedPosition] = useState<string>("all")
   const [datePickerOpen, setDatePickerOpen] = useState(false)
+  const [loadingButton, setLoadingButton] = useState<string | null>(null)
   
   // Ensure non-admins are locked to their own position
   useEffect(() => {
@@ -110,6 +112,13 @@ export default function CalendarPage() {
     }
   }, [authLoading, user, currentDate, selectedPosition, view])
 
+  // Reset loading button state when loading completes
+  useEffect(() => {
+    if (!loading) {
+      setLoadingButton(null)
+    }
+  }, [loading])
+
   const loadPositions = async () => {
     if (!isAdmin) return
     
@@ -124,7 +133,11 @@ export default function CalendarPage() {
   }
 
   const loadCalendarData = async () => {
-    setLoading(true)
+    // Only show full page loading on initial load
+    if (!calendarData) {
+      setLoading(true)
+    }
+    
     try {
       const year = currentDate.getFullYear()
       const month = currentDate.getMonth() + 1
@@ -151,10 +164,14 @@ export default function CalendarPage() {
       toastError("Error", "Failed to load calendar data")
     } finally {
       setLoading(false)
+      setLoadingButton(null)
     }
   }
 
   const navigateMonth = (direction: 'prev' | 'next') => {
+    const buttonType = direction === 'prev' ? 'prev' : 'next'
+    setLoadingButton(buttonType)
+    
     // Create a new Australian date based on current date
     const newDate = new Date(currentDate.getFullYear(), currentDate.getMonth(), currentDate.getDate())
     if (direction === 'prev') {
@@ -166,6 +183,9 @@ export default function CalendarPage() {
   }
 
   const navigateWeek = (direction: 'prev' | 'next') => {
+    const buttonType = direction === 'prev' ? 'prev' : 'next'
+    setLoadingButton(buttonType)
+    
     // Create a new Australian date based on current date
     const newDate = new Date(currentDate.getFullYear(), currentDate.getMonth(), currentDate.getDate())
     if (direction === 'prev') {
@@ -178,9 +198,25 @@ export default function CalendarPage() {
 
   const handleDatePickerSelect = (date: Date | undefined) => {
     if (date) {
+      setLoadingButton('calendar')
       setCurrentDate(date)
       setDatePickerOpen(false)
     }
+  }
+
+  const handleTodayClick = () => {
+    setLoadingButton('today')
+    setCurrentDate(getAustralianNow())
+  }
+
+  const handleViewChange = (newView: "month" | "week") => {
+    setLoadingButton('view')
+    setView(newView)
+  }
+
+  const handlePositionChange = (newPosition: string) => {
+    setLoadingButton('position')
+    setSelectedPosition(newPosition)
   }
 
   const getStatusColor = (status: string) => {
@@ -536,8 +572,13 @@ export default function CalendarPage() {
               variant="outline"
               size="sm"
               onClick={() => view === 'month' ? navigateMonth('prev') : navigateWeek('prev')}
+              disabled={loadingButton === 'prev'}
             >
-              <ChevronLeft className="w-4 h-4" />
+              {loadingButton === 'prev' ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <ChevronLeft className="w-4 h-4" />
+              )}
             </Button>
             
             <Popover open={datePickerOpen} onOpenChange={setDatePickerOpen}>
@@ -545,14 +586,24 @@ export default function CalendarPage() {
                 <Button
                   variant="outline"
                   className="flex items-center space-x-2 font-medium hover:bg-blue-50"
+                  disabled={loadingButton === 'calendar'}
                 >
-                  <CalendarIcon className="w-4 h-4" />
-                  <span>
-                    {view === 'month' 
-                      ? `${monthNames[toAustralianTime(currentDate).getMonth()]} ${toAustralianTime(currentDate).getFullYear()}`
-                      : `Week of ${formatAustralianDate(currentDate)}`
-                    }
-                  </span>
+                  {loadingButton === 'calendar' ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      <span>Loading...</span>
+                    </>
+                  ) : (
+                    <>
+                      <CalendarIcon className="w-4 h-4" />
+                      <span>
+                        {view === 'month' 
+                          ? `${monthNames[toAustralianTime(currentDate).getMonth()]} ${toAustralianTime(currentDate).getFullYear()}`
+                          : `Week of ${formatAustralianDate(currentDate)}`
+                        }
+                      </span>
+                    </>
+                  )}
                 </Button>
               </PopoverTrigger>
               <PopoverContent className="w-auto p-0" align="start">
@@ -570,23 +621,43 @@ export default function CalendarPage() {
               variant="outline"
               size="sm"
               onClick={() => view === 'month' ? navigateMonth('next') : navigateWeek('next')}
+              disabled={loadingButton === 'next'}
             >
-              <ChevronRight className="w-4 h-4" />
+              {loadingButton === 'next' ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <ChevronRight className="w-4 h-4" />
+              )}
             </Button>
             
             <Button
               variant="outline"
               size="sm"
-              onClick={() => setCurrentDate(getAustralianNow())}
+              onClick={handleTodayClick}
+              disabled={loadingButton === 'today'}
             >
-              Today
+              {loadingButton === 'today' ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin mr-1" />
+                  Loading...
+                </>
+              ) : (
+                'Today'
+              )}
             </Button>
           </div>
 
           <div className="flex items-center space-x-2">
-            <Select value={view} onValueChange={(value: "month" | "week") => setView(value)}>
+            <Select value={view} onValueChange={handleViewChange} disabled={loadingButton === 'view'}>
               <SelectTrigger className="w-32">
-                <SelectValue />
+                {loadingButton === 'view' ? (
+                  <div className="flex items-center">
+                    <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                    <span>Loading...</span>
+                  </div>
+                ) : (
+                  <SelectValue />
+                )}
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="month">Month</SelectItem>
@@ -595,9 +666,16 @@ export default function CalendarPage() {
             </Select>
 
             {isAdmin && positions.length > 0 && (
-              <Select value={selectedPosition} onValueChange={setSelectedPosition}>
+              <Select value={selectedPosition} onValueChange={handlePositionChange} disabled={loadingButton === 'position'}>
                 <SelectTrigger className="w-full">
-                  <SelectValue />
+                  {loadingButton === 'position' ? (
+                    <div className="flex items-center">
+                      <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                      <span>Loading...</span>
+                    </div>
+                  ) : (
+                    <SelectValue />
+                  )}
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Positions</SelectItem>
