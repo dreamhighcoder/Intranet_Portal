@@ -14,6 +14,7 @@ import { useRouter } from "next/navigation"
 import { useEffect } from "react"
 import { toKebabCase } from "@/lib/responsibility-mapper"
 import { positionsApi } from "@/lib/api-client"
+import { getPositionIcon, hasSpecificIcon } from "@/lib/position-icons"
 
 export default function HomePage() {
   const { user, isLoading } = usePositionAuth()
@@ -66,7 +67,6 @@ export default function HomePage() {
         const positions = await positionsApi.getAll()
         const nonAdmin = (positions || [])
           .filter((p: any) => p.name !== 'Administrator')
-        const iconMap = [Stethoscope, Users, Package, Building]
         const colorMap = ["var(--color-primary)", "#1565c0", "var(--accent-green)", "#2e7d32", "#fb8c00", "#d12c2c"]
 
         // Order strictly by display_order ascending; fallback to name when equal or missing
@@ -81,10 +81,15 @@ export default function HomePage() {
 
         const checklists = positionsOrdered.map((position: any, index: number) => {
           const display = position.displayName || position.name
+          
+          // Get the appropriate icon for this position
+          // For positions with specific icons, use those; for new positions, use fallback icons
+          const icon = getPositionIcon(display, index)
+          
           return ({
             title: `Checklist – ${display}`,
             description: getPositionDescription(display),
-            icon: iconMap[index % iconMap.length],
+            icon: icon,
             positionId: position.id,
             iconBg: colorMap[index % colorMap.length],
             responsibility: getResponsibilityValue(display)
