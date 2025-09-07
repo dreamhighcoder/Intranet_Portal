@@ -124,6 +124,23 @@ const getCategoryEmoji = (value: string): string => {
   return option ? option.emoji : ''
 }
 
+// Helper function to get abbreviation for responsibilities
+const getResponsibilityAbbreviation = (value: string): string => {
+  const ABBREVIATION_MAP: Record<string, string> = {
+    'pharmacy-assistant-s': 'PA',
+    'pharmacy-assistant': 'PA',
+    'dispensary-technician-s': 'DT',
+    'dispensary-technician': 'DT',
+    'daa-packer-s': 'DP',
+    'daa-packer': 'DP',
+    'pharmacist-primary': 'PH1',
+    'pharmacist-supporting': 'PH2',
+    'operational-managerial': 'OM',
+  }
+  
+  return ABBREVIATION_MAP[value] || value.substring(0, 2).toUpperCase()
+}
+
 // Helper to get badge color based on type and value
 const getBadgeClass = (item: string, type: string) => {
   if (type === "responsibility") {
@@ -212,6 +229,30 @@ const renderTruncatedArray = (
     )
   }
 
+  // For responsibilities: if there are 2 or more items, show all as abbreviation badges
+  if (type === 'responsibility' && items.length >= 2) {
+    return (
+      <div className="flex flex-wrap gap-1 w-full">
+        {items.map((item, index) => {
+          const abbreviation = getResponsibilityAbbreviation(item)
+          const displayName = getDisplayName(item)
+          const badgeClass = getBadgeClass(item, type)
+          
+          return (
+            <Badge
+              key={index}
+              variant={variant}
+              className={`text-xs ${badgeClass}`}
+              title={displayName}
+            >
+              {abbreviation}
+            </Badge>
+          )
+        })}
+      </div>
+    )
+  }
+
   return (
     <div className="flex flex-wrap gap-1 w-full">
       {visibleItems.map((item, index) => {
@@ -229,7 +270,7 @@ const renderTruncatedArray = (
           </Badge>
         )
       })}
-      {type !== 'category' && remainingCount > 0 && (
+      {type !== 'category' && type !== 'responsibility' && remainingCount > 0 && (
         <Badge
           variant="outline"
           className="text-xs bg-gray-100"

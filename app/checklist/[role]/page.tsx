@@ -183,6 +183,26 @@ const formatResponsibility = (responsibility: string) => {
     .join(' ')
 }
 
+const getResponsibilityAbbreviation = (responsibility: string) => {
+  if (!responsibility) return ''
+  const key = responsibility.trim().toLowerCase()
+
+  // Abbreviation mappings
+  const ABBREVIATION_MAP: Record<string, string> = {
+    'pharmacy-assistant-s': 'PA',
+    'pharmacy-assistant': 'PA',
+    'dispensary-technician-s': 'DT',
+    'dispensary-technician': 'DT',
+    'daa-packer-s': 'DP',
+    'daa-packer': 'DP',
+    'pharmacist-primary': 'PH1',
+    'pharmacist-supporting': 'PH2',
+    'operational-managerial': 'OM',
+  }
+  
+  return ABBREVIATION_MAP[key] || responsibility.substring(0, 2).toUpperCase()
+}
+
 // Calculate dynamic task status with proper frequency rules implementation
 const calculateDynamicTaskStatus = (task: ChecklistTask, currentDate: string): string => {
   try {
@@ -586,7 +606,21 @@ const renderBadgesWithTruncation = (
     })
   }
 
-  // For single category or responsibilities, use the original logic
+  // For responsibilities: if there are 2 or more items, show all as abbreviation badges
+  if (type === 'responsibility' && items.length >= 2) {
+    return items.map((item, index) => {
+      const colorClass = colorFn ? colorFn(item) : getResponsibilityColor(item)
+      const abbreviation = getResponsibilityAbbreviation(item)
+      const fullName = formatResponsibility(item)
+      return (
+        <Badge key={index} className={`text-xs ${colorClass}`} title={fullName}>
+          {abbreviation}
+        </Badge>
+      )
+    })
+  }
+
+  // For single item, show full format
   if (items.length <= maxVisible) {
     return items.map((item, index) => {
       if (type === 'responsibility') {
@@ -607,6 +641,7 @@ const renderBadgesWithTruncation = (
     })
   }
 
+  // This should not be reached with the new logic, but keeping for safety
   const visibleItems = items.slice(0, maxVisible)
   const hiddenItems = items.slice(maxVisible)
 
