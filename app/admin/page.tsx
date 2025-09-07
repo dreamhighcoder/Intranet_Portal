@@ -10,7 +10,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
-import { Users, ClipboardList, Calendar, Settings, BarChart3, Cog } from "lucide-react"
+import { Users, ClipboardList, Calendar, Settings, BarChart3, Activity } from "lucide-react"
 import { authenticatedGet } from "@/lib/api-client"
 import { toKebabCase } from "@/lib/responsibility-mapper"
 
@@ -132,9 +132,9 @@ export default function AdminDashboard() {
       bgColor: "bg-purple-100",
     },
     {
-      title: "Background Jobs",
-      description: "Generate tasks and update statuses manually",
-      icon: Cog,
+      title: "System Health",
+      description: "Monitor system performance and run diagnostics",
+      icon: Activity,
       href: "/admin/jobs",
       color: "text-indigo-600",
       bgColor: "bg-indigo-100",

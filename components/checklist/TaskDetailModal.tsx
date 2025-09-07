@@ -625,11 +625,11 @@ export default function TaskDetailModal({
                             status === 'not_due_yet' ? 'bg-blue-100 text-blue-800 border-blue-200' :
                               'bg-orange-100 text-orange-800 border-orange-200'
                     }>
-                      {status === 'completed' ? 'Completed' :
-                        status === 'overdue' ? 'Overdue' :
-                          status === 'missed' ? 'Missed' :
-                            status === 'not_due_yet' ? 'Not Due Yet' :
-                              'Due Today'}
+                      {status === 'completed' ? '✅ Completed' :
+                        status === 'overdue' ? '⚠️ Overdue' :
+                          status === 'missed' ? '❌ Missed' :
+                            status === 'not_due_yet' ? '📅 Not Due Yet' :
+                              '⏰ Due Today'}
                     </Badge>
                   </div>
                 </CardTitle>
