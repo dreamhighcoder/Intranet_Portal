@@ -189,17 +189,26 @@ export async function GET(request: NextRequest) {
     let positionCompletions: any[] | null = null
     
     if (masterTaskIds.length > 0) {
-      // Get task instances
+      // For carryover tasks, we need to find instances that might have been created on earlier dates
+      // but are still active for the current viewing date
+      const viewDate = parseAustralianDate(validatedDate)
+      const searchStartDate = new Date(viewDate)
+      searchStartDate.setDate(viewDate.getDate() - 60) // Look back 60 days for any carryover instances
+      
+      // Get task instances - look for instances that could be carrying over to this date
       const { data, error: instancesError } = await supabaseAdmin
         .from('task_instances')
-        .select('id, master_task_id, status, completed_by, completed_at, created_at')
+        .select('id, master_task_id, status, completed_by, completed_at, created_at, instance_date, due_date')
         .in('master_task_id', masterTaskIds)
-        .eq('instance_date', validatedDate)
+        .gte('instance_date', formatAustralianDate(searchStartDate))
+        .lte('instance_date', validatedDate)
 
       if (instancesError) {
         console.error('Error fetching existing instances:', instancesError)
       }
       existingInstances = data || null
+      
+
 
       // Get position-specific completions if we have instances
       if (existingInstances && existingInstances.length > 0) {
@@ -230,8 +239,34 @@ export async function GET(request: NextRequest) {
     const completionsByInstanceMap = new Map<string, any[]>()
     
     if (existingInstances) {
+      // For each master task, find the most relevant instance
+      // Priority: 1) Exact date match, 2) Most recent completed instance, 3) Most recent instance
+      const taskInstanceGroups = new Map<string, any[]>()
+      
       existingInstances.forEach(instance => {
-        instanceMap.set(instance.master_task_id, instance)
+        const taskId = instance.master_task_id
+        if (!taskInstanceGroups.has(taskId)) {
+          taskInstanceGroups.set(taskId, [])
+        }
+        taskInstanceGroups.get(taskId)!.push(instance)
+      })
+      
+      taskInstanceGroups.forEach((instances, taskId) => {
+        // Sort instances by relevance
+        const sortedInstances = instances.sort((a, b) => {
+          // First priority: completed instances (status = 'done') - these should always show their completion status
+          if (a.status === 'done' && b.status !== 'done') return -1
+          if (b.status === 'done' && a.status !== 'done') return 1
+          
+          // Second priority: exact date match (for non-completed instances)
+          if (a.instance_date === validatedDate && b.instance_date !== validatedDate) return -1
+          if (b.instance_date === validatedDate && a.instance_date !== validatedDate) return 1
+          
+          // Third priority: most recent instance_date
+          return new Date(b.instance_date).getTime() - new Date(a.instance_date).getTime()
+        })
+        
+        instanceMap.set(taskId, sortedInstances[0])
       })
     }
     
@@ -258,14 +293,31 @@ export async function GET(request: NextRequest) {
       let isCompletedByAnyPosition = false
 
       if (existingInstance) {
-        if (!isAdminRequest) {
-          // Non-admin: completed ONLY if this position has a completion record
-          isCompletedForCurrentPosition = taskCompletions.some(
-            (completion) => completion.position_name.toLowerCase().replace(/[^a-z0-9]+/g, '-') === normalizedRole
-          )
-        } else {
-          // Admin: completed if any position has completed
-          isCompletedByAnyPosition = taskCompletions.length > 0
+        // For carryover tasks, check if the completion should carry forward to the current viewing date
+        // This handles cases where a task was completed on an earlier date but should still show as completed
+        const isCarryoverCompletion = existingInstance.instance_date !== validatedDate && 
+                                     existingInstance.status === 'done' && 
+                                     taskCompletions.length > 0
+        
+        if (taskCompletions.length > 0) {
+          if (!isAdminRequest) {
+            // Non-admin: completed ONLY if this position has a completion record
+            isCompletedForCurrentPosition = taskCompletions.some(
+              (completion) => {
+                const normalizedCompletionRole = completion.position_name.toLowerCase().replace(/[^a-z0-9]+/g, '-')
+                const matches = normalizedCompletionRole === normalizedRole
+                
+
+                
+                return matches
+              }
+            )
+          } else {
+            // Admin: completed if any position has completed
+            isCompletedByAnyPosition = taskCompletions.length > 0
+          }
+          
+
         }
       }
 
@@ -289,6 +341,9 @@ export async function GET(request: NextRequest) {
 
       // Calculate proper status using recurrence engine
       const isCompleted = isAdminRequest ? isCompletedByAnyPosition : isCompletedForCurrentPosition
+      
+
+      
       const statusResult = recurrenceEngine.calculateTaskStatus(masterTaskForStatus, validatedDate, now, isCompleted)
       
       // Map status to ChecklistInstanceStatus

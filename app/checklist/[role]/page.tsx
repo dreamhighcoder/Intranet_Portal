@@ -70,22 +70,23 @@ interface ChecklistTask {
   }
 }
 
-// Category display names and colors
+// Category display names, colors, and emojis
 const CATEGORY_CONFIG = {
-  'stock-control': { label: 'Stock Control', color: 'bg-blue-100 text-blue-800 border-blue-200' },
-  'compliance': { label: 'Compliance', color: 'bg-red-100 text-red-800 border-red-200' },
-  'cleaning': { label: 'Cleaning', color: 'bg-green-100 text-green-800 border-green-200' },
-  'pharmacy-services': { label: 'Pharmacy Services', color: 'bg-purple-100 text-purple-800 border-purple-200' },
-  'fos-operations': { label: 'FOS Operations', color: 'bg-yellow-100 text-yellow-800 border-yellow-200' },
-  'dispensary-operations': { label: 'Dispensary Operations', color: 'bg-indigo-100 text-indigo-800 border-indigo-200' },
-  'general-pharmacy-operations': { label: 'General Pharmacy Operations', color: 'bg-pink-100 text-pink-800 border-pink-200' },
-  'business-management': { label: 'Business Management', color: 'bg-orange-100 text-orange-800 border-orange-200' },
-  'general': { label: 'General', color: 'bg-gray-100 text-gray-800 border-gray-200' }
+  'stock-control': { label: '📦 Stock Control', emoji: '📦', color: 'bg-blue-100 text-blue-800 border-blue-200' },
+  'compliance': { label: '☑️ Compliance', emoji: '☑️', color: 'bg-red-100 text-red-800 border-red-200' },
+  'cleaning': { label: '🧹 Cleaning', emoji: '🧹', color: 'bg-green-100 text-green-800 border-green-200' },
+  'pharmacy-services': { label: '💉 Pharmacy Services', emoji: '💉', color: 'bg-purple-100 text-purple-800 border-purple-200' },
+  'fos-operations': { label: '🛍️ FOS Operations', emoji: '🛍️', color: 'bg-yellow-100 text-yellow-800 border-yellow-200' },
+  'dispensary-operations': { label: '💊 Dispensary Operations', emoji: '💊', color: 'bg-indigo-100 text-indigo-800 border-indigo-200' },
+  'general-pharmacy-operations': { label: '🌀 General Pharmacy Operations', emoji: '🌀', color: 'bg-pink-100 text-pink-800 border-pink-200' },
+  'business-management': { label: '📊 Business Management', emoji: '📊', color: 'bg-orange-100 text-orange-800 border-orange-200' },
+  'general': { label: 'General', emoji: '', color: 'bg-gray-100 text-gray-800 border-gray-200' }
 }
 
 const getCategoryConfig = (category: string) => {
   return CATEGORY_CONFIG[category as keyof typeof CATEGORY_CONFIG] || {
     label: category.replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase()),
+    emoji: '',
     color: 'bg-gray-100 text-gray-800 border-gray-200'
   }
 }
@@ -573,6 +574,19 @@ const renderBadgesWithTruncation = (
   type: 'responsibility' | 'category' = 'responsibility',
   colorFn?: (value: string) => string
 ) => {
+  // For categories: if there are 2 or more items, show all as emoji-only badges
+  if (type === 'category' && items.length >= 2) {
+    return items.map((item, index) => {
+      const config = getCategoryConfig(item)
+      return (
+        <Badge key={index} className={`text-xs ${config.color}`} title={config.label}>
+          {config.emoji}
+        </Badge>
+      )
+    })
+  }
+
+  // For single category or responsibilities, use the original logic
   if (items.length <= maxVisible) {
     return items.map((item, index) => {
       if (type === 'responsibility') {
@@ -594,7 +608,7 @@ const renderBadgesWithTruncation = (
   }
 
   const visibleItems = items.slice(0, maxVisible)
-  const hiddenCount = items.length - maxVisible
+  const hiddenItems = items.slice(maxVisible)
 
   return (
     <>
@@ -615,9 +629,11 @@ const renderBadgesWithTruncation = (
           )
         }
       })}
-      <Badge variant="outline" className="text-xs bg-gray-50 text-gray-600">
-        +{hiddenCount}
-      </Badge>
+      {type === 'responsibility' && hiddenItems.length > 0 && (
+        <Badge variant="outline" className="text-xs bg-gray-50 text-gray-600">
+          +{hiddenItems.length}
+        </Badge>
+      )}
     </>
   )
 }

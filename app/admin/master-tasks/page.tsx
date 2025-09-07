@@ -94,16 +94,16 @@ const nameToResponsibilityValue = (positionName: string): string => {
     .replace(/^-+|-+$/g, '') // trim dashes
 }
 
-// Define category options for proper display names
+// Define category options for proper display names with emojis
 const CATEGORY_OPTIONS = [
-  { value: 'stock-control', label: 'Stock Control' },
-  { value: 'compliance', label: 'Compliance' },
-  { value: 'cleaning', label: 'Cleaning' },
-  { value: 'pharmacy-services', label: 'Pharmacy Services' },
-  { value: 'fos-operations', label: 'FOS Operations' },
-  { value: 'dispensary-operations', label: 'Dispensary Operations' },
-  { value: 'general-pharmacy-operations', label: 'General Pharmacy Operations' },
-  { value: 'business-management', label: 'Business Management' }
+  { value: 'stock-control', label: '📦 Stock Control', emoji: '📦' },
+  { value: 'compliance', label: '☑️ Compliance', emoji: '☑️' },
+  { value: 'cleaning', label: '🧹 Cleaning', emoji: '🧹' },
+  { value: 'pharmacy-services', label: '💉 Pharmacy Services', emoji: '💉' },
+  { value: 'fos-operations', label: '🛍️ FOS Operations', emoji: '🛍️' },
+  { value: 'dispensary-operations', label: '💊 Dispensary Operations', emoji: '💊' },
+  { value: 'general-pharmacy-operations', label: '🌀 General Pharmacy Operations', emoji: '🌀' },
+  { value: 'business-management', label: '📊 Business Management', emoji: '📊' }
 ]
 
 // Helper function to get display name for responsibilities
@@ -116,6 +116,12 @@ const getResponsibilityDisplayName = (value: string): string => {
 const getCategoryDisplayName = (value: string): string => {
   const option = CATEGORY_OPTIONS.find(opt => opt.value === value)
   return option ? option.label : value.replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase())
+}
+
+// Helper function to get emoji for categories
+const getCategoryEmoji = (value: string): string => {
+  const option = CATEGORY_OPTIONS.find(opt => opt.value === value)
+  return option ? option.emoji : ''
 }
 
 // Helper to get badge color based on type and value
@@ -182,6 +188,30 @@ const renderTruncatedArray = (
     }
   }
 
+  // For categories: if there are 2 or more items, show all as emoji-only badges
+  if (type === 'category' && items.length >= 2) {
+    return (
+      <div className="flex flex-wrap gap-1 w-full">
+        {items.map((item, index) => {
+          const emoji = getCategoryEmoji(item)
+          const displayName = getDisplayName(item)
+          const badgeClass = getBadgeClass(item, type)
+          
+          return (
+            <Badge
+              key={index}
+              variant={variant}
+              className={`text-xs ${badgeClass}`}
+              title={displayName}
+            >
+              {emoji}
+            </Badge>
+          )
+        })}
+      </div>
+    )
+  }
+
   return (
     <div className="flex flex-wrap gap-1 w-full">
       {visibleItems.map((item, index) => {
@@ -199,7 +229,7 @@ const renderTruncatedArray = (
           </Badge>
         )
       })}
-      {remainingCount > 0 && (
+      {type !== 'category' && remainingCount > 0 && (
         <Badge
           variant="outline"
           className="text-xs bg-gray-100"
