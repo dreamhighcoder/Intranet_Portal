@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { requireAuth } from '@/lib/auth-middleware'
+import { requireAuthEnhanced } from '@/lib/auth-middleware'
 import { createClient } from '@supabase/supabase-js'
 import { NewRecurrenceEngine, type MasterTask as NewMasterTask } from '@/lib/new-recurrence-engine'
 import { createHolidayChecker } from '@/lib/holiday-checker'
@@ -12,7 +12,7 @@ const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey)
 export async function GET(request: NextRequest) {
   try {
     // Authenticate the request and ensure admin access
-    const user = await requireAuth(request)
+    const user = await requireAuthEnhanced(request)
     if (user.role !== 'admin') {
       return NextResponse.json({ error: 'Admin access required' }, { status: 403 })
     }
@@ -122,12 +122,17 @@ async function runPerformanceTest() {
     
     // Test API endpoint performance
     const apiStartTime = Date.now()
-    const response = await fetch(`${request.nextUrl.origin}/api/checklist/counts?role=pharmacist&date=${getAustralianToday()}`, {
-      headers: {
-        'Authorization': request.headers.get('Authorization') || ''
-      }
-    })
-    const apiDuration = Date.now() - apiStartTime
+    let response: Response
+    let apiDuration: number
+    
+    try {
+      response = await fetch(`${request.nextUrl.origin}/api/checklist/counts?role=pharmacist&date=${getAustralianToday()}`)
+      apiDuration = Date.now() - apiStartTime
+    } catch (error) {
+      // If API call fails, just measure the time it took to fail
+      apiDuration = Date.now() - apiStartTime
+      response = { status: 500 } as Response
+    }
     
     const totalDuration = Date.now() - startTime
     

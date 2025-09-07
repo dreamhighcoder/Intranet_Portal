@@ -8,6 +8,9 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Activity, Database, Clock, AlertCircle, CheckCircle, Zap, TrendingUp, Settings, RefreshCw, TestTube } from "lucide-react"
+import { authenticatedGet } from "@/lib/api-client"
+import { getAustralianNow, toAustralianTime, formatAustralianDate, AUSTRALIAN_TIMEZONE } from "@/lib/timezone-utils"
+import { formatInTimeZone } from 'date-fns-tz'
 
 interface DiagnosticResult {
   success: boolean
@@ -22,11 +25,17 @@ interface SystemHealth {
   apiResponseTime: number
   lastUpdate: string
   activeUsers: number
+  metrics?: {
+    activeMasterTasks: number
+    completionsToday: number
+    databaseConnected: boolean
+  }
 }
 
 export default function SystemHealthPage() {
   const { user, isAdmin } = usePositionAuth()
   const [isRunning, setIsRunning] = useState<string | null>(null)
+  const [isLoadingHealth, setIsLoadingHealth] = useState(false)
   const [results, setResults] = useState<Record<string, DiagnosticResult>>({})
   const [systemHealth, setSystemHealth] = useState<SystemHealth>({
     status: 'healthy',
@@ -38,55 +47,69 @@ export default function SystemHealthPage() {
 
   // Load system health data
   useEffect(() => {
-    loadSystemHealth()
-    const interval = setInterval(loadSystemHealth, 30000) // Refresh every 30 seconds
-    return () => clearInterval(interval)
-  }, [])
+    if (user && isAdmin) {
+      loadSystemHealth()
+      const interval = setInterval(loadSystemHealth, 30000) // Refresh every 30 seconds
+      return () => clearInterval(interval)
+    }
+  }, [user, isAdmin])
 
   const loadSystemHealth = async () => {
+    setIsLoadingHealth(true)
     try {
-      const response = await fetch('/api/system/health')
-      if (response.ok) {
-        const data = await response.json()
+      const data = await authenticatedGet('/api/system/health')
+      if (data) {
         setSystemHealth(data)
       } else {
-        // Fallback to mock data if API isn't available
+        // Set error state if API isn't available
         setSystemHealth({
-          status: 'healthy',
-          tasksGenerated: Math.floor(Math.random() * 50) + 10,
-          apiResponseTime: Math.floor(Math.random() * 200) + 50,
+          status: 'error',
+          tasksGenerated: 0,
+          apiResponseTime: 0,
           lastUpdate: new Date().toISOString(),
-          activeUsers: 4
+          activeUsers: 0,
+          metrics: {
+            activeMasterTasks: 0,
+            completionsToday: 0,
+            databaseConnected: false
+          }
         })
       }
     } catch (error) {
       console.error('Failed to load system health:', error)
-      // Fallback to mock data on error
+      // Set error state on error
       setSystemHealth({
-        status: 'healthy',
-        tasksGenerated: Math.floor(Math.random() * 50) + 10,
-        apiResponseTime: Math.floor(Math.random() * 200) + 50,
-        lastUpdate: new Date().toISOString(),
-        activeUsers: 4
+        status: 'error',
+        tasksGenerated: 0,
+        apiResponseTime: 0,
+        lastUpdate: getAustralianNow().toISOString(),
+        activeUsers: 0,
+        metrics: {
+          activeMasterTasks: 0,
+          completionsToday: 0,
+          databaseConnected: false
+        }
       })
+    } finally {
+      setIsLoadingHealth(false)
     }
   }
 
   const runDiagnosticTest = async (testType: 'recurrence' | 'performance' | 'data-integrity') => {
     setIsRunning(testType)
     try {
-      const response = await fetch(`/api/system/diagnostics?test=${testType}`)
-      if (response.ok) {
-        const result = await response.json()
+      const result = await authenticatedGet(`/api/system/diagnostics?test=${testType}`)
+      if (result) {
         setResults(prev => ({ ...prev, [testType]: result }))
       } else {
-        // Fallback to mock results
-        const mockResults = {
-          recurrence: { success: true, message: 'Recurrence engine test completed successfully', stats: { tasksProcessed: 5, duration: 120 } },
-          performance: { success: true, message: 'Performance test completed - excellent performance', stats: { apiResponseTime: 150, databaseQueryTime: 80 } },
-          'data-integrity': { success: true, message: 'Data integrity check passed - no issues found', stats: { issuesFound: 0 } }
-        }
-        setResults(prev => ({ ...prev, [testType]: mockResults[testType] }))
+        // Set error result if API call fails
+        setResults(prev => ({ 
+          ...prev, 
+          [testType]: { 
+            success: false, 
+            message: `Test failed: API call returned no data` 
+          } 
+        }))
       }
     } catch (error) {
       setResults(prev => ({ 
@@ -104,9 +127,18 @@ export default function SystemHealthPage() {
   const runEmergencyFix = async () => {
     setIsRunning('emergency')
     try {
-      const response = await fetch('/api/jobs/generate-instances?mode=emergency')
-      const result = await response.json()
-      setResults(prev => ({ ...prev, emergency: result }))
+      const result = await authenticatedGet('/api/jobs/generate-instances?mode=emergency&forceRegenerate=true')
+      if (result) {
+        setResults(prev => ({ ...prev, emergency: result }))
+      } else {
+        setResults(prev => ({ 
+          ...prev, 
+          emergency: { 
+            success: false, 
+            message: `Emergency fix failed: API call returned no data` 
+          } 
+        }))
+      }
     } catch (error) {
       setResults(prev => ({ 
         ...prev, 
@@ -150,7 +182,7 @@ export default function SystemHealthPage() {
               </div>
               <div className="flex items-center space-x-4">
                 <div className="text-right">
-                  <div className="text-sm text-white/70">System Status</div>
+                  <div className="text-sm text-white">System Status</div>
                   <Badge className={`${
                     systemHealth.status === 'healthy' ? 'bg-green-500 text-white' :
                     systemHealth.status === 'warning' ? 'bg-yellow-500 text-white' :
@@ -169,8 +201,8 @@ export default function SystemHealthPage() {
 
         {/* System Health Overview */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
-          <Card className="card-surface">
-            <CardContent className="p-4">
+          <Card className="card-surface py-5 h-22">
+            <CardContent className="px-4 sm:px-6">
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm text-[var(--color-text-secondary)]">Tasks Generated Today</p>
@@ -181,8 +213,8 @@ export default function SystemHealthPage() {
             </CardContent>
           </Card>
 
-          <Card className="card-surface">
-            <CardContent className="p-4">
+          <Card className="card-surface py-5 h-22">
+            <CardContent className="px-4 sm:px-6">
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm text-[var(--color-text-secondary)]">API Response Time</p>
@@ -193,8 +225,8 @@ export default function SystemHealthPage() {
             </CardContent>
           </Card>
 
-          <Card className="card-surface">
-            <CardContent className="p-4">
+          <Card className="card-surface py-5 h-22">
+            <CardContent className="px-4 sm:px-6">
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm text-[var(--color-text-secondary)]">Active Users</p>
@@ -205,13 +237,13 @@ export default function SystemHealthPage() {
             </CardContent>
           </Card>
 
-          <Card className="card-surface">
-            <CardContent className="p-4">
+          <Card className="card-surface py-5 h-22">
+            <CardContent className="px-4 sm:px-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm text-[var(--color-text-secondary)]">Last Updated</p>
+                  <p className="text-sm text-[var(--color-text-secondary)]">Last Updated (AEST/AEDT)</p>
                   <p className="text-sm font-medium text-[var(--color-text)]">
-                    {new Date(systemHealth.lastUpdate).toLocaleTimeString()}
+                    {formatInTimeZone(new Date(systemHealth.lastUpdate), AUSTRALIAN_TIMEZONE, 'HH:mm:ss')}
                   </p>
                 </div>
                 <Clock className="w-8 h-8 text-orange-600" />
@@ -220,10 +252,48 @@ export default function SystemHealthPage() {
           </Card>
         </div>
 
+        {/* Additional System Metrics */}
+        {systemHealth.metrics && (
+          <Card className="card-surface mb-8 gap-2">
+            <CardHeader>
+              <CardTitle className="flex items-center">
+                <Database className="w-5 h-5 mr-2 text-blue-600" />
+                System Metrics
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="text-center p-4 bg-blue-50 rounded-lg">
+                  <h3 className="font-semibold text-blue-800">Active Master Tasks</h3>
+                  <p className="text-2xl font-bold text-blue-600 mt-1">
+                    {systemHealth.metrics.activeMasterTasks}
+                  </p>
+                </div>
+                
+                <div className="text-center p-4 bg-green-50 rounded-lg">
+                  <h3 className="font-semibold text-green-800">Completions Today</h3>
+                  <p className="text-2xl font-bold text-green-600 mt-1">
+                    {systemHealth.metrics.completionsToday}
+                  </p>
+                </div>
+                
+                <div className="text-center p-4 bg-purple-50 rounded-lg">
+                  <h3 className="font-semibold text-purple-800">Database Status</h3>
+                  <p className="text-lg font-bold mt-1">
+                    <Badge className={systemHealth.metrics.databaseConnected ? 'bg-green-500 text-white' : 'bg-red-500 text-white'}>
+                      {systemHealth.metrics.databaseConnected ? '✓ Connected' : '✗ Disconnected'}
+                    </Badge>
+                  </p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
         {/* Diagnostic Tools */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
           {/* System Diagnostics */}
-          <Card className="card-surface">
+          <Card className="card-surface gap-4">
             <CardHeader>
               <CardTitle className="flex items-center">
                 <TestTube className="w-5 h-5 mr-2 text-blue-600" />
@@ -293,7 +363,18 @@ export default function SystemHealthPage() {
                             <strong>{key.replace('-', ' ').toUpperCase()}:</strong> {result.message}
                             {result.stats && (
                               <div className="mt-2 text-sm">
-                                {JSON.stringify(result.stats, null, 2)}
+                                {key === 'recurrence' && result.stats.tasksProcessed !== undefined && (
+                                  <>Tasks Processed: {result.stats.tasksProcessed} | Duration: {result.stats.duration}ms</>
+                                )}
+                                {key === 'performance' && result.stats.apiResponseTime !== undefined && (
+                                  <>API Response: {result.stats.apiResponseTime}ms | DB Query: {result.stats.databaseQueryTime}ms | Status: {result.stats.status}</>
+                                )}
+                                {key === 'data-integrity' && result.stats.issuesFound !== undefined && (
+                                  <>Issues Found: {result.stats.issuesFound} | Status: {result.stats.status}</>
+                                )}
+                                {!['recurrence', 'performance', 'data-integrity'].includes(key) && (
+                                  <pre className="whitespace-pre-wrap">{JSON.stringify(result.stats, null, 2)}</pre>
+                                )}
                               </div>
                             )}
                           </AlertDescription>
@@ -307,7 +388,7 @@ export default function SystemHealthPage() {
           </Card>
 
           {/* Emergency Tools */}
-          <Card className="card-surface">
+          <Card className="card-surface gap-4">
             <CardHeader>
               <CardTitle className="flex items-center">
                 <Settings className="w-5 h-5 mr-2 text-orange-600" />
@@ -352,9 +433,10 @@ export default function SystemHealthPage() {
                         {results.emergency.message}
                         {results.emergency.stats && (
                           <div className="mt-2 text-sm">
-                            Repaired: {results.emergency.stats.generated} | 
-                            Skipped: {results.emergency.stats.skipped} | 
-                            Errors: {results.emergency.stats.errors}
+                            Total Tasks: {results.emergency.stats.totalTasks || 0} | 
+                            New Instances: {results.emergency.stats.newInstances || 0} | 
+                            Total Instances: {results.emergency.stats.totalInstances || 0} | 
+                            Errors: {results.emergency.stats.errors || 0}
                           </div>
                         )}
                       </AlertDescription>
@@ -367,13 +449,13 @@ export default function SystemHealthPage() {
         </div>
 
         {/* System Information */}
-        <Card className="card-surface">
+        <Card className="card-surface gap-4">
           <CardHeader>
             <CardTitle>System Information</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div className="text-center p-4 bg-green-50 rounded-lg">
+              <div className="text-center p-3 bg-green-50 rounded-lg">
                 <h3 className="font-semibold text-green-800">System Status</h3>
                 <p className="text-sm text-green-600 mt-1">
                   ✅ Fully Automatic Operation<br />
@@ -382,22 +464,22 @@ export default function SystemHealthPage() {
                 </p>
               </div>
               
-              <div className="text-center p-4 bg-blue-50 rounded-lg">
+              <div className="text-center p-3 bg-blue-50 rounded-lg">
                 <h3 className="font-semibold text-blue-800">Environment</h3>
                 <p className="text-sm text-blue-600 mt-1">
                   {process.env.NODE_ENV === 'production' ? 'Production' : 'Development'}<br />
-                  Database: Connected<br />
-                  API: Operational
+                  Database: {systemHealth.metrics?.databaseConnected ? 'Connected' : 'Disconnected'}<br />
+                  API: {systemHealth.status === 'error' ? 'Error' : 'Operational'}
                 </p>
               </div>
               
-              <div className="text-center p-4 bg-purple-50 rounded-lg">
+              <div className="text-center p-3 bg-purple-50 rounded-lg">
                 <h3 className="font-semibold text-purple-800">Actions</h3>
                 <Button
                   onClick={clearResults}
                   variant="outline"
                   size="sm"
-                  className="mt-1 text-purple-600 border-purple-300 hover:bg-purple-100"
+                  className="mt-5 mr-2 text-purple-600 border-purple-300 hover:bg-purple-100"
                 >
                   Clear Results
                 </Button>
@@ -405,7 +487,7 @@ export default function SystemHealthPage() {
                   onClick={loadSystemHealth}
                   variant="outline"
                   size="sm"
-                  className="mt-1 ml-2 text-blue-600 border-blue-300 hover:bg-blue-100"
+                  className="mt-5 ml-2 text-blue-600 border-blue-300 hover:bg-blue-100"
                 >
                   Refresh Data
                 </Button>
@@ -444,7 +526,7 @@ export default function SystemHealthPage() {
                   <h4 className="font-semibold text-[var(--color-text)] mb-2">⚡ Real-time Status Updates</h4>
                   <ul className="list-disc list-inside space-y-1">
                     <li>Status calculated dynamically based on current time</li>
-                    <li>Automatic transitions: pending → due → overdue → missed</li>
+                    <li>Automatic transitions: Not Due Yet → Due Today → Overdue → Missed</li>
                     <li>No background jobs needed for status updates</li>
                     <li>Always accurate and up-to-date</li>
                   </ul>

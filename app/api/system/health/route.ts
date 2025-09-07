@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { requireAuth } from '@/lib/auth-middleware'
+import { requireAuthEnhanced } from '@/lib/auth-middleware'
 import { createClient } from '@supabase/supabase-js'
-import { getAustralianToday } from '@/lib/timezone-utils'
+import { getAustralianToday, getAustralianNow } from '@/lib/timezone-utils'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
@@ -10,7 +10,7 @@ const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey)
 export async function GET(request: NextRequest) {
   try {
     // Authenticate the request and ensure admin access
-    const user = await requireAuth(request)
+    const user = await requireAuthEnhanced(request)
     if (user.role !== 'admin') {
       return NextResponse.json({ error: 'Admin access required' }, { status: 403 })
     }
@@ -67,13 +67,13 @@ export async function GET(request: NextRequest) {
 
     const healthData = {
       status,
-      tasksGenerated: taskInstancesResult.count || Math.floor(Math.random() * 50) + 10, // Mock data if no real data
+      tasksGenerated: taskInstancesResult.count || 0,
       apiResponseTime,
       lastUpdate: new Date().toISOString(),
-      activeUsers: positionsResult.count || 4, // Mock data if no real data
+      activeUsers: positionsResult.count || 0,
       metrics: {
-        activeMasterTasks: masterTasksResult.count || Math.floor(Math.random() * 20) + 5,
-        completionsToday: completionsResult.count || Math.floor(Math.random() * 30) + 5,
+        activeMasterTasks: masterTasksResult.count || 0,
+        completionsToday: completionsResult.count || 0,
         databaseConnected: !masterTasksResult.error
       }
     }
@@ -87,6 +87,11 @@ export async function GET(request: NextRequest) {
       apiResponseTime: 0,
       lastUpdate: new Date().toISOString(),
       activeUsers: 0,
+      metrics: {
+        activeMasterTasks: 0,
+        completionsToday: 0,
+        databaseConnected: false
+      },
       error: error instanceof Error ? error.message : 'Unknown error'
     }, { status: 500 })
   }

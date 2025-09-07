@@ -15,13 +15,13 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json().catch(() => ({}))
-    const { date, testMode = false, dryRun = false, forceRegenerate = false } = body
+    const { date, testMode = false, dryRun = false, forceRegenerate = false, mode } = body
 
     // Run the new daily generation job
     const result = await runNewDailyGeneration(date, {
       testMode,
       dryRun,
-      forceRegenerate
+      forceRegenerate: forceRegenerate || mode === 'emergency'
     })
 
     return NextResponse.json({
@@ -53,10 +53,10 @@ export async function POST(request: NextRequest) {
 export async function GET(request: NextRequest) {
   try {
     // Import auth function for user authentication
-    const { requireAuth } = await import('@/lib/auth-middleware')
+    const { requireAuthEnhanced } = await import('@/lib/auth-middleware')
     
     // Authenticate user and verify admin role
-    const user = await requireAuth(request)
+    const user = await requireAuthEnhanced(request)
     if (user.role !== 'admin') {
       return NextResponse.json({ error: 'Admin access required' }, { status: 403 })
     }
@@ -66,12 +66,13 @@ export async function GET(request: NextRequest) {
     const testMode = searchParams.get('testMode') === 'true'
     const dryRun = searchParams.get('dryRun') === 'true'
     const forceRegenerate = searchParams.get('forceRegenerate') === 'true'
+    const mode = searchParams.get('mode')
 
     // Run the new daily generation job
     const result = await runNewDailyGeneration(date, {
       testMode,
       dryRun,
-      forceRegenerate
+      forceRegenerate: forceRegenerate || mode === 'emergency'
     })
 
     return NextResponse.json({
