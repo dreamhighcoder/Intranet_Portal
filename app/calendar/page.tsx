@@ -668,14 +668,7 @@ export default function CalendarPage() {
             {isAdmin && positions.length > 0 && (
               <Select value={selectedPosition} onValueChange={handlePositionChange} disabled={loadingButton === 'position'}>
                 <SelectTrigger className="w-full">
-                  {loadingButton === 'position' ? (
-                    <div className="flex items-center">
-                      <Loader2 className="w-4 h-4 animate-spin mr-2" />
-                      <span>Loading...</span>
-                    </div>
-                  ) : (
-                    <SelectValue />
-                  )}
+                  <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Positions</SelectItem>
