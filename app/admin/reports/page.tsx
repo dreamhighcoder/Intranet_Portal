@@ -39,7 +39,8 @@ import {
   BarChart3,
   PieChart as PieChartIcon,
   FileText,
-  Users
+  Users,
+  Loader2
 } from "lucide-react"
 import { useRouter } from "next/navigation"
 import * as XLSX from 'xlsx'
@@ -248,6 +249,7 @@ export default function ReportsPage() {
   const [positions, setPositions] = useState<Position[]>([])
   const [loading, setLoading] = useState(false)
   const [reportData, setReportData] = useState<ReportData>({})
+  const [loadingButton, setLoadingButton] = useState<string | null>(null)
 
   // Filters
   const [dateRange, setDateRange] = useState({
@@ -273,9 +275,17 @@ export default function ReportsPage() {
     }
   }, [authLoading, user, isAdmin])
 
+  // Reset loading button state when loading completes
+  useEffect(() => {
+    if (!loading) {
+      setLoadingButton(null)
+    }
+  }, [loading])
+
   // Remove automatic loading when filters change - now controlled by manual button click
 
   const handleReportTypeChange = (reportType: string) => {
+    setLoadingButton(reportType)
     setActiveReportType(reportType)
     // Always trigger data loading when report type is changed
     if (user && isAdmin) {
@@ -295,7 +305,11 @@ export default function ReportsPage() {
   }
 
   const loadReports = async () => {
-    setLoading(true)
+    // Only show full page loading on initial load
+    if (!reportData.completionRate && !reportData.missedTasks) {
+      setLoading(true)
+    }
+    
     try {
       const startDate = dateRange.from.toISOString().split('T')[0]
       const endDate = dateRange.to.toISOString().split('T')[0]
@@ -361,6 +375,7 @@ export default function ReportsPage() {
       toastError("Error", "Failed to load report data")
     } finally {
       setLoading(false)
+      setLoadingButton(null)
     }
   }
 
@@ -760,10 +775,19 @@ export default function ReportsPage() {
                       variant={activeReportType === "overview" ? "default" : "outline"}
                       onClick={() => handleReportTypeChange("overview")}
                       className={`w-full ${activeReportType === "overview" ? "text-white" : ""}`}
-                      disabled={loading}
+                      disabled={loadingButton === "overview"}
                     >
-                      <Eye className="w-3 h-3" />
-                      {loading && activeReportType === "overview" ? "Loading..." : "Overview"}
+                      {loadingButton === "overview" ? (
+                        <>
+                          <Loader2 className="w-3 h-3 animate-spin" />
+                          <span>Loading...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Eye className="w-3 h-3" />
+                          <span>Overview</span>
+                        </>
+                      )}
                     </Button>
                   </div>
 
@@ -774,9 +798,19 @@ export default function ReportsPage() {
                       variant={activeReportType === "missed-tasks" ? "default" : "outline"}
                       onClick={() => handleReportTypeChange("missed-tasks")}
                       className={`w-full ${activeReportType === "missed-tasks" ? "text-white" : ""}`}
-                      disabled={loading}
+                      disabled={loadingButton === "missed-tasks"}
                     >
-                      {loading && activeReportType === "missed-tasks" ? "Loading..." : "Missed Tasks"}
+                      {loadingButton === "missed-tasks" ? (
+                        <>
+                          <Loader2 className="w-3 h-3 animate-spin" />
+                          <span>Loading...</span>
+                        </>
+                      ) : (
+                        <>
+                          <AlertTriangle className="w-3 h-3" />
+                          <span>Missed Tasks</span>
+                        </>
+                      )}
                     </Button>
                   </div>
                   <div className="space-y-2">
