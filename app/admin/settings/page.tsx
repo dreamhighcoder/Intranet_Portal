@@ -307,9 +307,6 @@ export default function SettingsPage() {
             </CardContent>
           </Card>
 
-          {/* Timezone Health Check */}
-          <TimezoneHealthCard />
-
           {/* Task Management Settings */}
           <Card className="card-surface gap-4 p-4 sm:p-6 mb-6">
             <CardHeader className="px-0 pt-2">
@@ -443,6 +440,9 @@ export default function SettingsPage() {
               )}
             </CardContent>
           </Card>
+
+          {/* Timezone Health Check */}
+          <TimezoneHealthCard />
 
           {/* System Information */}
           <Card className="card-surface gap-4 p-4 sm:p-6 mb-6">
