@@ -15,41 +15,41 @@ ON CONFLICT (name) DO NOTHING;
 
 -- Insert some sample Master Tasks (using current schema)
 INSERT INTO master_tasks (
-  title, description, position_id, frequency, timing, default_due_time, category,
+  title, description, responsibility, frequencies, timing, due_time, categories,
   publish_status
 ) VALUES
   -- Daily tasks for Pharmacist Primary
   ('Daily Register Check', 'Verify controlled substances register is complete and accurate', 
-   (SELECT id FROM positions WHERE name = 'Pharmacist (Primary)'), 'every_day', 'opening', '09:00:00', 'compliance',
+   ARRAY['pharmacist-primary'], ARRAY['every_day'], 'opening', '09:00:00', ARRAY['compliance'],
    'active'),
    
   ('Daily Temperature Log', 'Record and verify refrigeration temperatures', 
-   (SELECT id FROM positions WHERE name = 'Pharmacist (Primary)'), 'every_day', 'opening', '08:30:00', 'pharmacy-services',
+   ARRAY['pharmacist-primary'], ARRAY['every_day'], 'opening', '08:30:00', ARRAY['pharmacy-services'],
    'active'),
    
   -- Weekly tasks
   ('Weekly Safety Review', 'Review weekly safety incidents and near misses', 
-   (SELECT id FROM positions WHERE name = 'Pharmacist (Primary)'), 'weekly', 'opening', '09:30:00', 'compliance',
+   ARRAY['pharmacist-primary'], ARRAY['weekly'], 'opening', '09:30:00', ARRAY['compliance'],
    'active'),
    
   -- Monthly tasks for dispensary technicians
   ('Monthly Inventory Count', 'Complete monthly inventory count for assigned areas', 
-   (SELECT id FROM positions WHERE name = 'Dispensary Technicians'), 'start_every_month', 'opening', '08:00:00', 'stock-control',
+   ARRAY['dispensary-technicians'], ARRAY['start_every_month'], 'opening', '08:00:00', ARRAY['stock-control'],
    'active'),
    
   -- Once-off sticky task
   ('Annual CPR Training', 'Complete mandatory CPR training certification', 
-   (SELECT id FROM positions WHERE name = 'Pharmacist (Primary)'), 'once_off_sticky', 'anytime_during_day', '17:00:00', 'compliance',
+   ARRAY['pharmacist-primary'], ARRAY['once_off_sticky'], 'anytime_during_day', '17:00:00', ARRAY['compliance'],
    'active'),
    
   -- Specific weekdays task for operational/managerial (Monday, Wednesday, Friday)
   ('Delivery Schedule Check', 'Review and confirm upcoming delivery schedules', 
-   (SELECT id FROM positions WHERE name = 'Operational/Managerial'), 'specific_weekdays', 'opening', '08:15:00', 'business-management',
-   'active');
+   ARRAY['operational-managerial'], ARRAY['specific_weekdays'], 'opening', '08:15:00', ARRAY['business-management'],
+   'active'),
    
   -- End of month task
   ('Monthly P&L Review', 'Review monthly profit and loss statements', 
-   (SELECT id FROM positions WHERE name = 'Operational/Managerial'), 'end_every_month', 'closing', '16:00:00', 'business-management',
+   ARRAY['operational-managerial'], ARRAY['end_every_month'], 'closing', '16:00:00', ARRAY['business-management'],
    'active');
 
 -- Update weekdays for specific_weekdays tasks

@@ -9,7 +9,8 @@ import {
   isAustralianTimePast,
   parseAustralianDate,
   formatAustralianDate,
-  toAustralianTime
+  toAustralianTime,
+  getAustralianNow
 } from '@/lib/timezone-utils'
 import { NewRecurrenceEngine, NewFrequencyType, type MasterTask as NewMasterTask } from '@/lib/new-recurrence-engine'
 import { HolidayChecker } from '@/lib/holiday-checker'
@@ -24,6 +25,7 @@ function convertStringFrequenciesToEnum(frequencies: string[]): NewFrequencyType
     'once_off': NewFrequencyType.ONCE_OFF,
     'every_day': NewFrequencyType.EVERY_DAY,
     'once_weekly': NewFrequencyType.ONCE_WEEKLY,
+    'weekly': NewFrequencyType.ONCE_WEEKLY, // Legacy mapping
     'monday': NewFrequencyType.MONDAY,
     'tuesday': NewFrequencyType.TUESDAY,
     'wednesday': NewFrequencyType.WEDNESDAY,
@@ -32,6 +34,8 @@ function convertStringFrequenciesToEnum(frequencies: string[]): NewFrequencyType
     'saturday': NewFrequencyType.SATURDAY,
     'once_monthly': NewFrequencyType.ONCE_MONTHLY,
     'start_of_every_month': NewFrequencyType.START_OF_EVERY_MONTH,
+    'start_every_month': NewFrequencyType.START_OF_EVERY_MONTH, // Legacy mapping
+    'end_every_month': NewFrequencyType.END_OF_EVERY_MONTH, // Legacy mapping
     'start_of_month_jan': NewFrequencyType.START_OF_MONTH_JAN,
     'start_of_month_feb': NewFrequencyType.START_OF_MONTH_FEB,
     'start_of_month_mar': NewFrequencyType.START_OF_MONTH_MAR,
@@ -56,12 +60,20 @@ function convertStringFrequenciesToEnum(frequencies: string[]): NewFrequencyType
     'end_of_month_sep': NewFrequencyType.END_OF_MONTH_SEP,
     'end_of_month_oct': NewFrequencyType.END_OF_MONTH_OCT,
     'end_of_month_nov': NewFrequencyType.END_OF_MONTH_NOV,
-    'end_of_month_dec': NewFrequencyType.END_OF_MONTH_DEC
+    'end_of_month_dec': NewFrequencyType.END_OF_MONTH_DEC,
+    // Additional legacy mappings
+    'once_off_sticky': NewFrequencyType.ONCE_OFF,
+    'specific_weekdays': NewFrequencyType.ONCE_WEEKLY, // This will need special handling for weekdays
+    'monthly': NewFrequencyType.ONCE_MONTHLY // Legacy mapping
   }
 
-  return frequencies
+  const converted = frequencies
     .map(freq => frequencyMap[freq])
     .filter(Boolean)
+  
+
+  
+  return converted
 }
 
 // Build responsibility variants to match DB values
@@ -170,6 +182,8 @@ async function generateTaskOccurrences(startDate: string, endDate: string, posit
     throw new Error('Failed to fetch master tasks')
   }
 
+
+
   // Apply category filter in memory (after DB query)
   const filteredTasks = (masterTasks || []).filter(task => {
     if (category && category !== 'all') {
@@ -199,6 +213,8 @@ async function generateTaskOccurrences(startDate: string, endDate: string, posit
     .lte('instance_date', endDate)
 
   const { data: taskInstances } = await instancesQuery
+
+
 
   // Create a map of existing task instances
   const instanceMap: Record<string, any> = {}
@@ -285,9 +301,21 @@ async function generateTaskOccurrences(startDate: string, endDate: string, posit
           status = existingInstance.status
           completedAt = existingInstance.completed_at
         } else {
-          // No instance exists, determine status based on time
-          const isOverdue = task.due_time ? isAustralianTimePast(dateStr, task.due_time) : false
-          status = isOverdue ? 'overdue' : 'due_today'
+          // No instance exists, determine status based on time and date
+          const taskDate = parseAustralianDate(dateStr)
+          const currentDate = parseAustralianDate(formatAustralianDate(getAustralianNow()))
+          
+          if (taskDate < currentDate) {
+            // Task is from a past date - it should be marked as missed
+            status = 'missed'
+          } else if (taskDate.getTime() === currentDate.getTime()) {
+            // Task is for today - check if it's overdue based on time
+            const isOverdue = task.due_time ? isAustralianTimePast(dateStr, task.due_time) : false
+            status = isOverdue ? 'overdue' : 'due_today'
+          } else {
+            // Task is for a future date
+            status = 'not_due'
+          }
         }
 
         taskOccurrences.push({
@@ -304,6 +332,8 @@ async function generateTaskOccurrences(startDate: string, endDate: string, posit
       }
     }
   }
+
+
 
   return taskOccurrences
 }

@@ -63,10 +63,26 @@ const formatCategory = (category: string) => {
 }
 
 const formatStatus = (status: string) => {
-  // Convert snake_case to proper display format
-  return status
+  // Convert snake_case to proper display format and add icons for specific statuses
+  const formatted = status
     .replace(/_/g, ' ')
     .replace(/\b\w/g, l => l.toUpperCase())
+  
+  // Add icons for specific statuses to match checklist page
+  switch (status) {
+    case 'missed':
+      return '❌ Missed'
+    case 'done':
+      return '✓ Done'
+    case 'overdue':
+      return '⚠️ Overdue'
+    case 'due_today':
+      return '⏰ Due Today'
+    case 'not_due':
+      return '📅 Not Due'
+    default:
+      return formatted
+  }
 }
 
 // Helper to get responsibility badge color (consistent hash-based coloring)
@@ -114,7 +130,7 @@ const getStatusBadgeColor = (status: string) => {
     case 'overdue':
       return 'bg-red-100 text-red-800 border-red-200'
     case 'missed':
-      return 'bg-gray-100 text-gray-800 border-gray-200'
+      return 'bg-gray-800 text-white border-gray-600'
     case 'due_today':
       return 'bg-blue-100 text-blue-800 border-blue-200'
     case 'not_due':
@@ -346,6 +362,7 @@ export default function ReportsPage() {
       const results = await Promise.all(reportPromises)
 
       if (activeReportType === "overview") {
+
         setReportData({
           completionRate: results[0],
           taskSummary: results[1],
@@ -464,6 +481,8 @@ export default function ReportsPage() {
       position,
       missed: count
     }))
+
+
 
     return (
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
