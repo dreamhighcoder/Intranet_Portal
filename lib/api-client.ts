@@ -182,18 +182,35 @@ export async function authenticatedPost<T = any>(url: string, data: any): Promis
  */
 export async function authenticatedPut<T = any>(url: string, data: any): Promise<T | null> {
   try {
+    console.log('API Client - Making PUT request to:', url)
+    console.log('API Client - Request data:', JSON.stringify(data, null, 2))
+    
+    console.log('API Client - About to call authenticatedFetch...')
     const response = await authenticatedFetch(url, {
       method: 'PUT',
       body: JSON.stringify(data),
     })
+    console.log('API Client - authenticatedFetch completed')
+    
+    console.log('API Client - Response status:', response.status)
+    console.log('API Client - Response ok:', response.ok)
+    
     if (response.ok) {
-      return await response.json()
+      console.log('API Client - Response is OK, parsing JSON...')
+      const result = await response.json()
+      console.log('API Client - Success response:', result)
+      return result
     } else {
+      console.log('API Client - Response is not OK, parsing error...')
       const error = await response.json().catch(() => ({ error: 'Unknown error' }))
+      console.log('API Client - Error response:', error)
       throw new Error(error.error || `Failed to put to ${url}`)
     }
   } catch (error) {
-    console.error(`Error putting to ${url}:`, error)
+    console.error(`API Client - Exception in authenticatedPut for ${url}:`, error)
+    console.error('API Client - Error type:', typeof error)
+    console.error('API Client - Error message:', error instanceof Error ? error.message : String(error))
+    console.error('API Client - Error stack:', error instanceof Error ? error.stack : 'No stack trace')
     throw error
   }
 }

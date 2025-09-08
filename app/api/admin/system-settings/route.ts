@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
+import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { getAustralianNow, AUSTRALIAN_TIMEZONE } from '@/lib/timezone-utils'
 import { formatInTimeZone } from 'date-fns-tz'
 
@@ -53,25 +53,60 @@ export async function GET() {
     // Get system settings from database
     const { data: settings, error } = await supabase
       .from('system_settings')
-      .select('*')
-      .limit(1)
-      .single()
+      .select('key, value, data_type')
 
-    if (error && error.code !== 'PGRST116') { // PGRST116 = no rows returned
+    if (error) {
       console.error('Error fetching system settings:', error)
       return NextResponse.json({ error: 'Failed to fetch settings' }, { status: 500 })
     }
 
-    // If no settings exist, return defaults
-    if (!settings) {
-      return NextResponse.json(DEFAULT_SETTINGS)
+    // Convert array to object and parse values based on data_type
+    const settingsObject: any = {}
+    
+    if (settings) {
+      for (const setting of settings) {
+        let value = setting.value
+        
+        // Parse value based on data_type
+        switch (setting.data_type) {
+          case 'boolean':
+            value = value === 'true'
+            break
+          case 'number':
+            value = Number(value)
+            break
+          case 'json':
+            try {
+              value = JSON.parse(value)
+            } catch {
+              value = setting.value
+            }
+            break
+          default:
+            // string - keep as is
+            break
+        }
+        
+        settingsObject[setting.key] = value
+      }
     }
 
-    // Merge with defaults to ensure all fields are present
+    // Map database keys to frontend keys and merge with defaults
     const mergedSettings = {
       ...DEFAULT_SETTINGS,
-      ...settings,
-      working_days: settings.working_days || DEFAULT_SETTINGS.working_days
+      timezone: settingsObject.timezone || DEFAULT_SETTINGS.timezone,
+      new_since_hour: settingsObject.new_since_hour || DEFAULT_SETTINGS.new_since_hour,
+      missed_cutoff_time: settingsObject.daily_task_cutoff || DEFAULT_SETTINGS.missed_cutoff_time,
+      auto_logout_enabled: settingsObject.auto_logout_enabled !== undefined ? settingsObject.auto_logout_enabled : DEFAULT_SETTINGS.auto_logout_enabled,
+      auto_logout_delay_minutes: settingsObject.auto_logout_delay_seconds ? Math.ceil(settingsObject.auto_logout_delay_seconds / 60) : DEFAULT_SETTINGS.auto_logout_delay_minutes,
+      task_generation_days_ahead: settingsObject.task_generation_days_forward || DEFAULT_SETTINGS.task_generation_days_ahead,
+      task_generation_days_behind: settingsObject.task_generation_days_back || DEFAULT_SETTINGS.task_generation_days_behind,
+      working_days: settingsObject.business_days ? 
+        settingsObject.business_days.map((day: number) => {
+          const dayNames = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday']
+          return dayNames[day] || 'monday'
+        }) : DEFAULT_SETTINGS.working_days,
+      public_holiday_push_forward: settingsObject.ph_substitution_enabled !== undefined ? settingsObject.ph_substitution_enabled : DEFAULT_SETTINGS.public_holiday_push_forward
     }
 
     return NextResponse.json(mergedSettings)
@@ -107,8 +142,7 @@ export async function PUT(request: NextRequest) {
     
     // Validate required fields
     const requiredFields = [
-      'timezone', 'new_since_hour', 'missed_cutoff_time', 
-      'default_due_time', 'working_days'
+      'timezone', 'new_since_hour', 'missed_cutoff_time', 'working_days'
     ]
     
     for (const field of requiredFields) {
@@ -135,8 +169,8 @@ export async function PUT(request: NextRequest) {
     }
 
     // Validate numeric fields
-    if (typeof body.task_generation_days_ahead !== 'number' || body.task_generation_days_ahead < 1 || body.task_generation_days_ahead > 730) {
-      return NextResponse.json({ error: 'Invalid task_generation_days_ahead (must be 1-730)' }, { status: 400 })
+    if (typeof body.task_generation_days_ahead !== 'number' || body.task_generation_days_ahead < 1 || body.task_generation_days_ahead > 999999) {
+      return NextResponse.json({ error: 'Invalid task_generation_days_ahead (must be 1-999999)' }, { status: 400 })
     }
 
     if (typeof body.task_generation_days_behind !== 'number' || body.task_generation_days_behind < 0 || body.task_generation_days_behind > 90) {
@@ -147,59 +181,69 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ error: 'Invalid auto_logout_delay_minutes (must be 1-60)' }, { status: 400 })
     }
 
-    // Prepare settings object
-    const settingsToSave = {
-      timezone: body.timezone,
-      new_since_hour: body.new_since_hour,
-      missed_cutoff_time: body.missed_cutoff_time,
-      auto_logout_enabled: body.auto_logout_enabled || false,
-      auto_logout_delay_minutes: body.auto_logout_delay_minutes || 5,
-      task_generation_days_ahead: body.task_generation_days_ahead,
-      task_generation_days_behind: body.task_generation_days_behind,
-      default_due_time: body.default_due_time,
-      working_days: body.working_days,
-      public_holiday_push_forward: body.public_holiday_push_forward || false,
-      updated_at: formatInTimeZone(getAustralianNow(), AUSTRALIAN_TIMEZONE, "yyyy-MM-dd'T'HH:mm:ss.SSSxxx"),
-      updated_by: user.id
-    }
+    // Map frontend settings to database key-value pairs
+    const settingsToUpdate = [
+      { key: 'timezone', value: body.timezone, data_type: 'string' },
+      { key: 'new_since_hour', value: body.new_since_hour, data_type: 'string' },
+      { key: 'daily_task_cutoff', value: body.missed_cutoff_time, data_type: 'string' },
+      { key: 'auto_logout_enabled', value: body.auto_logout_enabled ? 'true' : 'false', data_type: 'boolean' },
+      { key: 'auto_logout_delay_seconds', value: String(body.auto_logout_delay_minutes * 60), data_type: 'number' },
+      { key: 'task_generation_days_forward', value: String(body.task_generation_days_ahead), data_type: 'number' },
+      { key: 'task_generation_days_back', value: String(body.task_generation_days_behind), data_type: 'number' },
+      { key: 'ph_substitution_enabled', value: body.public_holiday_push_forward ? 'true' : 'false', data_type: 'boolean' },
+      { 
+        key: 'business_days', 
+        value: JSON.stringify(body.working_days.map((day: string) => {
+          const dayMap: { [key: string]: number } = {
+            'sunday': 0, 'monday': 1, 'tuesday': 2, 'wednesday': 3, 
+            'thursday': 4, 'friday': 5, 'saturday': 6
+          }
+          return dayMap[day] || 1
+        })), 
+        data_type: 'json' 
+      }
+    ]
 
-    // Check if settings exist
-    const { data: existingSettings } = await supabase
-      .from('system_settings')
-      .select('id')
-      .limit(1)
-      .single()
-
-    let result
-    if (existingSettings) {
-      // Update existing settings
-      result = await supabase
+    // Update each setting using upsert
+    const results = []
+    for (const setting of settingsToUpdate) {
+      const { data, error } = await supabase
         .from('system_settings')
-        .update(settingsToSave)
-        .eq('id', existingSettings.id)
+        .upsert(
+          { 
+            key: setting.key, 
+            value: setting.value, 
+            data_type: setting.data_type,
+            updated_at: formatInTimeZone(getAustralianNow(), AUSTRALIAN_TIMEZONE, "yyyy-MM-dd'T'HH:mm:ss.SSSxxx")
+          },
+          { onConflict: 'key' }
+        )
         .select()
         .single()
-    } else {
-      // Insert new settings
-      result = await supabase
-        .from('system_settings')
-        .insert({
-          ...settingsToSave,
-          created_at: settingsToSave.updated_at,
-          created_by: user.id
-        })
-        .select()
-        .single()
+
+      if (error) {
+        console.error(`Error updating setting ${setting.key}:`, error)
+        return NextResponse.json({ error: `Failed to update setting: ${setting.key}` }, { status: 500 })
+      }
+
+      results.push(data)
     }
 
-    if (result.error) {
-      console.error('Error saving system settings:', result.error)
-      return NextResponse.json({ error: 'Failed to save settings' }, { status: 500 })
-    }
+    // Log the settings change in audit log
+    await supabase
+      .from('audit_log')
+      .insert({
+        user_id: user.id,
+        action: 'system_config_changed',
+        metadata: {
+          settings_updated: settingsToUpdate.map(s => s.key),
+          timestamp: formatInTimeZone(getAustralianNow(), AUSTRALIAN_TIMEZONE, "yyyy-MM-dd'T'HH:mm:ss.SSSxxx")
+        }
+      })
 
     return NextResponse.json({ 
       success: true, 
-      settings: result.data,
+      settings: results,
       message: 'System settings updated successfully'
     })
 

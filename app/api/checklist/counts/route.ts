@@ -5,6 +5,7 @@ import { createHolidayChecker } from '@/lib/holiday-checker'
 import { ChecklistQuerySchema } from '@/lib/validation-schemas'
 import { toKebabCase, getSearchOptions } from '@/lib/responsibility-mapper'
 import { getAustralianNow, getAustralianToday, createAustralianDateTime, parseAustralianDate, formatAustralianDate, toAustralianTime } from '@/lib/timezone-utils'
+import { getSystemSettings } from '@/lib/system-settings'
 
 // Use service role key to bypass RLS for server-side reads (match checklist API)
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!

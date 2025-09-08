@@ -16,6 +16,7 @@ import type {
   ChecklistInstanceStatus 
 } from './db'
 import { australianNowUtcISOString } from './timezone-utils'
+import { getSystemSettings } from './system-settings'
 
 // ========================================
 // TYPES AND INTERFACES
@@ -418,7 +419,7 @@ export class StatusManager {
       }
 
       // Determine what the status should be
-      const targetStatus = this.calculateTargetStatus(instance, masterTask, date)
+      const targetStatus = await this.calculateTargetStatus(instance, masterTask, date)
       
       if (currentStatus === targetStatus && !forceUpdate) {
         return {
@@ -511,7 +512,7 @@ export class StatusManager {
   /**
    * Calculate what the target status should be for an instance
    */
-  private calculateTargetStatus(instance: any, masterTask: any, date: string): ChecklistInstanceStatus {
+  private async calculateTargetStatus(instance: any, masterTask: any, date: string): Promise<ChecklistInstanceStatus> {
     const currentStatus = instance.status
     const dueTime = masterTask.due_time
     const timing = masterTask.timing
@@ -537,7 +538,7 @@ export class StatusManager {
 
     // Handle missed logic
     if (isPastDate && currentStatus !== 'completed') {
-      const cutoffTime = this.calculateCutoffTime(instanceDate, frequencyRules)
+      const cutoffTime = await this.calculateCutoffTime(instanceDate, frequencyRules)
       if (now > cutoffTime) {
         return 'missed'
       }
@@ -557,10 +558,14 @@ export class StatusManager {
 
   /**
    * Calculate the cutoff time for missed status
-   * Week/month rules have Saturday cutoff, others use 23:59
+   * Week/month rules have Saturday cutoff, others use system cutoff time
    */
-  private calculateCutoffTime(instanceDate: Date, frequencyRules: any): Date {
+  private async calculateCutoffTime(instanceDate: Date, frequencyRules: any): Promise<Date> {
     const cutoffDate = new Date(instanceDate)
+    const settings = await getSystemSettings()
+    
+    // Parse the cutoff time from settings (format: "HH:mm")
+    const [hours, minutes] = settings.missed_cutoff_time.split(':').map(Number)
     
     // Check if this is a week/month frequency rule
     const isWeekMonthRule = frequencyRules && (
@@ -572,14 +577,14 @@ export class StatusManager {
     )
 
     if (isWeekMonthRule) {
-      // For week/month rules, cutoff is Saturday 23:59
+      // For week/month rules, cutoff is Saturday at system cutoff time
       const dayOfWeek = cutoffDate.getDay()
       const daysUntilSaturday = (6 - dayOfWeek + 7) % 7
       cutoffDate.setDate(cutoffDate.getDate() + daysUntilSaturday)
-      cutoffDate.setHours(23, 59, 59, 999)
+      cutoffDate.setHours(hours, minutes, 59, 999)
     } else {
-      // For daily rules, cutoff is same day 23:59
-      cutoffDate.setHours(23, 59, 59, 999)
+      // For daily rules, cutoff is same day at system cutoff time
+      cutoffDate.setHours(hours, minutes, 59, 999)
     }
 
     return cutoffDate

@@ -12,6 +12,7 @@
 import { NewRecurrenceEngine, TaskStatus, type MasterTask, type TaskInstance, type NewFrequencyType } from './new-recurrence-engine'
 import { TaskDatabaseAdapter } from './task-database-adapter'
 import { HolidayChecker, createHolidayChecker } from './holiday-checker'
+import { getTaskGenerationSettings } from './system-settings'
 import { 
   getAustralianNow, 
   getAustralianToday, 
@@ -525,4 +526,33 @@ export async function runNewStatusUpdate(
 ): Promise<NewStatusUpdateResult> {
   const generator = new NewTaskGenerator(await createHolidayChecker(), options.logLevel || 'info');
   return await generator.updateStatusesForDate(options);
+}
+
+/**
+ * Run bulk task generation using system settings for date ranges
+ */
+export async function runBulkGeneration(
+  baseDate?: string,
+  options: Omit<NewGenerationOptions, 'date'> = {}
+): Promise<NewGenerationResult[]> {
+  const targetDate = baseDate || getAustralianToday()
+  const settings = await getTaskGenerationSettings()
+  
+  // Calculate date range based on system settings
+  const baseDateObj = parseAustralianDate(targetDate)
+  const startDate = new Date(baseDateObj)
+  startDate.setDate(startDate.getDate() - settings.daysBehind)
+  
+  const endDate = new Date(baseDateObj)
+  endDate.setDate(endDate.getDate() + settings.daysAhead)
+  
+  const startDateStr = formatAustralianDate(startDate)
+  const endDateStr = formatAustralianDate(endDate)
+  
+  console.log(`Running bulk generation from ${startDateStr} to ${endDateStr} (${settings.daysBehind} days behind, ${settings.daysAhead} days ahead)`)
+  
+  const holidayChecker = await createHolidayChecker()
+  const generator = new NewTaskGenerator(holidayChecker, options.logLevel || 'info')
+  
+  return await generator.generateForDateRange(startDateStr, endDateStr, options)
 }

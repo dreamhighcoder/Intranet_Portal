@@ -123,18 +123,17 @@ export default function SettingsPage() {
 
   const loadSettings = async () => {
     try {
-      // For now, use default settings - in production this would load from database
-      setSettings({
-        timezone: 'Australia/Sydney',
-        new_since_hour: '00:00',
-        missed_cutoff_time: '23:59',
-        auto_logout_enabled: true,
-        auto_logout_delay_minutes: 5,
-        task_generation_days_ahead: 365,
-        task_generation_days_behind: 0,
-        working_days: ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'],
-        public_holiday_push_forward: true
-      })
+      console.log('🔄 Loading settings from API...')
+      const response = await authenticatedGet('/api/admin/settings')
+      console.log('📥 Settings API response:', response)
+      
+      if (response && response.success) {
+        console.log('✅ Settings loaded successfully:', response.data)
+        setSettings(response.data)
+      } else {
+        console.error('❌ Settings load failed:', response?.error || 'No response')
+        throw new Error(response?.error || 'Failed to load settings')
+      }
     } catch (error) {
       console.error('Failed to load settings:', error)
       toastError("Load Failed", "Failed to load system settings")
@@ -190,13 +189,22 @@ export default function SettingsPage() {
   const handleSaveSettings = async () => {
     setIsSaving(true)
     try {
-      // For now, just simulate saving (in a real app, this would save to database)
-      await new Promise(resolve => setTimeout(resolve, 1000))
-
-      // Update last refresh time
-      setLastRefresh(getAustralianNow())
-
-      toastSuccess("Settings Saved", "System settings have been updated successfully")
+      console.log('💾 Saving settings to API...')
+      console.log('📤 Settings data to save:', JSON.stringify(settings, null, 2))
+      
+      const response = await authenticatedPut('/api/admin/settings', settings)
+      console.log('📥 Save response:', response)
+      
+      if (response && response.success) {
+        // Update last refresh time
+        setLastRefresh(getAustralianNow())
+        
+        console.log('✅ Settings saved successfully')
+        toastSuccess("Settings Saved", response.message || "System settings have been updated successfully")
+      } else {
+        console.error('❌ Settings save failed:', response?.error || 'No response')
+        throw new Error(response?.error || 'Failed to save settings')
+      }
     } catch (error) {
       console.error('Save settings error:', error)
       toastError("Save Failed", "Failed to save settings. Please try again.")
@@ -326,7 +334,7 @@ export default function SettingsPage() {
                     onChange={(e) => updateSetting('new_since_hour', e.target.value)}
                   />
                   <p className="text-sm text-[var(--color-text-muted)]">
-                    Time tasks marked "new" daily
+                    Time tasks marked "New" daily
                   </p>
                 </div>
 
@@ -339,7 +347,7 @@ export default function SettingsPage() {
                     onChange={(e) => updateSetting('missed_cutoff_time', e.target.value)}
                   />
                   <p className="text-sm text-[var(--color-text-muted)]">
-                    Time incomplete tasks marked "missed"
+                    Time incomplete tasks marked "Missed"
                   </p>
                 </div>
                 <div className="space-y-2 p-4 border rounded-lg shadow-sm">

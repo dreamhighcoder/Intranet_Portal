@@ -2,6 +2,7 @@
 
 import React, { createContext, useContext, useEffect, useState } from 'react'
 import { PositionAuthService, PositionAuthUser } from './position-auth'
+import { getSystemSettings } from './system-settings'
 import { useRouter } from 'next/navigation'
 
 interface PositionAuthContextType {
@@ -18,9 +19,9 @@ const PositionAuthContext = createContext<PositionAuthContextType | undefined>(u
 export function PositionAuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<PositionAuthUser | null>(null)
   const [isLoading, setIsLoading] = useState(true)
+  const [inactivityLimitMs, setInactivityLimitMs] = useState(5 * 60 * 1000) // Default 5 minutes
   const router = useRouter()
 
-  const INACTIVITY_LIMIT_MS = 5 * 60 * 1000 // 5 minutes for production
   const inactivityTimerRef = React.useRef<NodeJS.Timeout | null>(null)
   const lastActivityRef = React.useRef<number>(Date.now())
   const userRef = React.useRef<PositionAuthUser | null>(null)
@@ -34,6 +35,25 @@ export function PositionAuthProvider({ children }: { children: React.ReactNode }
   React.useEffect(() => {
     routerRef.current = router
   }, [router])
+
+  // Load system settings for auto-logout configuration
+  const loadAutoLogoutSettings = React.useCallback(async () => {
+    try {
+      const settings = await getSystemSettings()
+      if (settings.auto_logout_enabled) {
+        const newLimitMs = settings.auto_logout_delay_minutes * 60 * 1000
+        setInactivityLimitMs(newLimitMs)
+        console.log(`🔧 PositionAuth: Auto-logout enabled with ${settings.auto_logout_delay_minutes} minute delay`)
+      } else {
+        // Disable auto-logout by setting a very high limit
+        setInactivityLimitMs(24 * 60 * 60 * 1000) // 24 hours
+        console.log('🔧 PositionAuth: Auto-logout disabled')
+      }
+    } catch (error) {
+      console.error('❌ PositionAuth: Failed to load auto-logout settings:', error)
+      // Keep default 5-minute timeout on error
+    }
+  }, [])
 
   const performLogout = React.useCallback(() => {
     console.log('🚪 PositionAuth: Performing inactivity logout')
@@ -77,6 +97,11 @@ export function PositionAuthProvider({ children }: { children: React.ReactNode }
     loadCurrentUser()
   }, [])
 
+  // Load auto-logout settings when component mounts
+  useEffect(() => {
+    loadAutoLogoutSettings()
+  }, [])
+
   // Inactivity monitoring setup
   React.useEffect(() => {
     if (!user) {
@@ -91,7 +116,7 @@ export function PositionAuthProvider({ children }: { children: React.ReactNode }
     }
 
     console.log('🔧 PositionAuth: Setting up inactivity monitoring for:', user.displayName)
-    console.log(`⏱️ PositionAuth: Timeout set to ${INACTIVITY_LIMIT_MS}ms (${INACTIVITY_LIMIT_MS/1000} seconds)`)
+    console.log(`⏱️ PositionAuth: Timeout set to ${inactivityLimitMs}ms (${inactivityLimitMs/1000} seconds)`)
     userRef.current = user // Update ref when user changes
 
     // Local timer functions to avoid callback dependency issues
@@ -117,9 +142,9 @@ export function PositionAuthProvider({ children }: { children: React.ReactNode }
         } catch (error) {
           console.error('❌ PositionAuth: Error during logout:', error)
         }
-      }, INACTIVITY_LIMIT_MS)
+      }, inactivityLimitMs)
       
-      console.log(`✅ PositionAuth: Timer set for ${INACTIVITY_LIMIT_MS}ms`)
+      console.log(`✅ PositionAuth: Timer set for ${inactivityLimitMs}ms`)
     }
 
     const handleActivity = () => {
@@ -168,7 +193,7 @@ export function PositionAuthProvider({ children }: { children: React.ReactNode }
       })
       document.removeEventListener('visibilitychange', handleVisibilityChange)
     }
-  }, [user]) // Only depend on user to avoid router dependency issues
+  }, [user, inactivityLimitMs]) // Depend on user and inactivity limit
 
   const signIn = async (positionId: string, password: string): Promise<{ success: boolean; error?: string }> => {
     try {

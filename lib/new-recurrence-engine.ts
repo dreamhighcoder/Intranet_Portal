@@ -13,6 +13,7 @@
  */
 
 import { HolidayChecker } from './holiday-checker'
+import { getWorkingDaysAsNumbers, isWorkingDay, getSystemSetting } from './system-settings'
 import { 
   getAustralianNow, 
   getAustralianToday, 
@@ -1149,6 +1150,22 @@ export class NewRecurrenceEngine {
   private isNonWorkingDay(date: Date): boolean {
     // Non-working for monthly workday calculations: weekends (Sat/Sun) or PH
     return this.isWeekend(date) || this.isHoliday(date)
+  }
+
+  private async isSystemWorkingDay(date: Date): Promise<boolean> {
+    // Check if date is a working day according to system settings
+    return await isWorkingDay(date)
+  }
+
+  private async isSystemNonWorkingDay(date: Date): Promise<boolean> {
+    // Check if date is a non-working day according to system settings or is a holiday
+    const isWorking = await this.isSystemWorkingDay(date)
+    return !isWorking || this.isHoliday(date)
+  }
+
+  private async getSystemCutoffTime(): Promise<string> {
+    // Get the system cutoff time for missed tasks
+    return await getSystemSetting('missed_cutoff_time')
   }
 
   private findNextBusinessDay(date: Date): Date {

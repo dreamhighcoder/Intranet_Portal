@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { getSearchOptions, filterTasksByResponsibility } from '@/lib/responsibility-mapper'
 import { getAustralianToday, createAustralianDateTime, fromAustralianTime } from '@/lib/timezone-utils'
+import { getSystemSettings } from '@/lib/system-settings'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
@@ -110,8 +111,9 @@ export async function GET(request: NextRequest) {
 
     // Calculate counts from actual task instances
     // Compute boundaries in Australia/Sydney but compare in UTC (DB stores UTC)
-    const nineAmAus = createAustralianDateTime(date, '09:00')
-    const nineAmUtc = fromAustralianTime(nineAmAus)
+    const settings = await getSystemSettings()
+    const newTaskHourAus = createAustralianDateTime(date, settings.new_since_hour)
+    const nineAmUtc = fromAustralianTime(newTaskHourAus)
     const nowUtc = new Date()
 
     const counts = {
@@ -139,7 +141,7 @@ export async function GET(request: NextRequest) {
         }
       }
 
-      // Count new tasks since 9AM: created after 9AM today (created_at stored UTC)
+      // Count new tasks since system new task hour: created after new task hour today (created_at stored UTC)
       const createdUtc = instance.created_at ? new Date(instance.created_at) : null
       if (createdUtc && createdUtc >= nineAmUtc && instance.status !== 'completed') {
         counts.newSinceNine++

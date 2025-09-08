@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
+import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { getAustralianNow, getAustralianToday, AUSTRALIAN_TIMEZONE } from '@/lib/timezone-utils'
 import { formatInTimeZone } from 'date-fns-tz'
 
@@ -15,7 +15,7 @@ interface SystemHealth {
 
 export async function GET() {
   try {
-    const supabase = createClient()
+    const supabase = createServerSupabaseClient()
     
     // Check authentication
     const { data: { user }, error: authError } = await supabase.auth.getUser()

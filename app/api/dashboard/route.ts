@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/auth-middleware'
 import { createClient } from '@supabase/supabase-js'
 import { getAustralianNow, getAustralianToday, formatAustralianDate, createAustralianDateTime, fromAustralianTime, australianNowUtcISOString } from '@/lib/timezone-utils'
+import { getSystemSettings } from '@/lib/system-settings'
 
 // Use service role client to bypass RLS (we enforce auth/authorization in code)
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
@@ -216,12 +217,13 @@ export async function GET(request: NextRequest) {
       ? Math.round((completionTimes.reduce((sum, time) => sum + time, 0) / completionTimes.length) * 100) / 100
       : 0
 
-    // Tasks created since 9am today (Australia/Sydney)
-    const nineAmAus = createAustralianDateTime(getAustralianToday(), '09:00')
-    const nineAmUtc = fromAustralianTime(nineAmAus)
+    // Tasks created since system new task hour today (Australia/Sydney)
+    const settings = await getSystemSettings()
+    const newTaskHourAus = createAustralianDateTime(getAustralianToday(), settings.new_since_hour)
+    const newTaskHourUtc = fromAustralianTime(newTaskHourAus)
     const newSince9am = allTasks.filter(task => {
       const createdUtc = new Date(task.created_at as string)
-      return createdUtc >= nineAmUtc
+      return createdUtc >= newTaskHourUtc
     }).length
 
     // Tasks due today by status
