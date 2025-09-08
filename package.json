@@ -17,7 +17,9 @@
     "run-migration": "tsx scripts/run-migration.ts",
     "check-schema": "tsx scripts/check-schema.ts",
     "fix-audit-constraint": "node scripts/fix-audit-constraint.js",
-    "clear-audit-log": "node scripts/clear-audit-log.js"
+    "clear-audit-log": "node scripts/clear-audit-log.js",
+    "bulk-update-statuses": "tsx scripts/bulk-update-statuses.ts",
+    "bulk-generate-and-update": "tsx scripts/bulk-generate-and-update.ts"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",

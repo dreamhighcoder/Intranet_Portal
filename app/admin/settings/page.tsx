@@ -385,7 +385,7 @@ export default function SettingsPage() {
             <CardContent className="grid grid-cols-1 lg:grid-cols-2 gap-4 p-0">
               <div className="flex items-center justify-between p-4 border rounded-lg shadow-sm">
                 <div className="space-y-1">
-                  <Label className="text-base font-medium">Auto Logout</Label>
+                  <Label className="text-base font-medium mb-2">Auto Logout</Label>
                   <p className="text-sm text-[var(--color-text-muted)]">
                     Automatically log out inactive users for security
                   </p>

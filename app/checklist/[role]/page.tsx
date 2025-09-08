@@ -16,9 +16,12 @@ import { Check, X, Eye, LogOut, Settings, ChevronRight, Search, Clock, Users } f
 import Link from 'next/link'
 import { toastError, toastSuccess } from '@/hooks/use-toast'
 import { toKebabCase } from '@/lib/responsibility-mapper'
-import { authenticatedGet, authenticatedPost, positionsApi } from '@/lib/api-client'
+import { authenticatedGet, authenticatedPost, positionsApi, publicHolidaysApi } from '@/lib/api-client'
 import TaskDetailModal from '@/components/checklist/TaskDetailModal'
 import { getAustralianNow, getAustralianToday, formatAustralianDate, parseAustralianDate, createAustralianDateTime, australianNowUtcISOString, toAustralianTime } from '@/lib/timezone-utils'
+
+// Shared UI holiday set for PH-aware business day checks
+let UI_HOLIDAY_SET = new Set<string>()
 
 interface PositionCompletion {
   position_name: string
@@ -363,15 +366,30 @@ const getFrequencyCutoffs = (task: ChecklistTask, frequency: string, instanceDat
     return result
   }
 
+  const getLastSaturdayOfMonth = (d: Date) => {
+    const lastDay = new Date(d.getFullYear(), d.getMonth() + 1, 0)
+    const day = lastDay.getDay() // 0=Sun..6=Sat
+    const diff = day === 0 ? 1 : (7 - day + 6) % 7
+    const lastSaturday = new Date(lastDay)
+    lastSaturday.setDate(lastDay.getDate() - diff)
+    return lastSaturday
+  }
+
+  const prevBusinessDay = (d: Date) => {
+    const result = new Date(d)
+    while (!isBusinessDay(result)) {
+      result.setDate(result.getDate() - 1)
+    }
+    return result
+  }
+
   const isBusinessDay = (d: Date) => {
     const day = d.getDay()
     // Sunday is 0, Saturday is 6
-    // For pharmacy: Monday-Saturday are working days (1-6), Sunday is not (0)
     if (day === 0) return false // Sunday is not a business day
-    
-    // TODO: Integrate with holiday checker for full implementation
-    // For now, consider Monday-Saturday as business days
-    return true
+    // Treat Monday-Saturday as working days unless it is a public holiday
+    const dateStr = formatAustralianDate(d)
+    return !UI_HOLIDAY_SET.has(dateStr)
   }
 
   switch (frequency) {
@@ -506,10 +524,24 @@ const getFrequencyCutoffs = (task: ChecklistTask, frequency: string, instanceDat
       }
     }
 
+    case 'start_of_every_month':
+    case 'start_every_month': // alias support
     case 'start_of_month':
     case 'start_certain_months':
     case 'every_month':
-    case 'certain_months': {
+    case 'certain_months':
+    case 'start_of_month_jan':
+    case 'start_of_month_feb':
+    case 'start_of_month_mar':
+    case 'start_of_month_apr':
+    case 'start_of_month_may':
+    case 'start_of_month_jun':
+    case 'start_of_month_jul':
+    case 'start_of_month_aug':
+    case 'start_of_month_sep':
+    case 'start_of_month_oct':
+    case 'start_of_month_nov':
+    case 'start_of_month_dec': {
       // First business day of the month
       const monthStart = new Date(instanceDate.getFullYear(), instanceDate.getMonth(), 1)
       let appearanceDate = new Date(monthStart)
@@ -529,12 +561,9 @@ const getFrequencyCutoffs = (task: ChecklistTask, frequency: string, instanceDat
         }
       }
       
-      // Lock at end of month (last Saturday or last business day)
-      const monthEnd = new Date(instanceDate.getFullYear(), instanceDate.getMonth() + 1, 0)
-      let lockDate = new Date(monthEnd)
-      while (!isBusinessDay(lockDate) && lockDate >= monthStart) {
-        lockDate.setDate(lockDate.getDate() - 1)
-      }
+      // Lock at end of month: last Saturday of the month (PH-adjusted to previous business day)
+      const lastSaturday = getLastSaturdayOfMonth(instanceDate)
+      const lockDate = prevBusinessDay(lastSaturday)
 
       return {
         appearanceDate,
@@ -1125,6 +1154,26 @@ export default function RoleChecklistPage() {
   const [selectedTask, setSelectedTask] = useState<ChecklistTask | null>(null)
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false)
   const [processingTasks, setProcessingTasks] = useState<Set<string>>(new Set())
+
+  // Load public holidays for current year to enable PH-aware UI lock/appearance
+  useEffect(() => {
+    const loadHolidays = async () => {
+      try {
+        const year = new Date(currentDate).getFullYear().toString()
+        const holidays = await publicHolidaysApi.getAll({ year })
+        const set = new Set<string>()
+        ;(holidays || []).forEach((h: any) => {
+          if (h?.date) set.add(h.date)
+        })
+        UI_HOLIDAY_SET = set
+        // Bump refresh key to re-render with holiday-aware status
+        setRefreshKey((k) => k + 1)
+      } catch (e) {
+        console.warn('Failed to load public holidays for UI:', e)
+      }
+    }
+    loadHolidays()
+  }, [currentDate])
 
   // Custom order is now managed from Master Tasks Management page only
 

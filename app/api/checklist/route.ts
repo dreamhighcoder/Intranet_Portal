@@ -156,7 +156,13 @@ export async function GET(request: NextRequest) {
           description: task.description || '',
           responsibility: task.responsibility || [],
           categories: task.categories || [],
-          frequencies: (task.frequencies || []) as any,
+          // Normalize legacy monthly frequency aliases to engine enums
+          frequencies: ((task.frequencies || []) as any).map((f: string) =>
+            f === 'start_every_month' || f === 'start_of_month' ? 'start_of_every_month'
+            : f === 'every_month' ? 'once_monthly'
+            : f === 'end_every_month' ? 'end_of_every_month'
+            : f
+          ) as any,
           timing: task.timing || 'anytime_during_day',
           active: task.publish_status === 'active',
           publish_delay: task.publish_delay || undefined,
@@ -328,7 +334,13 @@ export async function GET(request: NextRequest) {
         description: task.description || '',
         responsibility: task.responsibility || [],
         categories: task.categories || [],
-        frequencies: (task.frequencies || []) as any,
+        // Normalize legacy monthly frequency aliases to engine enums
+        frequencies: ((task.frequencies || []) as any).map((f: string) =>
+          f === 'start_every_month' || f === 'start_of_month' ? 'start_of_every_month'
+          : f === 'every_month' ? 'once_monthly'
+          : f === 'end_every_month' ? 'end_of_every_month'
+          : f
+        ) as any,
         timing: task.timing || 'anytime_during_day',
         active: task.publish_status === 'active',
         publish_delay: task.publish_delay || undefined,

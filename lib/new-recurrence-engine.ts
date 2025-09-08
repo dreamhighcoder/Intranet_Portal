@@ -304,10 +304,30 @@ export class NewRecurrenceEngine {
           lockTime = '23:59'
           lockMoment = createAustralianDateTime(lockDate, lockTime)
         } else {
-          // Other tasks lock at 23:59 on their due date
-          lockDate = result.dueDate
-          lockTime = '23:59'
-          lockMoment = createAustralianDateTime(lockDate, lockTime)
+          // Determine if this frequency is a monthly-start type (Start of Month family)
+          const isMonthlyStart = (
+            frequency === NewFrequencyType.START_OF_EVERY_MONTH ||
+            [
+              NewFrequencyType.START_OF_MONTH_JAN, NewFrequencyType.START_OF_MONTH_FEB, NewFrequencyType.START_OF_MONTH_MAR,
+              NewFrequencyType.START_OF_MONTH_APR, NewFrequencyType.START_OF_MONTH_MAY, NewFrequencyType.START_OF_MONTH_JUN,
+              NewFrequencyType.START_OF_MONTH_JUL, NewFrequencyType.START_OF_MONTH_AUG, NewFrequencyType.START_OF_MONTH_SEP,
+              NewFrequencyType.START_OF_MONTH_OCT, NewFrequencyType.START_OF_MONTH_NOV, NewFrequencyType.START_OF_MONTH_DEC,
+            ].includes(frequency)
+          )
+
+          if (isMonthlyStart) {
+            // Start-of-month tasks lock at 23:59 on the last Saturday of the month (PH-adjusted)
+            const lastSaturday = this.getLastSaturdayOfMonth(dueDate)
+            const carryEnd = this.findPreviousBusinessDay(lastSaturday)
+            lockDate = formatAustralianDate(carryEnd)
+            lockTime = '23:59'
+            lockMoment = createAustralianDateTime(lockDate, lockTime)
+          } else {
+            // Other tasks lock at 23:59 on their due date
+            lockDate = result.dueDate
+            lockTime = '23:59'
+            lockMoment = createAustralianDateTime(lockDate, lockTime)
+          }
         }
       }
 
@@ -473,11 +493,27 @@ export class NewRecurrenceEngine {
           [NewFrequencyType.MONDAY, NewFrequencyType.TUESDAY, NewFrequencyType.WEDNESDAY, 
            NewFrequencyType.THURSDAY, NewFrequencyType.FRIDAY, NewFrequencyType.SATURDAY].includes(f)
         )
+
+        // Monthly start frequencies (Start of Month family) should lock at last Saturday (PH-adjusted)
+        const hasMonthlyStartFrequency = masterTask.frequencies.some(f =>
+          f === NewFrequencyType.START_OF_EVERY_MONTH ||
+          [
+            NewFrequencyType.START_OF_MONTH_JAN, NewFrequencyType.START_OF_MONTH_FEB, NewFrequencyType.START_OF_MONTH_MAR,
+            NewFrequencyType.START_OF_MONTH_APR, NewFrequencyType.START_OF_MONTH_MAY, NewFrequencyType.START_OF_MONTH_JUN,
+            NewFrequencyType.START_OF_MONTH_JUL, NewFrequencyType.START_OF_MONTH_AUG, NewFrequencyType.START_OF_MONTH_SEP,
+            NewFrequencyType.START_OF_MONTH_OCT, NewFrequencyType.START_OF_MONTH_NOV, NewFrequencyType.START_OF_MONTH_DEC,
+          ].includes(f)
+        )
         
         if (hasWeekdayFrequency) {
           // Weekday tasks lock at 23:59 on Saturday of the same week
           const weekSaturday = this.getWeekSaturday(instanceDate)
           lockMoment = createAustralianDateTime(formatAustralianDate(weekSaturday), '23:59')
+        } else if (hasMonthlyStartFrequency) {
+          // Start-of-month tasks lock at 23:59 on the last Saturday of the month (PH-adjusted)
+          const lastSaturday = this.getLastSaturdayOfMonth(dueDate)
+          const carryEnd = this.findPreviousBusinessDay(lastSaturday)
+          lockMoment = createAustralianDateTime(formatAustralianDate(carryEnd), '23:59')
         } else {
           // Other tasks lock at 23:59 on their due date
           lockMoment = createAustralianDateTime(instance.due_date, '23:59')
@@ -513,6 +549,9 @@ export class NewRecurrenceEngine {
           reason = 'Overdue - past due date'
         }
       }
+
+      // Recompute locked based on lock moment and current time
+      locked = !!(lockMoment && currentAustralianTime >= lockMoment)
 
       // Check if update is needed
       updated = (newStatus !== oldStatus) || (locked !== instance.locked)
