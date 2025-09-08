@@ -50,11 +50,11 @@ export function TimezoneHealthCard() {
   }, [])
 
   return (
-    <Card className="card-surface">
-      <CardHeader>
+    <Card className="card-surface gap-4 p-4 sm:p-6 mb-6">
+      <CardHeader className="px-0 pt-2">
         <CardTitle className="text-base sm:text-lg">Timezone Health</CardTitle>
       </CardHeader>
-      <CardContent>
+      <CardContent className="p-0">
         {loading && (
           <p className="text-sm text-[var(--color-text-secondary)]">Loading...</p>
         )}
@@ -62,20 +62,22 @@ export function TimezoneHealthCard() {
           <p className="text-sm text-red-600">Error: {error}</p>
         )}
         {data && (
-          <div className="text-sm space-y-2 text-[var(--color-text-secondary)]">
-            <div>
-              <span className="font-medium text-[var(--color-text)]">Timezone:</span> {data.timezone}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 text-sm text-[var(--color-text-secondary)]">
+            <div className="items-center p-4 rounded-md border shadow-sm">
+              <div className="mb-1">
+                <span className="font-medium text-[var(--color-text)]">Timezone:</span> {data.timezone}
+              </div>
+              <div className="mb-1">
+                <span className="font-medium text-[var(--color-text)]">AU Now:</span> {data.now.auDisplay}
+              </div>
+              <div className="mb-1">
+                <span className="font-medium text-[var(--color-text)]">AU Today:</span> {data.now.auToday}
+              </div>
+              <div className="break-all">
+                <span className="font-medium text-[var(--color-text)]">AU Now (as UTC ISO):</span> {data.now.auAsUtcISO}
+              </div>
             </div>
-            <div>
-              <span className="font-medium text-[var(--color-text)]">AU Now:</span> {data.now.auDisplay}
-            </div>
-            <div>
-              <span className="font-medium text-[var(--color-text)]">AU Today:</span> {data.now.auToday}
-            </div>
-            <div className="break-all">
-              <span className="font-medium text-[var(--color-text)]">AU Now (as UTC ISO):</span> {data.now.auAsUtcISO}
-            </div>
-            <div className="pt-2">
+            <div className="items-center p-4 rounded-md border shadow-sm">
               <span className="font-medium text-[var(--color-text)]">Process:</span>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 mt-1">
                 <div>env TZ: {data.process.envTZ}</div>

@@ -178,8 +178,6 @@ export default function AdminDashboard() {
           <KPIWidgets />
         </div>
 
-
-
         {/* Quick Actions Grid */}
         <div className="mb-6 sm:mb-8">
           <h2 className="text-xl sm:text-2xl font-bold mb-4 sm:mb-6 text-[var(--color-text)]">Quick Actions</h2>

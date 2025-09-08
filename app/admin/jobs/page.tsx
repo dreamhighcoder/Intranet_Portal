@@ -193,7 +193,7 @@ export default function SystemHealthPage() {
                      '✗ Error'}
                   </Badge>
                 </div>
-                <Activity className="w-8 h-8 text-white/80" />
+                <Activity className="w-8 h-8 text-white" />
               </div>
             </div>
           </div>

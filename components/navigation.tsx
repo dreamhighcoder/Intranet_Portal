@@ -143,7 +143,7 @@ export function Navigation() {
 
           {/* Desktop User Menu */}
           <div className="hidden md:flex items-center space-x-6">
-            <div className="text-xs leading-tight text-white/90">
+            <div className="hidden lg:inline text-xs leading-tight text-white/90">
               <div className="font-medium">Australia/Sydney</div>
               <div className="tabular-nums">{auNow || '—'}</div>
             </div>
