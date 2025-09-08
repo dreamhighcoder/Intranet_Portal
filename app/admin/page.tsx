@@ -219,7 +219,8 @@ export default function AdminDashboard() {
 
         {/* Recent Missed Tasks */}
         <div>
-          <h2 className="text-xl sm:text-2xl font-bold mb-4 sm:mb-6 text-[var(--color-text)]">Recent Issues</h2>
+          <h2 className="text-xl sm:text-2xl font-bold mb-0 sm:mb-1 text-[var(--color-text)]">Recent Issues</h2>
+          <p className="text-sm text-[var(--color-text-secondary)] mb-4 sm:mb-6">Showing missed and overdue tasks from the last 3 days (Australia/Sydney).</p>
           <RecentMissedTasks />
         </div>
       </main>

@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { taskInstancesApi } from "@/lib/api-client"
+import { taskInstancesApi, authenticatedGet } from "@/lib/api-client"
 import { usePositionAuth } from "@/lib/position-auth-context"
 import { toDisplayFormat } from "@/lib/responsibility-mapper"
 // Avoid importing timezone-utils on the client to prevent date-fns-tz bundling issues
@@ -46,7 +46,7 @@ export function RecentMissedTasks() {
       try {
         console.log('RecentMissedTasks: Fetching data for authenticated user:', user.displayName)
         
-        // Get date range for last 7 days using Australian timezone without importing date-fns-tz on client
+        // Get date range for last 3 days using Australian timezone
         const tz = 'Australia/Sydney'
         const now = new Date()
         const fmt = new Intl.DateTimeFormat('en-CA', { timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit' })
@@ -58,23 +58,105 @@ export function RecentMissedTasks() {
           return `${y}-${m}-${day}`
         }
         const endDateYmd = partsToYmd(now)
-        const start = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)
+        const start = new Date(now.getTime() - 3 * 24 * 60 * 60 * 1000) // Last 3 days
         const startDateYmd = partsToYmd(start)
 
         const dateRange = `${startDateYmd},${endDateYmd}`
         
-        // Fetch missed and overdue tasks
-        const [missedData, overdueData] = await Promise.all([
-          taskInstancesApi.getAll({ status: 'missed', dateRange }),
-          taskInstancesApi.getAll({ status: 'overdue', dateRange })
-        ])
+        // First try: use checklist API in admin mode to leverage computed status logic
+        const dateList: string[] = []
+        ;(() => {
+          const tz = 'Australia/Sydney'
+          const now = new Date()
+          const fmt = new Intl.DateTimeFormat('en-CA', { timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit' })
+          const partsToYmd = (d: Date) => {
+            const parts = fmt.formatToParts(d)
+            const y = parts.find(p => p.type === 'year')?.value
+            const m = parts.find(p => p.type === 'month')?.value
+            const day = parts.find(p => p.type === 'day')?.value
+            return `${y}-${m}-${day}`
+          }
+          const end = now
+          const start = new Date(now.getTime() - 3 * 24 * 60 * 60 * 1000) // Last 3 days
+          for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+            dateList.push(partsToYmd(new Date(d)))
+          }
+        })()
+
+        console.log('RecentMissedTasks: Fetching checklist data for dates:', dateList)
         
-        // Combine and sort by due date (most recent first)
-        const allTasks = [...(missedData || []), ...(overdueData || [])]
+        // Fetch each day in parallel from checklist API with admin_mode=true
+        const dailyResults = await Promise.all(
+          dateList.map(d => authenticatedGet<any>(`/api/checklist?role=admin&date=${d}&admin_mode=true`))
+        )
+
+        console.log('RecentMissedTasks: Daily results received:', dailyResults.map((res, i) => ({
+          date: dateList[i],
+          hasData: !!res,
+          isArray: Array.isArray(res?.data),
+          count: Array.isArray(res?.data) ? res.data.length : 0,
+          statuses: Array.isArray(res?.data) ? res.data.map((item: any) => item.status) : []
+        })))
+
+        // Flatten and filter to missed/overdue; transform to the shape used by this card
+        const allItems = dailyResults.flatMap(res => (res && Array.isArray(res.data)) ? res.data : [])
+        console.log('RecentMissedTasks: All flattened items count:', allItems.length)
+        console.log('RecentMissedTasks: All item statuses:', allItems.map((item: any) => item.status))
+        
+        const missedItems = allItems.filter((item: any) => item.status === 'missed' || item.status === 'overdue')
+        console.log('RecentMissedTasks: Filtered missed/overdue items:', missedItems.length)
+        console.log('RecentMissedTasks: Sample missed item:', missedItems[0])
+        
+        const checklistItems = missedItems
+          .map((item: any) => ({
+            id: item.id,
+            due_date: item.detailed_status?.dueDate || item.due_date || item.date,
+            due_time: item.detailed_status?.dueTime || item.due_time || '',
+            status: item.status,
+            master_task: {
+              title: item.master_task?.title || item.title || '',
+              responsibility: item.master_task?.responsibility || item.responsibility || [],
+            },
+          }))
           .sort((a, b) => new Date(b.due_date).getTime() - new Date(a.due_date).getTime())
           .slice(0, 5)
-        
-        setRecentMissedTasks(allTasks)
+
+        console.log('RecentMissedTasks: checklist-based final count:', checklistItems.length)
+        console.log('RecentMissedTasks: Final items:', checklistItems)
+
+        if (checklistItems.length > 0) {
+          setRecentMissedTasks(checklistItems)
+          return
+        }
+
+        // Fallback: original task-instances approach (if checklist-based yields nothing)
+        const fallbackDateRange = `${dateList[0]},${dateList[dateList.length - 1]}`
+        console.log('RecentMissedTasks: Using fallback with date range:', fallbackDateRange)
+        const [missedData, overdueData] = await Promise.all([
+          taskInstancesApi.getAll({ status: 'missed', dateRange: fallbackDateRange }),
+          taskInstancesApi.getAll({ status: 'overdue', dateRange: fallbackDateRange })
+        ])
+
+        const normalize = (items: any[] = []) => items
+          .map((t) => ({
+            ...t,
+            status: t.status === 'done' ? 'completed' : t.status,
+          }))
+          .filter((t) => t.status === 'missed' || t.status === 'overdue')
+
+        let combined = [...normalize(missedData), ...normalize(overdueData)]
+
+        if (combined.length === 0) {
+          console.log('RecentMissedTasks: No missed/overdue found, trying all tasks in date range:', fallbackDateRange)
+          const all = await taskInstancesApi.getAll({ dateRange: fallbackDateRange })
+          combined = normalize(all)
+        }
+
+        combined = combined
+          .sort((a, b) => new Date(b.due_date).getTime() - new Date(a.due_date).getTime())
+          .slice(0, 5)
+
+        setRecentMissedTasks(combined)
       } catch (error) {
         console.error('RecentMissedTasks: Error fetching recent missed tasks:', error)
         setRecentMissedTasks([])
@@ -87,9 +169,9 @@ export function RecentMissedTasks() {
   }, [user, authLoading])
 
   return (
-    <Card className="card-surface">
+    <Card className="card-surface gap-3">
       <CardHeader>
-        <CardTitle>Recent Missed Tasks</CardTitle>
+        <CardTitle>Recent Missed Tasks (Last 3 Days)</CardTitle>
       </CardHeader>
       <CardContent>
         {isLoading ? (
@@ -109,7 +191,7 @@ export function RecentMissedTasks() {
                     }
                   </p>
                   <p className="text-xs text-[var(--color-text-secondary)]">
-                    Due: {task.due_date} at {task.due_time}
+                    Due: {task.due_date} {task.due_time ? `at ${task.due_time}` : ''}
                   </p>
                 </div>
                 <div className="flex items-center space-x-2">
