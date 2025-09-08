@@ -71,6 +71,21 @@ const WORKING_DAYS_OPTIONS = [
   { value: 'sunday', label: 'Sunday' }
 ]
 
+const GENERATION_DAYS_AHEAD_OPTIONS = [
+  { value: 7, label: '7 Days' },
+  { value: 30, label: '1 Month' },
+  { value: 90, label: '3 Months' },
+  { value: 180, label: '6 Months' },
+  { value: 365, label: '1 Year' },
+  { value: 999999, label: 'Unlimit' }
+]
+
+const GENERATION_DAYS_BEHIND_OPTIONS = [
+  { value: 0, label: '0 Day' },
+  { value: 7, label: '7 Days' },
+  { value: 30, label: '1 Months' }
+]
+
 export default function SettingsPage() {
   const { user, isLoading: authLoading, isAdmin } = usePositionAuth()
   const router = useRouter()
@@ -78,12 +93,12 @@ export default function SettingsPage() {
   // Settings state
   const [settings, setSettings] = useState<SystemSettings>({
     timezone: 'Australia/Sydney',
-    new_since_hour: '09:00',
+    new_since_hour: '00:00',
     missed_cutoff_time: '23:59',
     auto_logout_enabled: true,
     auto_logout_delay_minutes: 5,
     task_generation_days_ahead: 365,
-    task_generation_days_behind: 30,
+    task_generation_days_behind: 0,
     working_days: ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'],
     public_holiday_push_forward: true
   })
@@ -111,12 +126,12 @@ export default function SettingsPage() {
       // For now, use default settings - in production this would load from database
       setSettings({
         timezone: 'Australia/Sydney',
-        new_since_hour: '09:00',
+        new_since_hour: '00:00',
         missed_cutoff_time: '23:59',
         auto_logout_enabled: true,
         auto_logout_delay_minutes: 5,
         task_generation_days_ahead: 365,
-        task_generation_days_behind: 30,
+        task_generation_days_behind: 0,
         working_days: ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'],
         public_holiday_push_forward: true
       })
@@ -332,28 +347,42 @@ export default function SettingsPage() {
                 </div>
                 <div className="space-y-2 p-4 border rounded-lg shadow-sm">
                   <Label htmlFor="daysAhead">Generation Days Ahead</Label>
-                  <Input
-                    id="daysAhead"
-                    type="number"
-                    min="1"
-                    max="730"
-                    value={settings.task_generation_days_ahead}
-                    onChange={(e) => updateSetting('task_generation_days_ahead', Number(e.target.value))}
-                  />
+                  <Select
+                    value={settings.task_generation_days_ahead.toString()}
+                    onValueChange={(value) => updateSetting('task_generation_days_ahead', Number(value))}
+                  >
+                    <SelectTrigger className="w-full">
+                      <SelectValue placeholder="Select days ahead" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {GENERATION_DAYS_AHEAD_OPTIONS.map((option) => (
+                        <SelectItem key={option.value} value={option.value.toString()}>
+                          {option.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                   <p className="text-sm text-[var(--color-text-muted)]">
                     Days ahead to create task instances
                   </p>
                 </div>
                 <div className="space-y-2 p-4 border rounded-lg shadow-sm">
                   <Label htmlFor="daysBehind">Generation Days Behind</Label>
-                  <Input
-                    id="daysBehind"
-                    type="number"
-                    min="0"
-                    max="90"
-                    value={settings.task_generation_days_behind}
-                    onChange={(e) => updateSetting('task_generation_days_behind', Number(e.target.value))}
-                  />
+                  <Select
+                    value={settings.task_generation_days_behind.toString()}
+                    onValueChange={(value) => updateSetting('task_generation_days_behind', Number(value))}
+                  >
+                    <SelectTrigger className="w-full">
+                      <SelectValue placeholder="Select days behind" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {GENERATION_DAYS_BEHIND_OPTIONS.map((option) => (
+                        <SelectItem key={option.value} value={option.value.toString()}>
+                          {option.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                   <p className="text-sm text-[var(--color-text-muted)]">
                     Days back to create task instances
                   </p>
