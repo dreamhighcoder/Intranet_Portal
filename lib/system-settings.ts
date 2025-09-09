@@ -29,6 +29,55 @@ let settingsCache: SystemSettings | null = null
 let cacheTimestamp: number = 0
 const CACHE_DURATION = 5 * 60 * 1000 // 5 minutes
 
+// Mapping between frontend setting names and database keys
+const SETTING_KEY_MAP = {
+  timezone: 'timezone',
+  new_since_hour: 'new_since_hour',
+  missed_cutoff_time: 'daily_task_cutoff',
+  auto_logout_enabled: 'auto_logout_enabled',
+  auto_logout_delay_minutes: 'auto_logout_delay_seconds',
+  task_generation_days_ahead: 'task_generation_days_forward',
+  task_generation_days_behind: 'task_generation_days_back',
+  working_days: 'business_days',
+  public_holiday_push_forward: 'ph_substitution_enabled'
+}
+
+/**
+ * Helper function to parse setting value based on data type
+ */
+function parseSettingValue(value: string, dataType: string): any {
+  switch (dataType) {
+    case 'boolean':
+      return value.toLowerCase() === 'true'
+    case 'number':
+      return parseInt(value, 10)
+    case 'json':
+      try {
+        return JSON.parse(value)
+      } catch {
+        return value
+      }
+    default:
+      return value
+  }
+}
+
+/**
+ * Helper function to convert business days array to working days array
+ */
+function convertBusinessDaysToWorkingDays(businessDays: number[]): string[] {
+  const dayMap = {
+    1: 'monday',
+    2: 'tuesday', 
+    3: 'wednesday',
+    4: 'thursday',
+    5: 'friday',
+    6: 'saturday',
+    7: 'sunday'
+  }
+  return businessDays.map(day => dayMap[day as keyof typeof dayMap]).filter(Boolean)
+}
+
 /**
  * Get system settings from database with caching
  */
@@ -41,35 +90,48 @@ export async function getSystemSettings(): Promise<SystemSettings> {
   }
 
   try {
-    // Get system settings from database - individual columns structure
-    const { data: settings, error } = await supabase
+    // Get system settings from database - key-value structure
+    const { data: settingsRows, error } = await supabase
       .from('system_settings')
-      .select('*')
-      .limit(1)
-      .single()
+      .select('key, value, data_type')
 
     if (error) {
-      if (error.code === 'PGRST116') {
-        // No settings found, return defaults
-        console.log('No system settings found, using defaults')
-        return DEFAULT_SETTINGS
-      }
       console.error('Error fetching system settings:', error)
       return DEFAULT_SETTINGS
     }
 
-    // Map database columns to frontend interface
+    if (!settingsRows || settingsRows.length === 0) {
+      console.log('No system settings found, using defaults')
+      return DEFAULT_SETTINGS
+    }
+
+    // Convert key-value rows to settings object
+    const settingsMap = new Map()
+    settingsRows.forEach(row => {
+      settingsMap.set(row.key, parseSettingValue(row.value, row.data_type))
+    })
+
+    // Map database keys to frontend interface
     const mergedSettings: SystemSettings = {
-      ...DEFAULT_SETTINGS,
-      timezone: settings.timezone || DEFAULT_SETTINGS.timezone,
-      new_since_hour: settings.new_since_hour ? settings.new_since_hour.substring(0, 5) : DEFAULT_SETTINGS.new_since_hour, // Convert TIME to HH:mm
-      missed_cutoff_time: settings.missed_cutoff_time ? settings.missed_cutoff_time.substring(0, 5) : DEFAULT_SETTINGS.missed_cutoff_time, // Convert TIME to HH:mm
-      auto_logout_enabled: settings.auto_logout_enabled !== undefined ? settings.auto_logout_enabled : DEFAULT_SETTINGS.auto_logout_enabled,
-      auto_logout_delay_minutes: settings.auto_logout_delay_minutes || DEFAULT_SETTINGS.auto_logout_delay_minutes,
-      task_generation_days_ahead: settings.task_generation_days_ahead || DEFAULT_SETTINGS.task_generation_days_ahead,
-      task_generation_days_behind: settings.task_generation_days_behind || DEFAULT_SETTINGS.task_generation_days_behind,
-      working_days: settings.working_days || DEFAULT_SETTINGS.working_days,
-      public_holiday_push_forward: settings.public_holiday_push_forward !== undefined ? settings.public_holiday_push_forward : DEFAULT_SETTINGS.public_holiday_push_forward
+      timezone: settingsMap.get(SETTING_KEY_MAP.timezone) || DEFAULT_SETTINGS.timezone,
+      new_since_hour: settingsMap.get(SETTING_KEY_MAP.new_since_hour) || DEFAULT_SETTINGS.new_since_hour,
+      missed_cutoff_time: settingsMap.get(SETTING_KEY_MAP.missed_cutoff_time) || DEFAULT_SETTINGS.missed_cutoff_time,
+      auto_logout_enabled: settingsMap.get(SETTING_KEY_MAP.auto_logout_enabled) !== undefined 
+        ? settingsMap.get(SETTING_KEY_MAP.auto_logout_enabled) 
+        : DEFAULT_SETTINGS.auto_logout_enabled,
+      // Convert seconds to minutes for the frontend
+      auto_logout_delay_minutes: settingsMap.get(SETTING_KEY_MAP.auto_logout_delay_minutes) !== undefined
+        ? Math.round(settingsMap.get(SETTING_KEY_MAP.auto_logout_delay_minutes) / 60)
+        : DEFAULT_SETTINGS.auto_logout_delay_minutes,
+      task_generation_days_ahead: settingsMap.get(SETTING_KEY_MAP.task_generation_days_ahead) || DEFAULT_SETTINGS.task_generation_days_ahead,
+      task_generation_days_behind: settingsMap.get(SETTING_KEY_MAP.task_generation_days_behind) || DEFAULT_SETTINGS.task_generation_days_behind,
+      // Convert business days array to working days
+      working_days: settingsMap.get(SETTING_KEY_MAP.working_days) 
+        ? convertBusinessDaysToWorkingDays(settingsMap.get(SETTING_KEY_MAP.working_days))
+        : DEFAULT_SETTINGS.working_days,
+      public_holiday_push_forward: settingsMap.get(SETTING_KEY_MAP.public_holiday_push_forward) !== undefined
+        ? settingsMap.get(SETTING_KEY_MAP.public_holiday_push_forward)
+        : DEFAULT_SETTINGS.public_holiday_push_forward
     }
 
     // Update cache
@@ -144,7 +206,7 @@ export async function getTaskGenerationSettings(): Promise<{
 }
 
 /**
- * Update system settings in database
+ * Update system settings via API
  */
 export async function updateSystemSettings(newSettings: SystemSettings): Promise<void> {
   try {
@@ -153,85 +215,21 @@ export async function updateSystemSettings(newSettings: SystemSettings): Promise
     // Clear cache first
     clearSettingsCache()
 
-    // Prepare the update object with the actual column names
-    const updateData = {
-      timezone: newSettings.timezone,
-      new_since_hour: newSettings.new_since_hour + ':00', // Convert HH:mm to TIME format
-      missed_cutoff_time: newSettings.missed_cutoff_time + ':00', // Convert HH:mm to TIME format
-      auto_logout_enabled: newSettings.auto_logout_enabled,
-      auto_logout_delay_minutes: newSettings.auto_logout_delay_minutes,
-      task_generation_days_ahead: newSettings.task_generation_days_ahead,
-      task_generation_days_behind: newSettings.task_generation_days_behind,
-      working_days: newSettings.working_days,
-      public_holiday_push_forward: newSettings.public_holiday_push_forward,
-      updated_at: new Date().toISOString()
+    // Use the API endpoint to update settings
+    const response = await fetch('/api/admin/settings', {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(newSettings)
+    })
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({ error: 'Unknown error' }))
+      throw new Error(`Failed to update settings: ${errorData.error || response.statusText}`)
     }
 
-    console.log('📝 Updating settings in database...')
-    console.log('   Update data:', JSON.stringify(updateData, null, 2))
-
-    // Since there should only be one row in system_settings, we'll update it
-    // First, check if there's an existing row
-    console.log('   Checking for existing settings...')
-    const { data: existingSettings, error: fetchError } = await supabase
-      .from('system_settings')
-      .select('id')
-      .limit(1)
-      .single()
-
-    console.log('   Fetch result:', { existingSettings, fetchError })
-
-    if (fetchError && fetchError.code !== 'PGRST116') { // PGRST116 = no rows returned
-      console.error('❌ Error fetching existing settings:', fetchError)
-      console.error('❌ Fetch error details:', {
-        message: fetchError.message,
-        code: fetchError.code,
-        details: fetchError.details,
-        hint: fetchError.hint
-      })
-      throw fetchError
-    }
-
-    if (existingSettings) {
-      // Update existing row
-      console.log('   Updating existing settings row with ID:', existingSettings.id)
-      const { error: updateError } = await supabase
-        .from('system_settings')
-        .update(updateData)
-        .eq('id', existingSettings.id)
-
-      if (updateError) {
-        console.error('❌ Error updating settings:', updateError)
-        console.error('❌ Update error details:', {
-          message: updateError.message,
-          code: updateError.code,
-          details: updateError.details,
-          hint: updateError.hint
-        })
-        throw updateError
-      }
-      console.log('   ✅ Update successful')
-    } else {
-      // Insert new row
-      console.log('   Inserting new settings row...')
-      const { error: insertError } = await supabase
-        .from('system_settings')
-        .insert(updateData)
-
-      if (insertError) {
-        console.error('❌ Error inserting settings:', insertError)
-        console.error('❌ Insert error details:', {
-          message: insertError.message,
-          code: insertError.code,
-          details: insertError.details,
-          hint: insertError.hint
-        })
-        throw insertError
-      }
-      console.log('   ✅ Insert successful')
-    }
-
-    console.log('✅ System settings updated successfully')
+    console.log('✅ System settings updated successfully via API')
   } catch (error) {
     console.error('Error updating system settings:', error)
     throw error

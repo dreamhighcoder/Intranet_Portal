@@ -199,6 +199,9 @@ export default function SettingsPage() {
         // Update last refresh time
         setLastRefresh(getAustralianNow())
         
+        // Dispatch event to notify other components that settings have changed
+        window.dispatchEvent(new CustomEvent('systemSettingsChanged'))
+        
         console.log('✅ Settings saved successfully')
         toastSuccess("Settings Saved", response.message || "System settings have been updated successfully")
       } else {

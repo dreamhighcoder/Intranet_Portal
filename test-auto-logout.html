@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Auto-Logout Test</title>
+</head>
+<body>
+    <h1>Auto-Logout Test Page</h1>
+    <p>This is a simple test to verify the auto-logout functionality is working.</p>
+    <p>Open the browser console to see debug messages.</p>
+    <p>If you set auto-logout to 1 minute and don't interact with the page, you should be logged out after 1 minute.</p>
+    
+    <div id="status">
+        <p><strong>Current Status:</strong></p>
+        <ul>
+            <li>Auto-logout functionality has been implemented in the position auth context</li>
+            <li>It loads settings from the database on user login</li>
+            <li>It sets up activity listeners (mouse, keyboard, touch, scroll)</li>
+            <li>It starts an inactivity timer based on the configured delay</li>
+            <li>When the timer expires, it automatically logs out the user</li>
+        </ul>
+    </div>
+
+    <div id="instructions">
+        <p><strong>To test:</strong></p>
+        <ol>
+            <li>Go to the System Settings page</li>
+            <li>Set "Auto Logout Delay" to 1 minute</li>
+            <li>Save the settings</li>
+            <li>Navigate to any page in the application</li>
+            <li>Don't interact with the page for 1 minute</li>
+            <li>You should be automatically logged out and redirected to the login page</li>
+        </ol>
+    </div>
+
+    <div id="debugging">
+        <p><strong>Debug Information:</strong></p>
+        <p>Check the browser console for these messages:</p>
+        <ul>
+            <li>🔧 Auto-logout settings loaded: {enabled: true, delayMinutes: 1}</li>
+            <li>👤 User logged in, setting up auto-logout functionality</li>
+            <li>⏱️ Setting inactivity timer for 1 minutes</li>
+            <li>⏰ Inactivity timeout reached, performing auto-logout</li>
+            <li>⏰ Auto-logout triggered due to inactivity</li>
+        </ul>
+    </div>
+</body>
+</html>
