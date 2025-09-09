@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useState } from 'react'
+import { Clock } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 
 interface TZHealth {
@@ -52,7 +53,10 @@ export function TimezoneHealthCard() {
   return (
     <Card className="card-surface gap-4 p-4 sm:p-6 mb-6">
       <CardHeader className="px-0 pt-2">
-        <CardTitle className="text-base sm:text-lg">Timezone Health</CardTitle>
+        <div className="flex items-center space-x-2">
+          <Clock className="w-5 h-5 text-[var(--color-primary)]" />
+          <CardTitle className="text-base sm:text-lg">Timezone Health</CardTitle>
+        </div>
       </CardHeader>
       <CardContent className="p-0">
         {loading && (

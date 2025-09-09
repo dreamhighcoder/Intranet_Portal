@@ -1,7 +1,7 @@
 import { useEffect, useRef, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
-import { supabase } from '@/lib/supabase'
-import { getSystemSettings } from '@/lib/system-settings'
+import { PositionAuthService } from '@/lib/position-auth'
+import { getSystemSettings, clearSettingsCache } from '@/lib/system-settings'
 
 interface UseAutoLogoutOptions {
   onWarning?: (timeLeft: number) => void
@@ -33,13 +33,13 @@ export function useAutoLogout(options: UseAutoLogoutOptions = {}) {
   // Perform logout
   const performLogout = useCallback(async () => {
     try {
-      await supabase.auth.signOut()
+      PositionAuthService.signOut()
       onLogout?.()
-      router.push('/login')
+      router.push('/')
     } catch (error) {
       console.error('Auto-logout error:', error)
       // Force redirect even if logout fails
-      router.push('/login')
+      router.push('/')
     }
   }, [router, onLogout])
 
@@ -61,13 +61,20 @@ export function useAutoLogout(options: UseAutoLogoutOptions = {}) {
   }, [])
 
   // Reset the timeout
-  const resetTimeout = useCallback(async () => {
+  const resetTimeout = useCallback(async (forceReload = false) => {
     clearTimeouts()
     
-    // Load settings if not already loaded
+    // Clear cache and reload settings if forced or if no settings cached
+    if (forceReload || !settingsRef.current) {
+      clearSettingsCache()
+      settingsRef.current = null
+    }
+    
+    // Load settings
     const settings = settingsRef.current || await loadSettings()
     
     if (!settings.enabled) {
+      console.log('🔧 Auto-logout: Disabled in settings')
       return
     }
 
@@ -75,6 +82,8 @@ export function useAutoLogout(options: UseAutoLogoutOptions = {}) {
     const warningMs = Math.max(0, timeoutMs - (warningTime * 1000))
 
     lastActivityRef.current = Date.now()
+    
+    console.log(`🔧 Auto-logout: Setting timeout for ${settings.delayMinutes} minutes (${timeoutMs}ms)`)
 
     // Set warning timeout
     if (warningMs > 0 && onWarning) {
@@ -85,6 +94,7 @@ export function useAutoLogout(options: UseAutoLogoutOptions = {}) {
 
     // Set logout timeout
     timeoutRef.current = setTimeout(() => {
+      console.log('🚨 Auto-logout: Timeout reached, logging out user')
       performLogout()
     }, timeoutMs)
   }, [clearTimeouts, loadSettings, warningTime, onWarning, performLogout])
@@ -127,6 +137,7 @@ export function useAutoLogout(options: UseAutoLogoutOptions = {}) {
   return {
     resetTimeout,
     clearTimeouts,
+    refreshSettings: () => resetTimeout(true), // Force reload settings
     getTimeLeft: () => {
       if (!settingsRef.current?.enabled || !timeoutRef.current) return null
       const elapsed = Date.now() - lastActivityRef.current

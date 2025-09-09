@@ -4,7 +4,6 @@ import { GeistSans } from "geist/font/sans"
 import { GeistMono } from "geist/font/mono"
 import { PositionAuthProvider } from "@/lib/position-auth-context"
 import { ErrorBoundary } from "@/components/error-boundary"
-import { AutoLogoutProvider } from "@/components/auto-logout-provider"
 import { Toaster } from "@/components/ui/toaster"
 import "./globals.css"
 
@@ -41,9 +40,7 @@ html {
       <body className="min-h-screen bg-[var(--color-background)] text-[var(--color-text-primary)] antialiased">
         <ErrorBoundary>
           <PositionAuthProvider>
-            <AutoLogoutProvider>
-              {children}
-            </AutoLogoutProvider>
+            {children}
             <Toaster />
           </PositionAuthProvider>
         </ErrorBoundary>

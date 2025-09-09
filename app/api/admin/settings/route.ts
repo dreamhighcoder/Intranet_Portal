@@ -142,19 +142,13 @@ export async function PUT(request: NextRequest) {
       }
     }
 
-    // Update settings
-    console.log('💾 Calling updateSystemSettings...')
+    // Update settings using the server-side function
+    console.log('💾 Updating system settings...')
     try {
       await updateSystemSettingsServer(body)
       console.log('✅ Settings updated successfully')
     } catch (updateError) {
-      console.error('❌ updateSystemSettings failed:', updateError)
-      console.error('❌ Error details:', {
-        message: updateError.message,
-        code: updateError.code,
-        details: updateError.details,
-        hint: updateError.hint
-      })
+      console.error('❌ Failed to update settings:', updateError)
       throw updateError
     }
     
@@ -168,9 +162,12 @@ export async function PUT(request: NextRequest) {
     console.error('❌ Error message:', error?.message)
     console.error('❌ Error stack:', error?.stack)
     console.error('❌ Full error object:', JSON.stringify(error, null, 2))
+    
+    // Return more specific error message
+    const errorMessage = error instanceof Error ? error.message : 'Failed to update system settings'
     return NextResponse.json({
       success: false,
-      error: 'Failed to update system settings'
+      error: errorMessage
     }, { status: 500 })
   }
 }
