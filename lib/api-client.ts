@@ -152,18 +152,26 @@ export async function authenticatedPost<T = any>(url: string, data: any): Promis
       console.log('API Client - Success response:', result)
       return result
     } else {
+      console.log('API Client - Response not ok, status:', response.status, 'statusText:', response.statusText)
       const errorText = await response.text()
       console.log('API Client - Error response text:', errorText)
+      console.log('API Client - Response headers:', Object.fromEntries(response.headers.entries()))
       
-      let errorMessage = `Failed to post to ${url}`
+      let errorMessage = `Failed to post to ${url} (${response.status}: ${response.statusText})`
       try {
         const errorJson = JSON.parse(errorText)
         console.log('API Client - Parsed error JSON:', errorJson)
-        errorMessage = errorJson.error || errorMessage
+        const details = typeof errorJson?.details === 'string' ? errorJson.details : undefined
+        const code = errorJson?.code ? ` [${errorJson.code}]` : ''
+        if (errorJson.error) {
+          errorMessage = `${errorJson.error}${code}${details ? ` - ${details}` : ''}`
+        } else if (details) {
+          errorMessage = `${errorMessage} - ${details}`
+        }
       } catch {
         // If response is not JSON, use the text as error message
         if (errorText) {
-          errorMessage = errorText
+          errorMessage = `${errorMessage} - ${errorText}`
         }
       }
       
@@ -288,7 +296,7 @@ export const masterTasksApi = {
     return await authenticatedPut(`/api/master-tasks/${id}`, data)
   },
 
-  async reorder(order: Array<{ id: string; custom_order: number }>) {
+  async reorder(order: Array<{ id: string; custom_order: number | null }>) {
     return await authenticatedPost('/api/master-tasks/reorder', { order })
   },
 

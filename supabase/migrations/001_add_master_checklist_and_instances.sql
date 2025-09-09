@@ -70,6 +70,12 @@ BEGIN
         END IF;
     END IF;
 
+    -- Add custom_order for drag-and-drop ordering if it doesn't exist
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns 
+                   WHERE table_name = 'master_tasks' AND column_name = 'custom_order') THEN
+        ALTER TABLE master_tasks ADD COLUMN custom_order INTEGER;
+    END IF;
+
     -- Update publish_status check constraint to include 'draft' if not already present
     IF NOT EXISTS (SELECT 1 FROM information_schema.check_constraints 
                    WHERE constraint_name = 'master_tasks_publish_status_check') THEN
@@ -185,6 +191,7 @@ CREATE INDEX IF NOT EXISTS idx_master_tasks_frequency_rules_gin ON master_tasks 
 CREATE INDEX IF NOT EXISTS idx_master_tasks_publish_delay ON master_tasks(publish_delay);
 CREATE INDEX IF NOT EXISTS idx_master_tasks_created_by ON master_tasks(created_by);
 CREATE INDEX IF NOT EXISTS idx_master_tasks_updated_by ON master_tasks(updated_by);
+CREATE INDEX IF NOT EXISTS idx_master_tasks_custom_order ON master_tasks(custom_order);
 
 -- ========================================
 -- CREATE TRIGGERS

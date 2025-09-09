@@ -1,5 +1,6 @@
 "use client"
 
+import React from 'react'
 import { useState, useEffect, useRef, useMemo } from "react"
 import Head from 'next/head'
 import { usePositionAuth } from "@/lib/position-auth-context"
@@ -14,7 +15,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { Checkbox } from "@/components/ui/checkbox"
 
-import { masterTasksApi, positionsApi } from "@/lib/api-client"
+import { masterTasksApi, positionsApi, authenticatedPost } from "@/lib/api-client"
 import { supabase } from "@/lib/supabase"
 import * as XLSX from 'xlsx'
 import { toastSuccess, toastError } from "@/hooks/use-toast"
@@ -137,7 +138,7 @@ const getResponsibilityAbbreviation = (value: string): string => {
     'pharmacist-supporting': 'PH2',
     'operational-managerial': 'OM',
   }
-  
+
   return ABBREVIATION_MAP[value] || value.substring(0, 2).toUpperCase()
 }
 
@@ -213,7 +214,7 @@ const renderTruncatedArray = (
           const emoji = getCategoryEmoji(item)
           const displayName = getDisplayName(item)
           const badgeClass = getBadgeClass(item, type)
-          
+
           return (
             <Badge
               key={index}
@@ -237,7 +238,7 @@ const renderTruncatedArray = (
           const abbreviation = getResponsibilityAbbreviation(item)
           const displayName = getDisplayName(item)
           const badgeClass = getBadgeClass(item, type)
-          
+
           return (
             <Badge
               key={index}
@@ -394,11 +395,57 @@ const renderFrequencyWithDetails = (task: MasterTask) => {
   )
 }
 
+// Helper to get the effective due time string used for sorting and display
+const getEffectiveDueTime = (task: MasterTask): string => {
+  const due = (task as any).due_time as string | undefined
+  // Spec: Default time is 17:00 if no due_time is specified
+  return due || '17:00'
+}
+
 // Helper function to parse due time to minutes for sorting
 const parseDueTimeToMinutes = (dueTime?: string): number => {
   if (!dueTime) return 1020 // Default to 17:00 (17 * 60 = 1020 minutes)
-  const [hours, minutes] = dueTime.split(':').map(Number)
+  const parts = dueTime.split(':').map(Number)
+  const hours = parts[0] || 0
+  const minutes = parts[1] || 0
   return hours * 60 + minutes
+}
+
+// Normalize task frequencies to the unified set (handles legacy single 'frequency' field)
+const getNormalizedFrequencies = (task: any): string[] => {
+  const arr = Array.isArray(task.frequencies) ? task.frequencies : []
+  if (arr.length > 0) return arr
+  const legacy = task.frequency as string | undefined
+  if (!legacy) return []
+  switch (legacy) {
+    case 'once_off_sticky':
+      return ['once_off']
+    case 'once_off':
+      return ['once_off']
+    case 'every_day':
+      return ['every_day']
+    case 'weekly':
+    case 'once_weekly':
+      return ['once_weekly']
+    case 'specific_weekdays':
+      return ['specific_weekdays']
+    case 'start_every_month':
+    case 'start_of_every_month':
+      return ['start_of_every_month']
+    case 'start_certain_months':
+      return ['start_certain_months']
+    case 'every_month':
+      return ['once_monthly']
+    case 'certain_months':
+      return ['certain_months']
+    case 'end_every_month':
+    case 'end_of_every_month':
+      return ['end_of_every_month']
+    case 'end_certain_months':
+      return ['end_certain_months']
+    default:
+      return [legacy]
+  }
 }
 
 // Helper function to get frequency rank for sorting
@@ -406,23 +453,27 @@ const getFrequencyRankForDay = (frequencies: string[], date: Date): number => {
   if (!frequencies || frequencies.length === 0) return 999
 
   // Frequency priority order (lower number = higher priority)
-  // Based on requirements: Once Off, Every Day, Once Weekly, Monday ~ Saturday, Once Monthly, Start of Every Month, Start of Month (Jan) ~ Start of Month (Dec), End of Every Month, End of Month (Jan) ~ End of Month (Dec)
+  // Spec: Once Off, Every Day, Once Weekly, Specific Weekdays (Mon→Sat), Start Every Month,
+  // Start of Specific Months (Jan→Dec), Once Monthly, End Every Month, End of Specific Months (Jan→Dec)
   const frequencyRanks: Record<string, number> = {
     'once_off': 1,
-    'once_off_sticky': 1, // Same as once_off
+    'once_off_sticky': 1,
     'every_day': 2,
     'once_weekly': 3,
-    'weekly': 3, // Same as once_weekly
-    // Start of specific day
+    'weekly': 3,
+    // Specific weekdays
+    'specific_weekdays': 4, // legacy generic bucket; treated as Monday-level priority
     'monday': 4,
     'tuesday': 5,
     'wednesday': 6,
     'thursday': 7,
     'friday': 8,
     'saturday': 9,
+    // Start every month
     'start_every_month': 10,
-    'start_of_every_month': 10, // Same as start_every_month
-    // Start of specific months (Jan-Dec)
+    'start_of_every_month': 10,
+    // Start of specific months
+    'start_certain_months': 11, // legacy generic bucket; placed before specific months
     'start_of_month_jan': 11,
     'start_of_month_feb': 12,
     'start_of_month_mar': 13,
@@ -435,10 +486,14 @@ const getFrequencyRankForDay = (frequencies: string[], date: Date): number => {
     'start_of_month_oct': 20,
     'start_of_month_nov': 21,
     'start_of_month_dec': 22,
+    // Once monthly (every month)
+    'every_month': 23, // legacy
     'once_monthly': 23,
+    // End every month
     'end_every_month': 24,
-    'end_of_every_month': 24, // Same as end_every_month
-    // End of specific months (Jan-Dec)
+    'end_of_every_month': 24,
+    // End of specific months
+    'end_certain_months': 25, // legacy generic bucket; placed before specific months
     'end_of_month_jan': 25,
     'end_of_month_feb': 26,
     'end_of_month_mar': 27,
@@ -450,18 +505,17 @@ const getFrequencyRankForDay = (frequencies: string[], date: Date): number => {
     'end_of_month_sep': 33,
     'end_of_month_oct': 34,
     'end_of_month_nov': 35,
-    'end_of_month_dec': 36
+    'end_of_month_dec': 36,
+    // Legacy catch-alls
+    'certain_months': 23
   }
 
   // Get the lowest rank (highest priority) from all frequencies
   let minRank = 999
   for (const freq of frequencies) {
-    const rank = frequencyRanks[freq] || 999
-    if (rank < minRank) {
-      minRank = rank
-    }
+    const rank = frequencyRanks[freq] ?? 999
+    if (rank < minRank) minRank = rank
   }
-
   return minRank
 }
 
@@ -901,6 +955,8 @@ export default function AdminMasterTasksPage() {
   const [isSavingOrder, setIsSavingOrder] = useState(false)
   const [isOrderDirty, setIsOrderDirty] = useState(false)
   const [dragIndex, setDragIndex] = useState<number | null>(null)
+  const [isResettingToDefault, setIsResettingToDefault] = useState(false)
+  const [showResetConfirmDialog, setShowResetConfirmDialog] = useState(false)
 
   // Sorting function
   const handleSort = (field: string) => {
@@ -968,6 +1024,27 @@ export default function AdminMasterTasksPage() {
       }
 
       setTasks(tasksData)
+
+      // Initialize order map: use DB custom_order if present, otherwise derive from default comparator
+      // Note: using shared RESET_VALUE (999999) since custom_order has NOT NULL constraint
+      const hasDbOrder = tasksData.some((t: any) => typeof (t as any).custom_order === 'number' && (t as any).custom_order < RESET_VALUE)
+      if (hasDbOrder) {
+        const map: Record<string, number> = {}
+        // Sort by custom_order ascending; if equal, missing, or reset value, fall back to compareBase
+        const ordered = [...tasksData].sort((a: any, b: any) => {
+          const ac = typeof a.custom_order === 'number' && a.custom_order < RESET_VALUE ? a.custom_order : Infinity
+          const bc = typeof b.custom_order === 'number' && b.custom_order < RESET_VALUE ? b.custom_order : Infinity
+          if (ac !== bc) return ac - bc
+          return compareBase(a, b)
+        })
+        ordered.forEach((t, idx) => { map[t.id] = idx })
+        setCustomOrderMap(map)
+      } else {
+        const base = [...tasksData].sort(compareBase)
+        const map: Record<string, number> = {}
+        base.forEach((t, idx) => { map[t.id] = idx })
+        setCustomOrderMap(map)
+      }
 
       // Filter out only exact 'Administrator' from the dropdown
       const filteredPositions = positionsData.filter((position: any) => position.name !== 'Administrator')
@@ -1074,7 +1151,36 @@ export default function AdminMasterTasksPage() {
         console.log('Task created:', newTask)
 
         // Immediately add the new task to the UI
-        setTasks([newTask, ...tasks])
+        const updatedTasks = [newTask, ...tasks]
+        setTasks(updatedTasks)
+
+        // Update the custom order map to include the new task
+        // Place it at the beginning of the default-sorted unordered tasks
+        // Using shared RESET_VALUE
+        const hasCustomOrder = tasks.some(t => typeof t.custom_order === 'number' && t.custom_order < RESET_VALUE)
+        if (hasCustomOrder || Object.keys(customOrderMap).length > 0) {
+          // Get all tasks with numeric custom_order that are not reset values (these stay at the top)
+          const numberedTasks = updatedTasks.filter(t => typeof t.custom_order === 'number' && t.custom_order < RESET_VALUE)
+          // Get all tasks without custom_order or with reset values (including the new task)
+          const unnumberedTasks = updatedTasks.filter(t => typeof t.custom_order !== 'number' || t.custom_order >= RESET_VALUE)
+          
+          // Sort unnumbered tasks by default comparator
+          const sortedUnnumbered = [...unnumberedTasks].sort(compareBase)
+          
+          // Build new order map
+          const newOrderMap: Record<string, number> = {}
+          let index = 0
+          
+          // First, add numbered tasks in their custom order
+          numberedTasks
+            .sort((a, b) => (a.custom_order as number) - (b.custom_order as number))
+            .forEach(t => { newOrderMap[t.id] = index++ })
+          
+          // Then add unnumbered tasks in default sort order
+          sortedUnnumbered.forEach(t => { newOrderMap[t.id] = index++ })
+          
+          setCustomOrderMap(newOrderMap)
+        }
 
         showToast('success', 'Task Created', 'New task was created successfully')
         // Notify homepage cards to refresh counts immediately
@@ -1571,8 +1677,8 @@ export default function AdminMasterTasksPage() {
       return
     }
 
-    // Check if any task has custom_order from database
-    const hasCustomOrder = tasks.some(t => typeof t.custom_order === 'number')
+    // Check if any task has custom_order from database (excluding reset values)
+    const hasCustomOrder = tasks.some(t => typeof t.custom_order === 'number' && t.custom_order < RESET_VALUE)
 
     if (!hasCustomOrder) {
       // No custom order exists, initialize with base default order
@@ -1586,55 +1692,146 @@ export default function AdminMasterTasksPage() {
     } else {
       // Custom order exists, use it
       const orderMap: Record<string, number> = {}
-      tasks.forEach((task) => {
-        // Use custom_order from database if available, otherwise use default order
-        if (typeof task.custom_order === 'number') {
-          orderMap[task.id] = task.custom_order
-        } else {
-          // For tasks without custom_order, assign a high number to put them at the end
-          orderMap[task.id] = 999999
-        }
+
+      // Separate tasks with and without custom_order (excluding reset values)
+      const tasksWithOrder = tasks.filter(t => typeof t.custom_order === 'number' && t.custom_order < RESET_VALUE)
+      const tasksWithoutOrder = tasks.filter(t => typeof t.custom_order !== 'number' || t.custom_order >= RESET_VALUE)
+
+      // First, assign existing custom orders
+      tasksWithOrder.forEach((task) => {
+        orderMap[task.id] = task.custom_order!
       })
+
+      // For tasks without custom_order, we need to insert them in their proper default positions
+      if (tasksWithoutOrder.length > 0) {
+        // Get the default sorted order for tasks without custom_order
+        const defaultSortedNewTasks = getBaseSortedTasks(tasksWithoutOrder)
+
+        // Get all existing custom order values and sort them
+        const existingOrders = tasksWithOrder
+          .map(t => t.custom_order!)
+          .sort((a, b) => a - b)
+
+        // For each new task, find where it should be inserted based on default sorting
+        defaultSortedNewTasks.forEach((newTask) => {
+          // Get all tasks that should come before this new task according to default sorting
+          const allTasksForComparison = [...tasksWithOrder, newTask]
+          const defaultSorted = getBaseSortedTasks(allTasksForComparison)
+          const newTaskIndex = defaultSorted.findIndex(t => t.id === newTask.id)
+
+          // Find tasks that should come before this new task
+          const tasksBefore = defaultSorted.slice(0, newTaskIndex)
+          const tasksBeforeWithOrder = tasksBefore.filter(t => typeof t.custom_order === 'number')
+
+          if (tasksBeforeWithOrder.length === 0) {
+            // New task should be first, assign order 0
+            orderMap[newTask.id] = 0
+            // Shift all existing orders up by 1
+            Object.keys(orderMap).forEach(taskId => {
+              if (taskId !== newTask.id) {
+                orderMap[taskId] = orderMap[taskId] + 1
+              }
+            })
+          } else {
+            // Find the highest order among tasks that should come before
+            const maxOrderBefore = Math.max(...tasksBeforeWithOrder.map(t => orderMap[t.id] || t.custom_order!))
+
+            // Find tasks that should come after
+            const tasksAfter = defaultSorted.slice(newTaskIndex + 1)
+            const tasksAfterWithOrder = tasksAfter.filter(t => typeof t.custom_order === 'number')
+
+            if (tasksAfterWithOrder.length === 0) {
+              // New task should be last, assign next available order
+              orderMap[newTask.id] = maxOrderBefore + 1
+            } else {
+              // Find the minimum order among tasks that should come after
+              const minOrderAfter = Math.min(...tasksAfterWithOrder.map(t => orderMap[t.id] || t.custom_order!))
+
+              if (minOrderAfter > maxOrderBefore + 1) {
+                // There's space between, insert in the middle
+                orderMap[newTask.id] = maxOrderBefore + 1
+              } else {
+                // Need to shift tasks after to make space
+                orderMap[newTask.id] = maxOrderBefore + 1
+                // Shift all tasks that should come after
+                tasksAfterWithOrder.forEach(task => {
+                  const currentOrder = orderMap[task.id] || task.custom_order!
+                  if (currentOrder >= orderMap[newTask.id]) {
+                    orderMap[task.id] = currentOrder + 1
+                  }
+                })
+              }
+            }
+          }
+        })
+      }
+
       setCustomOrderMap(orderMap)
+
+      // If we inserted new tasks, we need to save the order to maintain consistency
+      if (tasksWithoutOrder.length > 0) {
+        // Auto-save the new order to database
+        setTimeout(async () => {
+          try {
+            const orderArray = Object.entries(orderMap).map(([taskId, customOrder]) => ({
+              id: taskId,
+              custom_order: customOrder
+            }))
+
+            await masterTasksApi.reorder(orderArray)
+            console.log('Auto-saved custom order for new tasks')
+          } catch (error) {
+            console.error('Failed to auto-save custom order for new tasks:', error)
+          }
+        }, 100) // Small delay to ensure state is updated
+      }
+
       setIsOrderDirty(false)
     }
   }, [tasks, positions])
 
+  // Base comparator implementing: Due Time -> Frequency -> Position(display_order) -> Description -> Title -> Id
+  const compareBase = (a: MasterTask, b: MasterTask) => {
+    // 1) Due time (due_time → default_due_time → timing default → 17:00)
+    const aMin = parseDueTimeToMinutes(getEffectiveDueTime(a))
+    const bMin = parseDueTimeToMinutes(getEffectiveDueTime(b))
+    if (aMin !== bMin) return aMin - bMin
+
+    // 2) Frequency rank (lower is higher priority)
+    const aRank = getFrequencyRankForDay(getNormalizedFrequencies(a), new Date())
+    const bRank = getFrequencyRankForDay(getNormalizedFrequencies(b), new Date())
+    if (aRank !== bRank) return aRank - bRank
+
+    // 3) Position display_order (by first responsibility)
+    const aResponsibility = (a.responsibility || [])[0] || ''
+    const bResponsibility = (b.responsibility || [])[0] || ''
+
+    if (aResponsibility !== bResponsibility) {
+      const aPosition = positions.find(p => nameToResponsibilityValue(p.name) === aResponsibility)
+      const bPosition = positions.find(p => nameToResponsibilityValue(p.name) === bResponsibility)
+      const aOrder = aPosition?.display_order ?? 999
+      const bOrder = bPosition?.display_order ?? 999
+      if (aOrder !== bOrder) return aOrder - bOrder
+    }
+
+    // 4) Description (case-insensitive)
+    const aDesc = a.description?.toLowerCase() || ''
+    const bDesc = b.description?.toLowerCase() || ''
+    const descCompare = aDesc.localeCompare(bDesc)
+    if (descCompare !== 0) return descCompare
+
+    // Deterministic tie-breakers
+    const aTitle = a.title?.toLowerCase() || ''
+    const bTitle = b.title?.toLowerCase() || ''
+    const titleCompare = aTitle.localeCompare(bTitle)
+    if (titleCompare !== 0) return titleCompare
+
+    return a.id.localeCompare(b.id)
+  }
+
   // Helper function to get base sorted tasks (Timing, Frequency, Position order, Task Description)
   const getBaseSortedTasks = (taskList: MasterTask[]) => {
-    return [...taskList].sort((a, b) => {
-      // 1. Sort by due_time (timing)
-      const aMin = parseDueTimeToMinutes(a.due_time)
-      const bMin = parseDueTimeToMinutes(b.due_time)
-      if (aMin !== bMin) return aMin - bMin
-
-      // 2. Sort by frequency rank
-      const aRank = getFrequencyRankForDay(a.frequencies || [], new Date())
-      const bRank = getFrequencyRankForDay(b.frequencies || [], new Date())
-      if (aRank !== bRank) return aRank - bRank
-
-      // 3. Sort by position display_order (responsibility)
-      const aResponsibility = (a.responsibility || [])[0] || ''
-      const bResponsibility = (b.responsibility || [])[0] || ''
-
-      if (aResponsibility !== bResponsibility) {
-        // Find the positions for these responsibilities
-        const aPosition = positions.find(p => nameToResponsibilityValue(p.name) === aResponsibility)
-        const bPosition = positions.find(p => nameToResponsibilityValue(p.name) === bResponsibility)
-
-        const aOrder = aPosition?.display_order || 999
-        const bOrder = bPosition?.display_order || 999
-
-        if (aOrder !== bOrder) return aOrder - bOrder
-      }
-
-      // 4. Sort by task description
-      const aDesc = a.description?.toLowerCase() || ''
-      const bDesc = b.description?.toLowerCase() || ''
-      if (aDesc !== bDesc) return aDesc.localeCompare(bDesc)
-
-      return 0
-    })
+    return [...taskList].sort(compareBase)
   }
 
   // Drag handlers for desktop rows
@@ -1701,6 +1898,114 @@ export default function AdminMasterTasksPage() {
     }
   }
 
+  // Helper function to check if custom ordering is active
+  // Note: 999999 is used as a reset value since custom_order has NOT NULL constraint
+  const RESET_VALUE = 999999
+  const hasCustomOrdering = () => {
+    return tasks.some(t => typeof t.custom_order === 'number' && t.custom_order < RESET_VALUE)
+  }
+
+  const handleResetToDefaultSort = () => {
+    setShowResetConfirmDialog(true)
+  }
+
+  const confirmResetToDefaultSort = async () => {
+    if (isResettingToDefault) return
+
+    try {
+      setIsResettingToDefault(true)
+      setShowResetConfirmDialog(false)
+
+      console.log('Resetting to default sort for', tasks.length, 'tasks')
+      console.log('Current user:', user)
+      console.log('Is admin:', isAdmin)
+
+      // Check for tasks that have meaningful custom_order values (not reset values)
+      const tasksWithCustomOrder = tasks.filter(task => 
+        typeof task.custom_order === 'number' && task.custom_order < RESET_VALUE
+      )
+      console.log('Tasks with custom order:', tasksWithCustomOrder.length)
+
+      if (tasksWithCustomOrder.length === 0) {
+        console.log('No tasks have custom order, nothing to reset')
+        toastSuccess('Default Sort Already Active', 'Tasks are already using default sorting.')
+        return
+      }
+
+      // Clear all custom_order values by setting them to null
+      const orderArray = tasksWithCustomOrder.map(task => ({
+        id: task.id,
+        custom_order: null as null
+      }))
+
+      console.log('Sending reset order request:', orderArray.length, 'tasks')
+      console.log('Order array sample:', orderArray.slice(0, 3))
+
+      // Test with just one task to see if it's a payload size issue
+      const testArray = orderArray.slice(0, Math.min(1, orderArray.length))
+      console.log('Testing with first task only:', testArray)
+
+      // First test if we can fetch master tasks (simpler operation)
+      console.log('Testing basic API access by fetching master tasks...')
+      try {
+        const testTasks = await masterTasksApi.getAll({ status: 'all' })
+        console.log('Basic API test successful, got', testTasks.length, 'tasks')
+      } catch (basicError) {
+        console.error('Basic API test failed:', basicError)
+        throw new Error(`Basic API access failed: ${basicError instanceof Error ? basicError.message : 'Unknown error'}`)
+      }
+
+      // Now try the actual reorder API with detailed logging
+      console.log('About to call reorder resetAll endpoint')
+
+      try {
+        // Use resetAll fast-path to clear all custom_order values server-side
+        const result = await authenticatedPost('/api/master-tasks/reorder', { resetAll: true })
+        console.log('Reorder API success:', result)
+      } catch (apiError) {
+        console.error('Reorder API error:', apiError)
+        console.error('API error type:', typeof apiError)
+        console.error('API error constructor:', apiError?.constructor?.name)
+        if (apiError instanceof Error) {
+          console.error('API error message:', apiError.message)
+          console.error('API error stack:', apiError.stack)
+        }
+        throw apiError
+      }
+
+      console.log('Successfully reset custom order in database')
+
+      // Update the local tasks state to set custom_order to reset value
+      setTasks(prevTasks => prevTasks.map(task => ({ ...task, custom_order: RESET_VALUE })))
+
+      const baseSortedNow = [...tasks].sort(compareBase)
+      const baseOrderNow: Record<string, number> = {}
+      baseSortedNow.forEach((t, idx) => (baseOrderNow[t.id] = idx))
+      setCustomOrderMap(baseOrderNow)
+
+      setIsOrderDirty(false)
+      setSortField('')
+      setSortDirection('asc')
+
+      toastSuccess('Default Sort Restored', 'Tasks have been reset to default sorting order.')
+
+      // Reload tasks to get updated data (will re-initialize order map as well)
+      await loadData()
+      console.log('Successfully reloaded tasks after reset')
+    } catch (e) {
+      console.error('Failed to reset to default sort', e)
+      console.error('Error details:', {
+        message: e instanceof Error ? e.message : 'Unknown error',
+        stack: e instanceof Error ? e.stack : undefined,
+        error: e
+      })
+      const errorMessage = e instanceof Error ? e.message : 'Unknown error occurred'
+      toastError('Reset Failed', `Could not reset to default sort: ${errorMessage}`)
+    } finally {
+      setIsResettingToDefault(false)
+    }
+  }
+
   // Filter and sort tasks based on search and filters
   const filteredAndSortedTasks = useMemo(() => {
     // First, filter tasks
@@ -1756,16 +2061,17 @@ export default function AdminMasterTasksPage() {
             bValue = b.categories?.[0] || b.category || ''
             break
           case 'frequency':
-            aValue = a.frequencies?.[0] || ''
-            bValue = b.frequencies?.[0] || ''
+            // Use rank for manual sort as well, to keep consistent order
+            aValue = getFrequencyRankForDay(getNormalizedFrequencies(a), new Date())
+            bValue = getFrequencyRankForDay(getNormalizedFrequencies(b), new Date())
             break
           case 'status':
             aValue = a.publish_status || ''
             bValue = b.publish_status || ''
             break
           case 'due_time':
-            aValue = (a as any).default_due_time || '17:00'
-            bValue = (b as any).default_due_time || '17:00'
+            aValue = getEffectiveDueTime(a)
+            bValue = getEffectiveDueTime(b)
             break
           default:
             return 0
@@ -1801,8 +2107,8 @@ export default function AdminMasterTasksPage() {
           return 1
         }
 
-        // Fallback to base default order
-        return getBaseSortedTasks([a, b]).indexOf(a) - getBaseSortedTasks([a, b]).indexOf(b)
+        // Fallback to base default order using stable comparator (avoid re-sorting inside comparator)
+        return compareBase(a as MasterTask, b as MasterTask)
       })
     }
   }, [tasks, searchTerm, filterPosition, filterStatus, filterCategory, sortField, sortDirection, customOrderMap, positions])
@@ -1872,7 +2178,7 @@ export default function AdminMasterTasksPage() {
   return (
     <div className="min-h-screen bg-[var(--color-background)]">
       {/* Inline styles for modal sizing */}
-      <style dangerouslySetInnerHTML={{ __html: customStyles }} />
+      <style>{customStyles}</style>
       <Navigation />
 
       <main className="max-w-content-lg mx-auto px-4 sm:px-6 lg:px-18 py-6 sm:py-8">
@@ -2027,14 +2333,17 @@ export default function AdminMasterTasksPage() {
         <Card className="card-surface w-full gap-0">
           <CardHeader className="flex flex-col lg:flex-row lg:items-center lg:justify-between space-y-4 lg:space-y-0">
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between space-y-2 sm:space-y-0">
-              <CardTitle className="text-lg lg:text-xl mb-1">
-                Master Tasks ({filteredAndSortedTasks.length === 0 ? '0' : `${startIndex + 1}-${Math.min(endIndex, filteredAndSortedTasks.length)}`} of {filteredAndSortedTasks.length})
-                {totalPages > 1 && (
-                  <span className="text-sm font-normal text-gray-600 ml-2">
-                    - Page {currentPage} of {totalPages}
-                  </span>
-                )}
-              </CardTitle>
+              <div className="flex flex-col sm:flex-row sm:items-center sm:gap-3">
+                <CardTitle className="text-lg lg:text-xl mb-1">
+                  Master Tasks ({filteredAndSortedTasks.length === 0 ? '0' : `${startIndex + 1}-${Math.min(endIndex, filteredAndSortedTasks.length)}`} of {filteredAndSortedTasks.length})
+                  {totalPages > 1 && (
+                    <span className="text-sm font-normal text-gray-600 ml-2">
+                      - Page {currentPage} of {totalPages}
+                    </span>
+                  )}
+                </CardTitle>
+
+              </div>
               <div className="mt-2 sm:mt-0 sm:ml-4 flex items-center gap-2">
                 <span className="text-sm text-gray-600">Per page:</span>
                 <Select value={String(tasksPerPage)} onValueChange={(v) => { setTasksPerPage(parseInt(v, 10)); setCurrentPage(1); }}>
@@ -2049,8 +2358,54 @@ export default function AdminMasterTasksPage() {
                   </SelectContent>
                 </Select>
               </div>
+
             </div>
             <div className="flex space-x-3">
+              {/* Sorting Status Indicator */}
+              <div className="flex items-center mr-1">
+                {sortField ? (
+                  <Badge variant="outline" className="text-xs bg-blue-50 text-blue-700 border-blue-200">
+                    <ChevronUp className="w-3 h-3 mr-1" />
+                    Sorted by {sortField} ({sortDirection})
+                  </Badge>
+                ) : (filterPosition === 'all' && hasCustomOrdering()) ? (
+                  <Badge variant="outline" className="text-xs text-purple-700 border-0">
+                    <Menu className="w-3 h-3 mr-1" />
+                    Custom Order
+                  </Badge>
+                ) : (
+                  <Badge variant="outline" className="text-xs text-gray-600 border-0">
+                    <Settings className="w-3 h-3 mr-1" />
+                    Default Sort
+                  </Badge>
+                )}
+              </div>
+
+              {/* Default Sort Button - Only show when custom ordering exists and in "All Positions" view */}
+              {hasCustomOrdering() && filterPosition === 'all' && !sortField && !isOrderDirty && (
+                <div>
+                  <Button
+                    onClick={handleResetToDefaultSort}
+                    disabled={isResettingToDefault}
+                    variant="outline"
+                    className="w-full border-orange-200 text-orange-700 hover:bg-orange-50 hover:border-orange-300"
+                    size="sm"
+                  >
+                    {isResettingToDefault ? (
+                      <span className="flex items-center justify-center">
+                        <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-orange-700 mr-2"></div>
+                        Resetting...
+                      </span>
+                    ) : (
+                      <span className="flex items-center justify-center">
+                        <Settings className="w-3 h-3 mr-1" />
+                        Reset to Default Sort
+                      </span>
+                    )}
+                  </Button>
+                </div>
+              )}
+
               {/* Bulk Actions */}
               {selectedTasks.size > 0 && (
                 <div className="flex space-x-3">
@@ -2649,6 +3004,53 @@ export default function AdminMasterTasksPage() {
                   Delete Tasks
                 </Button>
               </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* Reset to Default Sort Confirmation Modal */}
+        <Dialog open={showResetConfirmDialog} onOpenChange={setShowResetConfirmDialog}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle className="text-orange-600 flex items-center">
+                <Settings className="w-5 h-5 mr-2" />
+                Reset to Default Sort
+              </DialogTitle>
+            </DialogHeader>
+            <div className="py-4">
+              <p className="text-gray-700 mb-4">
+                This will remove all custom ordering and restore the default sorting based on:
+              </p>
+              <ul className="text-sm text-gray-600 space-y-1 mb-4">
+                <li>• Due Time (earliest first)</li>
+                <li>• Frequency Priority (Once Off → Daily → Weekly → Monthly)</li>
+                <li>• Position Order (by display order)</li>
+                <li>• Task Description (alphabetical)</li>
+              </ul>
+              <p className="text-orange-800 text-sm font-medium">
+                This action cannot be undone.
+              </p>
+            </div>
+            <div className="flex justify-end space-x-2">
+              <Button
+                variant="outline"
+                onClick={() => setShowResetConfirmDialog(false)}
+                disabled={isResettingToDefault}
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={confirmResetToDefaultSort}
+                disabled={isResettingToDefault}
+                className="bg-orange-600 hover:bg-orange-700 text-white"
+              >
+                {isResettingToDefault ? (
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                ) : (
+                  <Settings className="w-4 h-4 mr-2" />
+                )}
+                Reset to Default
+              </Button>
             </div>
           </DialogContent>
         </Dialog>

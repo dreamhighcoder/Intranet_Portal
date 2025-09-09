@@ -63,7 +63,8 @@ export async function GET(request: NextRequest) {
       console.log('Master tasks GET - No status filter (showing all)')
     }
 
-    // Order by custom_order first (if exists), then by created_at
+    // Order by custom_order first (if exists and not reset value), then by created_at
+    // Note: 999999 is used as a reset value since custom_order has NOT NULL constraint
     query = query.order('custom_order', { ascending: true, nullsLast: true })
     query = query.order('created_at', { ascending: false })
 
