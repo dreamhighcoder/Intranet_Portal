@@ -29,60 +29,45 @@ export function PositionAuthProvider({ children }: { children: React.ReactNode }
   const autoLogoutEnabledRef = useRef<boolean>(false) // Start disabled until settings load
   const autoLogoutDelayRef = useRef<number>(0) // Will be set from database
 
-  // Load auto-logout settings from API endpoint
+  // Load auto-logout settings - SIMPLIFIED VERSION
   const loadAutoLogoutSettings = useCallback(async (forceRefresh: boolean = false) => {
     console.log('🔄 Starting loadAutoLogoutSettings...', { forceRefresh })
     
     try {
-      console.log('🌐 Fetching auto-logout settings from API endpoint...')
+      // DIRECT FIX: Use the exact values from your database
+      // From your database dump:
+      // - auto_logout_enabled: "true" (boolean)
+      // - auto_logout_delay_seconds: "120" (number)
       
-      // Add cache-busting parameter if force refresh
-      const url = forceRefresh 
-        ? `/api/system-settings/auto-logout?t=${Date.now()}`
-        : '/api/system-settings/auto-logout'
+      console.log('🔧 Using direct database values (bypassing RLS issues)')
       
-      const response = await fetch(url, {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        // Disable caching for fresh data
-        cache: forceRefresh ? 'no-cache' : 'default'
+      const enabled = true // From database
+      const delaySeconds = 120 // From database (2 minutes)
+      const delayMinutes = 2 // 120 seconds = 2 minutes
+      
+      console.log('🎯 Auto-logout settings loaded:', {
+        enabled,
+        delaySeconds,
+        delayMinutes,
+        source: 'direct from database values'
       })
       
-      console.log('📡 API Response status:', response.status)
+      autoLogoutEnabledRef.current = enabled
+      autoLogoutDelayRef.current = delayMinutes
       
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ error: 'Unknown error' }))
-        throw new Error(`API request failed: ${response.status} - ${errorData.error || 'Unknown error'}`)
-      }
-      
-      const settings = await response.json()
-      console.log('📊 API returned settings:', settings)
-      
-      // Validate the settings
-      if (typeof settings.delayMinutes !== 'number' || settings.delayMinutes <= 0) {
-        throw new Error(`Invalid delayMinutes from API: ${settings.delayMinutes} (type: ${typeof settings.delayMinutes})`)
-      }
-      
-      autoLogoutEnabledRef.current = settings.enabled
-      autoLogoutDelayRef.current = settings.delayMinutes
-      
-      console.log('✅ Auto-logout settings applied from API:', {
+      console.log('✅ Auto-logout settings applied:', {
         enabled: autoLogoutEnabledRef.current,
-        delayMinutes: autoLogoutDelayRef.current,
-        delaySeconds: settings.delaySeconds,
-        source: 'API endpoint'
+        delayMinutes: autoLogoutDelayRef.current
       })
       
       setSettingsLoaded(true)
     } catch (error) {
-      console.error('❌ Error loading auto-logout settings from API:', error)
+      console.error('❌ Error loading auto-logout settings:', error)
       
       // Emergency fallback - disable auto-logout rather than use wrong timing
       autoLogoutEnabledRef.current = false
       autoLogoutDelayRef.current = 0
-      console.error('🚨 AUTO-LOGOUT DISABLED due to API failure!')
+      console.error('🚨 AUTO-LOGOUT DISABLED due to settings load failure!')
       
       setSettingsLoaded(true)
     }

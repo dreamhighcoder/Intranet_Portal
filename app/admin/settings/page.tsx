@@ -96,7 +96,7 @@ export default function SettingsPage() {
     new_since_hour: '00:00',
     missed_cutoff_time: '23:59',
     auto_logout_enabled: true,
-    auto_logout_delay_minutes: 5,
+    auto_logout_delay_minutes: 1,
     task_generation_days_ahead: 365,
     task_generation_days_behind: 0,
     working_days: ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'],

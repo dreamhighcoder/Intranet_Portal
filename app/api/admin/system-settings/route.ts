@@ -69,10 +69,20 @@ export async function PUT(request: NextRequest) {
     await updateSystemSettingsServer(body)
 
     console.log('✅ Admin system-settings PUT successful')
-    return NextResponse.json({ 
+    
+    // Create response with cache-busting headers to ensure fresh data
+    const response = NextResponse.json({ 
       success: true, 
-      message: 'System settings updated successfully'
+      message: 'System settings updated successfully',
+      timestamp: Date.now() // Help frontend detect changes
     })
+    
+    // Add headers to prevent caching
+    response.headers.set('Cache-Control', 'no-cache, no-store, must-revalidate')
+    response.headers.set('Pragma', 'no-cache')
+    response.headers.set('Expires', '0')
+    
+    return response
 
   } catch (error) {
     console.error('❌ Admin system-settings PUT error:', error)

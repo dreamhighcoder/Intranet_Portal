@@ -279,7 +279,7 @@ export async function GET(request: NextRequest) {
         responsibility: task.responsibility || [],
         categories: task.categories || [],
         frequencies: convertStringFrequenciesToEnum(task.frequencies || []),
-        timing: task.due_time ?? '09:00', // Use actual due_time from database, fallback to 09:00 only if null/undefined
+        timing: task.due_time ?? '00:00', // Use actual due_time from database, fallback to 09:00 only if null/undefined
         active: true,
         publish_delay: task.publish_delay || undefined,
         due_date: task.due_date || undefined

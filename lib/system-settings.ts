@@ -17,7 +17,7 @@ const DEFAULT_SETTINGS: SystemSettings = {
   new_since_hour: '09:00',
   missed_cutoff_time: '23:59',
   auto_logout_enabled: true,
-  auto_logout_delay_minutes: 5,
+  auto_logout_delay_minutes: 5, // Reasonable default
   task_generation_days_ahead: 365,
   task_generation_days_behind: 30,
   working_days: ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'],
@@ -28,6 +28,10 @@ const DEFAULT_SETTINGS: SystemSettings = {
 let settingsCache: SystemSettings | null = null
 let cacheTimestamp: number = 0
 const CACHE_DURATION = 5 * 60 * 1000 // 5 minutes
+
+// Clear cache on module load to ensure fresh data
+settingsCache = null
+cacheTimestamp = 0
 
 // Mapping between frontend setting names and database keys
 const SETTING_KEY_MAP = {
@@ -81,27 +85,52 @@ function convertBusinessDaysToWorkingDays(businessDays: number[]): string[] {
 /**
  * Get system settings from database with caching
  */
-export async function getSystemSettings(): Promise<SystemSettings> {
+export async function getSystemSettings(forceRefresh: boolean = false): Promise<SystemSettings> {
   const now = Date.now()
   
-  // Return cached settings if still valid
-  if (settingsCache && (now - cacheTimestamp) < CACHE_DURATION) {
+  // Return cached settings if still valid (unless force refresh is requested)
+  const cacheAge = now - cacheTimestamp
+  if (!forceRefresh && settingsCache && cacheAge < CACHE_DURATION) {
+    console.log('📦 Using cached settings:', {
+      cacheAgeSeconds: Math.round(cacheAge / 1000),
+      maxCacheSeconds: Math.round(CACHE_DURATION / 1000),
+      autoLogoutDelay: settingsCache.auto_logout_delay_minutes
+    })
     return settingsCache
   }
 
+  console.log('🔄 Loading fresh settings from database:', {
+    reason: forceRefresh ? 'force refresh' : 'cache expired',
+    cacheAgeSeconds: Math.round(cacheAge / 1000),
+    maxCacheSeconds: Math.round(CACHE_DURATION / 1000)
+  })
+
   try {
+    console.log('🔍 Querying system_settings table...')
+    
     // Get system settings from database - key-value structure
     const { data: settingsRows, error } = await supabase
       .from('system_settings')
       .select('key, value, data_type')
 
+    console.log('📊 Database query result:', { 
+      error, 
+      rowCount: settingsRows?.length || 0,
+      firstFewRows: settingsRows?.slice(0, 3)
+    })
+
     if (error) {
-      console.error('Error fetching system settings:', error)
+      console.error('❌ Error fetching system settings:', error)
+      console.error('❌ Error details:', {
+        message: error.message,
+        code: error.code,
+        details: error.details
+      })
       return DEFAULT_SETTINGS
     }
 
     if (!settingsRows || settingsRows.length === 0) {
-      console.log('No system settings found, using defaults')
+      console.log('⚠️ No system settings found in database, using defaults')
       return DEFAULT_SETTINGS
     }
 
@@ -111,7 +140,27 @@ export async function getSystemSettings(): Promise<SystemSettings> {
       settingsMap.set(row.key, parseSettingValue(row.value, row.data_type))
     })
 
+    console.log('🔍 Settings loaded from database:', {
+      totalRows: settingsRows.length,
+      autoLogoutDelaySeconds: settingsMap.get(SETTING_KEY_MAP.auto_logout_delay_minutes),
+      autoLogoutEnabled: settingsMap.get(SETTING_KEY_MAP.auto_logout_enabled),
+      settingsMap: Object.fromEntries(settingsMap)
+    })
+
     // Map database keys to frontend interface
+    const autoLogoutDelaySeconds = settingsMap.get(SETTING_KEY_MAP.auto_logout_delay_minutes)
+    const autoLogoutDelayMinutes = autoLogoutDelaySeconds !== undefined
+      ? Math.round(autoLogoutDelaySeconds / 60)
+      : DEFAULT_SETTINGS.auto_logout_delay_minutes
+
+    console.log('🔄 Auto-logout delay conversion:', {
+      databaseKey: SETTING_KEY_MAP.auto_logout_delay_minutes,
+      fromDatabase: autoLogoutDelaySeconds,
+      convertedToMinutes: autoLogoutDelayMinutes,
+      defaultFallback: DEFAULT_SETTINGS.auto_logout_delay_minutes,
+      wasUndefined: autoLogoutDelaySeconds === undefined
+    })
+
     const mergedSettings: SystemSettings = {
       timezone: settingsMap.get(SETTING_KEY_MAP.timezone) || DEFAULT_SETTINGS.timezone,
       new_since_hour: settingsMap.get(SETTING_KEY_MAP.new_since_hour) || DEFAULT_SETTINGS.new_since_hour,
@@ -120,9 +169,7 @@ export async function getSystemSettings(): Promise<SystemSettings> {
         ? settingsMap.get(SETTING_KEY_MAP.auto_logout_enabled) 
         : DEFAULT_SETTINGS.auto_logout_enabled,
       // Convert seconds to minutes for the frontend
-      auto_logout_delay_minutes: settingsMap.get(SETTING_KEY_MAP.auto_logout_delay_minutes) !== undefined
-        ? Math.round(settingsMap.get(SETTING_KEY_MAP.auto_logout_delay_minutes) / 60)
-        : DEFAULT_SETTINGS.auto_logout_delay_minutes,
+      auto_logout_delay_minutes: autoLogoutDelayMinutes,
       task_generation_days_ahead: settingsMap.get(SETTING_KEY_MAP.task_generation_days_ahead) || DEFAULT_SETTINGS.task_generation_days_ahead,
       task_generation_days_behind: settingsMap.get(SETTING_KEY_MAP.task_generation_days_behind) || DEFAULT_SETTINGS.task_generation_days_behind,
       // Convert business days array to working days
@@ -133,6 +180,8 @@ export async function getSystemSettings(): Promise<SystemSettings> {
         ? settingsMap.get(SETTING_KEY_MAP.public_holiday_push_forward)
         : DEFAULT_SETTINGS.public_holiday_push_forward
     }
+
+    console.log('✅ Final merged settings:', mergedSettings)
 
     // Update cache
     settingsCache = mergedSettings
@@ -147,6 +196,15 @@ export async function getSystemSettings(): Promise<SystemSettings> {
 }
 
 /**
+ * Clear the settings cache to force fresh loading
+ */
+export function clearSettingsCache(): void {
+  console.log('🗑️ Clearing settings cache')
+  settingsCache = null
+  cacheTimestamp = 0
+}
+
+/**
  * Get a specific system setting by key
  */
 export async function getSystemSetting<K extends keyof SystemSettings>(key: K): Promise<SystemSettings[K]> {
@@ -154,13 +212,7 @@ export async function getSystemSetting<K extends keyof SystemSettings>(key: K): 
   return settings[key]
 }
 
-/**
- * Clear the settings cache (useful after updates)
- */
-export function clearSettingsCache(): void {
-  settingsCache = null
-  cacheTimestamp = 0
-}
+
 
 /**
  * Get working days as numbers (0=Sunday, 1=Monday, etc.)
