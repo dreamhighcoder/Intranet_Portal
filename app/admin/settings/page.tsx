@@ -123,15 +123,11 @@ export default function SettingsPage() {
 
   const loadSettings = async () => {
     try {
-      console.log('🔄 Loading settings from API...')
       const response = await authenticatedGet('/api/admin/settings')
-      console.log('📥 Settings API response:', response)
       
       if (response && response.success) {
-        console.log('✅ Settings loaded successfully:', response.data)
         setSettings(response.data)
       } else {
-        console.error('❌ Settings load failed:', response?.error || 'No response')
         throw new Error(response?.error || 'Failed to load settings')
       }
     } catch (error) {
@@ -189,11 +185,7 @@ export default function SettingsPage() {
   const handleSaveSettings = async () => {
     setIsSaving(true)
     try {
-      console.log('💾 Saving settings to API...')
-      console.log('📤 Settings data to save:', JSON.stringify(settings, null, 2))
-      
       const response = await authenticatedPut('/api/admin/settings', settings)
-      console.log('📥 Save response:', response)
       
       if (response && response.success) {
         // Update last refresh time
@@ -202,10 +194,8 @@ export default function SettingsPage() {
         // Dispatch event to notify other components that settings have changed
         window.dispatchEvent(new CustomEvent('systemSettingsChanged'))
         
-        console.log('✅ Settings saved successfully')
         toastSuccess("Settings Saved", response.message || "System settings have been updated successfully")
       } else {
-        console.error('❌ Settings save failed:', response?.error || 'No response')
         throw new Error(response?.error || 'Failed to save settings')
       }
     } catch (error) {

@@ -3,26 +3,20 @@ import { getSystemSettingsServer, updateSystemSettingsServer } from '@/lib/syste
 
 export async function GET() {
   try {
-    console.log('🔄 Admin system-settings GET called')
-    
     // Use the server-side function that handles the correct schema
     const settings = await getSystemSettingsServer()
     
-    console.log('✅ Admin system-settings GET successful:', settings)
     return NextResponse.json(settings)
 
   } catch (error) {
-    console.error('❌ Admin system-settings GET error:', error)
+    console.error('Admin system-settings GET error:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }
 
 export async function PUT(request: NextRequest) {
   try {
-    console.log('🔄 Admin system-settings PUT called')
-    
     const body = await request.json()
-    console.log('📝 Request body:', JSON.stringify(body, null, 2))
     
     // Validate required fields
     const requiredFields = [
@@ -67,8 +61,6 @@ export async function PUT(request: NextRequest) {
 
     // Use the server-side function that handles the correct schema
     await updateSystemSettingsServer(body)
-
-    console.log('✅ Admin system-settings PUT successful')
     
     // Create response with cache-busting headers to ensure fresh data
     const response = NextResponse.json({ 
@@ -85,7 +77,7 @@ export async function PUT(request: NextRequest) {
     return response
 
   } catch (error) {
-    console.error('❌ Admin system-settings PUT error:', error)
+    console.error('Admin system-settings PUT error:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }

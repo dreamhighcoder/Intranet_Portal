@@ -31,11 +31,7 @@ export function PositionAuthProvider({ children }: { children: React.ReactNode }
 
   // Load auto-logout settings from API endpoint
   const loadAutoLogoutSettings = useCallback(async (forceRefresh: boolean = false) => {
-    console.log('🔄 Starting loadAutoLogoutSettings...', { forceRefresh })
-    
     try {
-      console.log('🌐 Fetching auto-logout settings from API endpoint...')
-      
       // Add cache-busting parameter if force refresh
       const url = forceRefresh 
         ? `/api/system-settings/auto-logout?t=${Date.now()}`
@@ -50,15 +46,12 @@ export function PositionAuthProvider({ children }: { children: React.ReactNode }
         cache: forceRefresh ? 'no-cache' : 'default'
       })
       
-      console.log('📡 API Response status:', response.status)
-      
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({ error: 'Unknown error' }))
         throw new Error(`API request failed: ${response.status} - ${errorData.error || 'Unknown error'}`)
       }
       
       const settings = await response.json()
-      console.log('📊 API returned settings:', settings)
       
       // Validate the settings
       if (typeof settings.delayMinutes !== 'number' || settings.delayMinutes <= 0) {
@@ -68,21 +61,13 @@ export function PositionAuthProvider({ children }: { children: React.ReactNode }
       autoLogoutEnabledRef.current = settings.enabled
       autoLogoutDelayRef.current = settings.delayMinutes
       
-      console.log('✅ Auto-logout settings applied from API:', {
-        enabled: autoLogoutEnabledRef.current,
-        delayMinutes: autoLogoutDelayRef.current,
-        delaySeconds: settings.delaySeconds,
-        source: 'API endpoint'
-      })
-      
       setSettingsLoaded(true)
     } catch (error) {
-      console.error('❌ Error loading auto-logout settings from API:', error)
+      console.error('Error loading auto-logout settings:', error)
       
       // Emergency fallback - disable auto-logout rather than use wrong timing
       autoLogoutEnabledRef.current = false
       autoLogoutDelayRef.current = 0
-      console.error('🚨 AUTO-LOGOUT DISABLED due to API failure!')
       
       setSettingsLoaded(true)
     }
@@ -90,13 +75,12 @@ export function PositionAuthProvider({ children }: { children: React.ReactNode }
 
   // Auto-logout due to inactivity
   const performAutoLogout = useCallback(() => {
-    console.log('⏰ Auto-logout triggered due to inactivity')
     try {
       PositionAuthService.signOut()
       setUser(null)
       router.push('/')
     } catch (error) {
-      console.error('❌ Error during auto-logout:', error)
+      console.error('Error during auto-logout:', error)
     }
   }, [router])
 
@@ -105,17 +89,8 @@ export function PositionAuthProvider({ children }: { children: React.ReactNode }
     const now = Date.now()
     lastActivityRef.current = now
     
-    console.log('🔄 resetInactivityTimer called:', {
-      user: !!user,
-      enabled: autoLogoutEnabledRef.current,
-      delay: autoLogoutDelayRef.current,
-      settingsLoaded,
-      hasExistingTimer: !!inactivityTimerRef.current
-    })
-    
     // Clear existing timer
     if (inactivityTimerRef.current) {
-      console.log('🗑️ Clearing existing timer')
       clearTimeout(inactivityTimerRef.current)
       inactivityTimerRef.current = null
     }
@@ -123,23 +98,10 @@ export function PositionAuthProvider({ children }: { children: React.ReactNode }
     // Only set new timer if user is logged in, auto-logout is enabled, and we have valid delay
     if (user && autoLogoutEnabledRef.current && autoLogoutDelayRef.current > 0) {
       const timeoutMs = autoLogoutDelayRef.current * 60 * 1000 // Convert minutes to milliseconds
-      console.log(`⏱️ Setting inactivity timer for ${autoLogoutDelayRef.current} minutes (${timeoutMs}ms)`)
-      console.log(`⏱️ Timer will fire at: ${new Date(now + timeoutMs).toLocaleTimeString()}`)
       
       inactivityTimerRef.current = setTimeout(() => {
-        console.log('⏰ Inactivity timeout reached, performing auto-logout')
-        console.log('⏰ Timeout fired at:', new Date().toLocaleTimeString())
         performAutoLogout()
       }, timeoutMs)
-      
-      console.log('✅ Timer set successfully, ID:', inactivityTimerRef.current)
-    } else {
-      console.log('⚠️ Not setting timer:', {
-        user: !!user,
-        enabled: autoLogoutEnabledRef.current,
-        delay: autoLogoutDelayRef.current,
-        settingsLoaded
-      })
     }
   }, [user, performAutoLogout, settingsLoaded])
 
@@ -173,12 +135,6 @@ export function PositionAuthProvider({ children }: { children: React.ReactNode }
   // Set up activity listeners and inactivity timer when user changes AND settings are loaded
   useEffect(() => {
     if (user && settingsLoaded && autoLogoutEnabledRef.current && autoLogoutDelayRef.current > 0) {
-      console.log('👤 User logged in and settings loaded, setting up auto-logout functionality')
-      console.log('📊 Current auto-logout settings:', {
-        enabled: autoLogoutEnabledRef.current,
-        delayMinutes: autoLogoutDelayRef.current
-      })
-      
       // Start the inactivity timer
       resetInactivityTimer()
 
@@ -191,8 +147,6 @@ export function PositionAuthProvider({ children }: { children: React.ReactNode }
 
       // Cleanup function
       return () => {
-        console.log('🧹 Cleaning up auto-logout functionality')
-        
         // Remove event listeners
         events.forEach(event => {
           document.removeEventListener(event, handleUserActivity, true)
@@ -205,13 +159,6 @@ export function PositionAuthProvider({ children }: { children: React.ReactNode }
         }
       }
     } else {
-      console.log('⚠️ Auto-logout setup conditions not met:', {
-        user: !!user,
-        settingsLoaded,
-        enabled: autoLogoutEnabledRef.current,
-        delay: autoLogoutDelayRef.current
-      })
-      
       // Clear timer if conditions not met
       if (inactivityTimerRef.current) {
         clearTimeout(inactivityTimerRef.current)
@@ -223,11 +170,9 @@ export function PositionAuthProvider({ children }: { children: React.ReactNode }
   // Reload settings when they might have changed
   useEffect(() => {
     const handleSettingsChange = async () => {
-      console.log('🔄 System settings changed, reloading auto-logout settings...')
       await loadAutoLogoutSettings(true) // Force refresh
       // Reset timer with new settings if user is logged in and settings are loaded
       if (user && settingsLoaded) {
-        console.log('🔄 Resetting inactivity timer with new settings')
         resetInactivityTimer()
       }
     }
@@ -248,7 +193,6 @@ export function PositionAuthProvider({ children }: { children: React.ReactNode }
         setUser(result.user)
         
         // Load auto-logout settings immediately after successful login
-        console.log('🔄 User signed in, loading auto-logout settings...')
         await loadAutoLogoutSettings(true) // Force refresh
         
         return { success: true }
@@ -262,13 +206,12 @@ export function PositionAuthProvider({ children }: { children: React.ReactNode }
   }
 
   const signOut = () => {
-    console.log('🚪 PositionAuth: Manual signout requested')
     try {
       PositionAuthService.signOut()
       setUser(null)
       router.push('/')
     } catch (error) {
-      console.error('❌ PositionAuth: Error during manual logout:', error)
+      console.error('Error during manual logout:', error)
     }
   }
 
@@ -282,44 +225,7 @@ export function PositionAuthProvider({ children }: { children: React.ReactNode }
     resetInactivityTimer
   }
 
-  // Debug logging
-  React.useEffect(() => {
-    console.log('PositionAuth Context Update:', {
-      user: user ? {
-        id: user.id,
-        role: user.role,
-        displayName: user.displayName,
-        isAuthenticated: user.isAuthenticated,
-        isSuperAdmin: user.isSuperAdmin
-      } : null,
-      isLoading,
-      settingsLoaded,
-      autoLogoutEnabled: autoLogoutEnabledRef.current,
-      autoLogoutDelay: autoLogoutDelayRef.current,
-      hasActiveTimer: !!inactivityTimerRef.current,
-      isAdmin: user?.role === 'admin',
-      isSuperAdmin: user?.isSuperAdmin || false,
-      userRole: user?.role
-    })
-  }, [user, isLoading, settingsLoaded])
 
-  // Expose debug functions to window for testing
-  React.useEffect(() => {
-    if (typeof window !== 'undefined') {
-      (window as any).debugAutoLogout = {
-        getCurrentSettings: () => ({
-          enabled: autoLogoutEnabledRef.current,
-          delayMinutes: autoLogoutDelayRef.current,
-          settingsLoaded,
-          hasActiveTimer: !!inactivityTimerRef.current,
-          user: !!user
-        }),
-        forceReloadSettings: () => loadAutoLogoutSettings(true),
-        triggerAutoLogout: () => performAutoLogout(),
-        resetTimer: () => resetInactivityTimer()
-      }
-    }
-  }, [loadAutoLogoutSettings, performAutoLogout, resetInactivityTimer, settingsLoaded, user])
 
   return (
     <PositionAuthContext.Provider value={value}>
