@@ -211,6 +211,7 @@ const getResponsibilityAbbreviation = (responsibility: string) => {
 const calculateDynamicTaskStatus = (task: ChecklistTask, currentDate: string): string => {
   return calculateTaskStatus({
     date: task.date,
+    due_date: task.due_date, // pass actual due date so weekly/monthly statuses are correct
     master_task: {
       due_time: task.master_task?.due_time,
       created_at: task.master_task?.created_at,

@@ -13,6 +13,7 @@ import {
 
 export interface TaskStatusInput {
   date: string // Task instance date (YYYY-MM-DD)
+  due_date?: string // The actual due date for the instance (e.g., Saturday for weekly)
   master_task?: {
     due_time?: string // HH:mm:ss or HH:mm format
     created_at?: string
@@ -42,49 +43,52 @@ export type TaskStatus =
  */
 export function calculateTaskStatus(task: TaskStatusInput, currentDate?: string): TaskStatus {
   try {
-    // Completed takes precedence
-    if (task.is_completed_for_position || task.status === 'completed') {
-      return 'completed'
-    }
+    // 1) Hard precedence: completion
+    if (task.is_completed_for_position || task.status === 'completed') return 'completed'
 
-    // For time-sensitive status calculation, we need to check if this task is due today
-    // and override backend status if necessary for proper time comparison
     const now = getAustralianNow()
     const todayStr = currentDate || getAustralianToday()
     const today = parseAustralianDate(todayStr)
-    const instanceDate = parseAustralianDate(task.date)
-    const viewDate = parseAustralianDate(todayStr)
-    
-    // Check if this task is due today (task.date equals today)
-    const isTaskDueToday = instanceDate.getTime() === today.getTime()
-    
-    // If task is due today, we need to do time-based status calculation
-    if (isTaskDueToday) {
-      const dueTimeStr = task?.master_task?.due_time || '17:00'
-      // Handle time format - convert "HH:mm:ss" to "HH:mm" if needed
-      const timeFormatted = dueTimeStr.includes(':') ? dueTimeStr.substring(0, 5) : dueTimeStr
-      const dueDateTime = createAustralianDateTime(todayStr, timeFormatted)
-      
-      // Check if we have lock time information
-      const lockDate = task.lock_date ? parseAustralianDate(task.lock_date) : null
-      const lockTime = task.lock_time
-      
-      // Check lock time first (missed status)
-      if (lockDate && lockTime && lockDate.getTime() === today.getTime()) {
-        const lockDateTime = createAustralianDateTime(todayStr, lockTime)
-        if (now >= lockDateTime) return 'missed'
-      }
-      
-      // Time-based status for tasks due today
-      if (now >= dueDateTime) {
-        return 'overdue'
-      } else {
-        return 'due_today'
-      }
+
+    // Helper: normalize HH:mm[:ss] to HH:mm
+    const normalizeTime = (t?: string): string | null => {
+      if (!t) return null
+      return t.includes(':') ? t.substring(0, 5) : t
     }
 
-    // Use backend's detailed status if available (for non-today tasks or as fallback)
+    const dueDateStr = task.due_date || null
+    const dueTimeStr = normalizeTime(task?.master_task?.due_time) || '17:00'
+    const lockDateStr = task.lock_date || null
+    const lockTimeStr = normalizeTime(task.lock_time || undefined)
+
+    // 2) Lock deadline → Missed
+    if (lockDateStr && lockTimeStr) {
+      const lockDate = parseAustralianDate(lockDateStr)
+      const lockDateTime = createAustralianDateTime(lockDateStr, lockTimeStr)
+      if (now >= lockDateTime) return 'missed'
+    }
+
+    // 3) If backend provided a detailed_status, prefer it as baseline,
+    //    but refine using due/lock when we have explicit dates/times.
     if (task.detailed_status) {
+      // If explicit due_date exists, compute precise state for today/relative to due
+      if (dueDateStr) {
+        const dueDate = parseAustralianDate(dueDateStr)
+
+        if (today.getTime() < dueDate.getTime()) {
+          return 'not_due_yet'
+        }
+
+        if (today.getTime() === dueDate.getTime()) {
+          const dueDateTime = createAustralianDateTime(dueDateStr, dueTimeStr)
+          return now < dueDateTime ? 'due_today' : 'overdue'
+        }
+
+        // today > dueDate
+        return 'overdue'
+      }
+
+      // No explicit due_date → trust backend detailed_status
       switch (task.detailed_status) {
         case 'completed':
           return 'completed'
@@ -97,17 +101,45 @@ export function calculateTaskStatus(task: TaskStatusInput, currentDate?: string)
         case 'missed':
           return 'missed'
         default:
-          return 'pending'
+          break
       }
     }
 
-    // Fallback: Calculate status using frontend logic
-    const isViewingToday = viewDate.getTime() === today.getTime()
+    // 4) No detailed_status or could not determine from it → use explicit due/lock if provided
+    if (dueDateStr) {
+      const dueDate = parseAustralianDate(dueDateStr)
 
-    // Check visibility window (never show before creation/publish/start; hide after end)
+      if (today.getTime() < dueDate.getTime()) {
+        return 'not_due_yet'
+      }
+
+      if (today.getTime() === dueDate.getTime()) {
+        const dueDateTime = createAustralianDateTime(dueDateStr, dueTimeStr)
+
+        // If we also have lock window today, check Missed after lock
+        if (lockDateStr) {
+          const lockDate = parseAustralianDate(lockDateStr)
+          if (lockDate.getTime() === today.getTime() && lockTimeStr) {
+            const lockDateTime = createAustralianDateTime(lockDateStr, lockTimeStr)
+            if (now >= lockDateTime) return 'missed'
+          }
+        }
+
+        return now < dueDateTime ? 'due_today' : 'overdue'
+      }
+
+      // today > dueDate
+      // If lock deadline exists in the future, it's still overdue until lock time passes
+      return 'overdue'
+    }
+
+    // 5) Fallback visibility and instance-based heuristics (no due_date provided)
+    //    Do NOT assume instance date == due date (prevents false "due_today").
+    //    Only enforce visibility window.
+    const viewDate = parseAustralianDate(todayStr)
     let visibilityStart: Date | null = null
     let visibilityEnd: Date | null = null
-    
+
     try {
       const createdAtIso = task?.master_task?.created_at
       const publishDelay = task?.master_task?.publish_delay // YYYY-MM-DD
@@ -123,20 +155,13 @@ export function calculateTaskStatus(task: TaskStatusInput, currentDate?: string)
       if (startDate) dates.push(parseAustralianDate(startDate))
       if (dates.length > 0) visibilityStart = new Date(Math.max(...dates.map(d => d.getTime())))
       if (endDate) visibilityEnd = parseAustralianDate(endDate)
-    } catch { }
+    } catch {}
 
     if (visibilityStart && viewDate < visibilityStart) return 'not_visible'
     if (visibilityEnd && viewDate > visibilityEnd) return 'not_visible'
 
-    // Default status calculation
-    if (instanceDate > today) {
-      return 'not_due_yet'
-    } else if (instanceDate.getTime() === today.getTime()) {
-      return 'due_today'
-    } else {
-      return 'overdue'
-    }
-
+    // Without explicit due_date info, be conservative: rely on backend or mark as pending
+    return 'pending'
   } catch (error) {
     console.error('Error calculating task status:', error)
     return 'pending'

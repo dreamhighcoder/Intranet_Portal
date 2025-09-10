@@ -159,7 +159,7 @@ export default function TaskDetailModal({
         if (startDate) dates.push(parseAustralianDate(startDate))
         if (dates.length > 0) visibilityStart = new Date(Math.max(...dates.map(d => d.getTime())))
         if (endDate) visibilityEnd = parseAustralianDate(endDate)
-      } catch {}
+      } catch { }
 
       if (visibilityStart && viewDate < visibilityStart) return 'not_visible'
       if (visibilityEnd && viewDate > visibilityEnd) return 'not_visible'
@@ -780,10 +780,10 @@ export default function TaskDetailModal({
               <CardContent>
                 {/* Current Status Summary */}
                 <div className={`px-4 py-3 rounded-lg border mb-6 ${status === 'completed' ? 'bg-green-50 border-green-200' :
-                    status === 'not_due_yet' ? 'bg-blue-50 border-blue-200' :
-                      status === 'overdue' ? 'bg-red-50 border-red-200' :
-                        status === 'missed' ? 'bg-gray-100 border' :
-                          'bg-orange-50 border-orange-200'
+                  status === 'not_due_yet' ? 'bg-blue-50 border-blue-200' :
+                    status === 'overdue' ? 'bg-red-50 border-red-200' :
+                      status === 'missed' ? 'bg-gray-100 border' :
+                        'bg-orange-50 border-orange-200'
                   }`}>
                   <div className="flex items-center space-x-2 mb-3">
                     {status === 'completed' ? (
@@ -798,10 +798,10 @@ export default function TaskDetailModal({
                       <Clock className="h-5 w-5 text-orange-600" />
                     )}
                     <span className={`font-semibold text-lg ${status === 'completed' ? 'text-green-800' :
-                        status === 'not_due_yet' ? 'text-blue-800' :
-                          status === 'overdue' ? 'text-red-800' :
-                            status === 'missed' ? 'text-gray-800' :
-                              'text-orange-800'
+                      status === 'not_due_yet' ? 'text-blue-800' :
+                        status === 'overdue' ? 'text-red-800' :
+                          status === 'missed' ? 'text-gray-800' :
+                            'text-orange-800'
                       }`}>
                       Current Status: {
                         status === 'completed' ? 'Completed' :
@@ -877,55 +877,52 @@ export default function TaskDetailModal({
                           Frequency: {fc.frequency?.replace(/_/g, ' ').replace(/\b\w/g, (m: string) => m.toUpperCase())}
                         </div>
 
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm">
-                          <div className="flex items-center justify-between">
-                            <span className="text-gray-600">Appearance</span>
-                            <span className="text-gray-900 font-medium">{formatAUDate(fc.appearance)}</span>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm gap-8">
+                          <div className="space-y-2">
+                            <div className="flex items-center justify-between">
+                              <span className="text-gray-600">Appearance:</span>
+                              <span className="text-gray-900 font-medium">{formatAUDate(fc.appearance)}</span>
+                            </div>
+                            <div className="flex items-center justify-between">
+                              <span className="text-gray-600">Carry window:</span>
+                              <span className="text-gray-900 font-medium">
+                                {fc.carryStart ? formatAUDate(fc.carryStart) : '—'}
+                                {' '} - {' '}
+                                {fc.carryEnd ? formatAUDate(fc.carryEnd) : (fc.carryEnd === null ? 'Indefinite' : '—')}
+                              </span>
+                            </div>
                           </div>
 
-                          <div className="flex items-center justify-between">
-                            <span className="text-gray-600">Due date</span>
-                            <span className="text-gray-900 font-medium">{formatAUDate(fc.dueDate)}</span>
-                          </div>
-
-                          <div className="flex items-center justify-between">
-                            <span className="text-gray-600">Due time</span>
-                            <span className="text-gray-900 font-medium">
+                          <div className="space-y-2">
+                            <div className="flex items-center justify-between">
+                              <span className="text-gray-600">Due Date & Due TIme:</span>
+                              <span className="text-gray-900 font-medium">{formatAUDate(fc.dueDate)}, </span>
                               {fc.dueTime ? fc.dueTime : '—'}
                               {fc.dueDate && fc.dueTime && (
                                 <span className={`ml-2 px-2 py-0.5 rounded text-xs border ${nowAU >= new Date(`${formatYMD(fc.dueDate)}T${fc.dueTime}:00`)
-                                    ? 'bg-red-50 text-red-700 border-red-200'
-                                    : 'bg-blue-50 text-blue-700 border-blue-200'
+                                  ? 'bg-red-50 text-red-700 border-red-200'
+                                  : 'bg-blue-50 text-blue-700 border-blue-200'
                                   }`}>
                                   {nowAU >= new Date(`${formatYMD(fc.dueDate)}T${fc.dueTime}:00`) ? 'Passed' : 'Upcoming'}
                                 </span>
                               )}
-                            </span>
-                          </div>
-
-                          <div className="flex items-center justify-between">
-                            <span className="text-gray-600">Lock cutoff</span>
-                            <span className="text-gray-900 font-medium">
-                              {fc.lockDate ? `${formatAUDate(fc.lockDate)} 11:59 PM` : 'Never locks'}
-                              {fc.lockDate && (
-                                <span className={`ml-2 px-2 py-0.5 rounded text-xs border ${nowAU > new Date(`${formatYMD(fc.lockDate)}T23:59:00`)
+                            </div>
+                            <div className="flex items-center justify-between">
+                              <span className="text-gray-600">Lock cutoff:</span>
+                              <span className="text-gray-900 font-medium">
+                                {fc.lockDate ? `${formatAUDate(fc.lockDate)} 11:59 PM` : 'Never locks'}
+                                {fc.lockDate && (
+                                  <span className={`ml-2 px-2 py-0.5 rounded text-xs border ${nowAU > new Date(`${formatYMD(fc.lockDate)}T23:59:00`)
                                     ? 'bg-gray-100 text-gray-800 border-gray-200'
                                     : 'bg-green-50 text-green-700 border-green-200'
-                                  }`}>
-                                  {nowAU > new Date(`${formatYMD(fc.lockDate)}T23:59:00`) ? 'Passed' : 'Upcoming'}
-                                </span>
-                              )}
-                            </span>
+                                    }`}>
+                                    {nowAU > new Date(`${formatYMD(fc.lockDate)}T23:59:00`) ? 'Passed' : 'Upcoming'}
+                                  </span>
+                                )}
+                              </span>
+                            </div>
                           </div>
 
-                          <div className="flex items-center justify-between">
-                            <span className="text-gray-600">Carry window</span>
-                            <span className="text-gray-900 font-medium">
-                              {fc.carryStart ? formatAUDate(fc.carryStart) : '—'}
-                              {' '} - {' '}
-                              {fc.carryEnd ? formatAUDate(fc.carryEnd) : (fc.carryEnd === null ? 'Indefinite' : '—')}
-                            </span>
-                          </div>
                         </div>
                       </div>
                     ))}
