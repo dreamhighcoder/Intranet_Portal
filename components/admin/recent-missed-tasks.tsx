@@ -111,7 +111,7 @@ export function RecentMissedTasks() {
   return (
     <Card className="card-surface gap-3">
       <CardHeader>
-        <CardTitle>Recent Missed Tasks (Last 3 Days)</CardTitle>
+        <CardTitle>Recent Outstanding Tasks (Last 3 Days)</CardTitle>
       </CardHeader>
       <CardContent>
         {isLoading ? (
