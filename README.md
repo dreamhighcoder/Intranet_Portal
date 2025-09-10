@@ -9,7 +9,6 @@ A comprehensive Next.js-based intranet portal for pharmacy task management with 
 - **Current time references:** Always use Australian time (AEDT/AEST)
 - **Task scheduling:** All due times and dates are in Australian timezone
 - **Database times:** Stored and processed in Australian timezone
-
 - **Local system time is IRRELEVANT** - only Australian time matters
 
 This is a **MANDATORY** requirement for all development, analysis, and operations.
@@ -19,11 +18,12 @@ This is a **MANDATORY** requirement for all development, analysis, and operation
 This application allows pharmacists to track, manage, and complete daily tasks with:
 - **Role-based Authentication** (Admin/Viewer roles)
 - **Position-based Task Assignment** (Pharmacist Primary, Supporting, Assistants, etc.)
-- **Advanced Task Recurrence Engine** with 26+ frequency patterns
+- **Advanced Task Recurrence Engine** with 36+ frequency patterns
 - **Automated Task Generation** with complex recurrence patterns
 - **Real-time Status Management** and audit logging
 - **Public Holiday Integration** with automatic date shifting
 - **Comprehensive Reporting** and analytics dashboard
+- **System Settings Management** with database-backed configuration
 
 ## 🚀 Quick Setup
 
@@ -47,6 +47,7 @@ This application allows pharmacists to track, manage, and complete daily tasks w
    # NEXT_PUBLIC_SUPABASE_URL=your_supabase_url
    # NEXT_PUBLIC_SUPABASE_ANON_KEY=your_anon_key
    # SUPABASE_SERVICE_ROLE_KEY=your_service_role_key
+   # CRON_API_KEY=your_cron_api_key_for_production
    ```
 
 3. **Database Setup:**
@@ -95,8 +96,13 @@ This application allows pharmacists to track, manage, and complete daily tasks w
 │   │   ├── checklist/     # Task management
 │   │   ├── jobs/          # Background job endpoints
 │   │   ├── reports/       # Analytics and reporting
+│   │   ├── admin/         # Admin-only endpoints
 │   │   └── ...            # Other API endpoints
 │   ├── admin/             # Admin-only pages
+│   │   ├── settings/      # System settings management
+│   │   ├── master-tasks/  # Task template management
+│   │   ├── reports/       # Analytics dashboard
+│   │   └── ...            # Other admin pages
 │   ├── checklist/         # Task checklist pages
 │   ├── login/             # Authentication pages
 │   └── ...                # Other app pages
@@ -113,6 +119,7 @@ This application allows pharmacists to track, manage, and complete daily tasks w
 │   ├── new-task-generator.ts  # Task generation orchestration
 │   ├── task-database-adapter.ts  # Database integration layer
 │   ├── status-manager.ts # Task status automation
+│   ├── system-settings.ts # System configuration management
 │   └── ...               # Other utilities
 ├── supabase/             # Database schema & migrations
 │   ├── schema.sql        # Core database schema
@@ -134,28 +141,35 @@ This application allows pharmacists to track, manage, and complete daily tasks w
 - ✅ **Role-based Access Control** - Admin and Viewer roles
 - ✅ **Position-based Permissions** - Access control by pharmacy position
 - ✅ **Automatic Profile Creation** - User profiles created on first login
+- ✅ **Auto-logout System** - Configurable inactivity timeout
 
 ### Task Management System
 - ✅ **Master Task Templates** - Reusable task definitions with complex scheduling
 - ✅ **Task Instance Generation** - Automatic creation of daily task instances
-- ✅ **26+ Recurrence Patterns** - From simple daily to complex monthly patterns
+- ✅ **36+ Recurrence Patterns** - From simple daily to complex monthly patterns
 - ✅ **Status Automation** - Automatic transitions (Pending → Overdue → Missed → Locked)
 - ✅ **Carry Behavior** - Tasks can carry over multiple days based on frequency type
 - ✅ **Due Date/Time Management** - Flexible scheduling with override capabilities
+- ✅ **Task Activation System** - Manual and automatic task activation with publish delays
 
-### Advanced Recurrence Engine
-The system supports sophisticated scheduling patterns:
+### Advanced Recurrence Engine (36 Frequency Types)
 
 #### Basic Patterns
 - **Once Off** - Single occurrence with admin-specified due date
+- **Once Off Sticky** - Same as once off but remains visible after completion
 - **Every Day** - Daily tasks excluding Sundays and public holidays
-- **Once Weekly** - Weekly tasks anchored to specific days
 
-#### Advanced Patterns
+#### Weekly Patterns
+- **Once Weekly** - Weekly tasks anchored to Mondays with holiday shifting
 - **Specific Weekdays** - Monday through Saturday with holiday shifting
-- **Monthly Patterns** - Start/end of month with business day logic
-- **Quarterly/Yearly** - Advanced business scheduling
-- **Holiday Integration** - Automatic date shifting for public holidays
+  - Monday, Tuesday, Wednesday, Thursday, Friday, Saturday
+
+#### Monthly Patterns
+- **Start of Every Month** - First business day of each month
+- **Start of Specific Months** - First business day of specific months (Jan-Dec)
+- **Once Monthly** - Monthly tasks with last Saturday due dates
+- **End of Every Month** - Last Monday with sufficient workdays remaining
+- **End of Specific Months** - Last Monday of specific months (Jan-Dec)
 
 #### Key Features
 - **Deterministic Logic** - Same inputs always produce same outputs
@@ -164,6 +178,28 @@ The system supports sophisticated scheduling patterns:
 - **Precise Timing** - Exact due times and status transition timing
 - **Carry Logic** - Different carry behaviors per frequency type
 
+### System Settings Management
+- ✅ **Database-backed Configuration** - All settings stored in database
+- ✅ **Real-time Application** - Settings applied immediately across system
+- ✅ **Admin-only Access** - Secure settings management
+- ✅ **Comprehensive Validation** - Input validation and error handling
+- ✅ **Caching Strategy** - 5-minute cache for performance optimization
+
+#### Available Settings
+**Timezone & Regional Settings:**
+- System Timezone (configurable, currently Australia/Sydney)
+- Working Days (multi-select, affects task generation)
+
+**Task Management:**
+- New Task Hour (when tasks become "new")
+- Missed Cutoff Time (when tasks become "missed")
+- Generation Days Ahead/Behind (bulk generation ranges)
+- Public Holiday Handling (enable/disable holiday substitution)
+
+**Security & Sessions:**
+- Auto Logout (enable/disable)
+- Auto Logout Delay (1-1440 minutes)
+
 ### Admin Dashboard
 - ✅ **KPI Metrics** - Real-time performance indicators
 - ✅ **Task Completion Analytics** - Completion rates by position and time
@@ -171,6 +207,7 @@ The system supports sophisticated scheduling patterns:
 - ✅ **Master Task Editor** - Create and modify task templates
 - ✅ **Background Job Monitoring** - Track automated processes
 - ✅ **Audit Trail Access** - Complete history of all actions
+- ✅ **System Settings Panel** - Configure system-wide settings
 
 ### Reporting & Analytics
 - ✅ **Completion Rate Reports** - Track performance over time
@@ -186,6 +223,7 @@ The system supports sophisticated scheduling patterns:
 #### Positions
 - Defines pharmacy roles (Pharmacist Primary, Supporting, Assistants, etc.)
 - Links to user profiles for access control
+- Display order for UI presentation
 
 #### User Profiles
 - User information and role assignments
@@ -194,25 +232,33 @@ The system supports sophisticated scheduling patterns:
 
 #### Master Tasks
 - Recurring task templates with complex scheduling rules
-- Support for 26+ frequency patterns
+- Support for 36+ frequency patterns
 - Responsibility and category assignments
 - Timing and due date specifications
+- Publish status and activation delays
 
 #### Task Instances
 - Individual task occurrences generated from master tasks
 - Status tracking (Pending, Overdue, Missed, Locked, Completed)
 - Completion tracking with user and timestamp
 - Override capabilities for due dates/times
+- Carry instance tracking
 
 #### Public Holidays
 - Holiday calendar for automatic date shifting
 - Supports different holiday handling per frequency type
 - Integration with recurrence engine
 
+#### System Settings
+- Database-backed configuration storage
+- Cached for performance (5-minute TTL)
+- Comprehensive validation and type conversion
+
 #### Audit Log
 - Complete trail of all task actions
 - User tracking for all changes
 - Timestamp and action type logging
+- Metadata storage for detailed context
 
 ### Row Level Security (RLS)
 - **Admins:** Full access to all data across all positions
@@ -244,9 +290,9 @@ pnpm run generate-tasks
 # Update task statuses (Overdue/Missed/Locked)
 pnpm run update-statuses
 
-# New recurrence engine endpoints
-pnpm run generate-tasks-new
-pnpm run update-statuses-new
+# Bulk operations
+pnpm run bulk-generate-and-update
+pnpm run bulk-update-statuses
 ```
 
 #### Production Environment
@@ -259,9 +305,32 @@ pnpm run update-statuses-prod
 ```
 
 #### Scheduling Recommendations
-- **Task Generation:** Run daily at 12:01 AM
+- **Task Activation:** Run daily at 12:01 AM
+- **Task Generation:** Run daily at 12:05 AM
 - **Status Updates:** Run every hour during business hours
 - **Cleanup Jobs:** Run weekly to archive old completed tasks
+
+### Cron Job Setup
+
+Set up daily cron jobs for production:
+
+1. **Task Activation** (runs at 00:01 daily):
+   ```bash
+   curl -X POST https://your-domain/api/jobs/activate-tasks \
+     -H "Authorization: Bearer YOUR_CRON_API_KEY"
+   ```
+
+2. **Instance Generation** (runs at 00:05 daily):
+   ```bash
+   curl -X POST https://your-domain/api/jobs/generate-instances \
+     -H "Authorization: Bearer YOUR_CRON_API_KEY"
+   ```
+
+3. **Status Updates** (runs hourly):
+   ```bash
+   curl -X POST https://your-domain/api/jobs/update-statuses \
+     -H "Authorization: Bearer YOUR_CRON_API_KEY"
+   ```
 
 ## 🔍 API Endpoints
 
@@ -281,10 +350,14 @@ pnpm run update-statuses-prod
 - `GET /api/calendar` - Calendar view of tasks
 
 ### Background Jobs
-- `GET /api/jobs/generate-instances` - Generate daily task instances
-- `GET /api/jobs/update-statuses` - Update task statuses
-- `GET /api/jobs/generate-instances-new` - New recurrence engine generation
-- `GET /api/jobs/update-statuses-new` - New recurrence engine status updates
+- `POST /api/jobs/activate-tasks` - Activate tasks past their publish delay
+- `POST /api/jobs/generate-instances` - Generate daily task instances
+- `POST /api/jobs/update-statuses` - Update task statuses
+
+### System Management
+- `GET/PUT /api/admin/settings` - System settings management
+- `GET /api/holidays` - Public holiday management
+- `POST /api/admin/bulk-generate` - Bulk task generation
 
 ### Reporting & Analytics
 - `GET /api/reports/kpis` - Key performance indicators
@@ -292,9 +365,9 @@ pnpm run update-statuses-prod
 - `GET /api/audit-log` - Audit trail access
 - `GET /api/dashboard` - Admin dashboard data
 
-### System Management
-- `GET /api/holidays` - Public holiday management
-- `GET /api/settings` - System configuration
+### Testing & Development
+- `POST /api/test/task-activation` - Comprehensive task activation testing
+- `GET /api/health` - System health checks
 
 ## 🛠️ Development Guide
 
@@ -317,8 +390,13 @@ pnpm run update-statuses-prod
 
 3. **Test Implementation:**
    ```bash
-   # Test new patterns using the new recurrence engine
-   # Use the new-recurrence-engine.ts for proper implementation
+   # Test new patterns using the test endpoint
+   POST /api/test/task-activation
+   {
+     "action": "full_test",
+     "frequency": "your_new_frequency",
+     "testDate": "2024-01-15"
+   }
    ```
 
 ### Database Migrations
@@ -365,6 +443,29 @@ pnpm run update-statuses-prod
    const data = await authenticatedGet('/api/your-endpoint')
    ```
 
+### Adding New System Settings
+1. **Update Database Schema:**
+   ```sql
+   -- Add new setting to system_settings table
+   INSERT INTO system_settings (key, value, data_type, description)
+   VALUES ('new_setting', 'default_value', 'string', 'Description');
+   ```
+
+2. **Update Settings Library:**
+   ```typescript
+   // In lib/system-settings.ts
+   // Add new setting to SystemSettings interface
+   // Update getSystemSettings() to include new setting
+   // Add validation in updateSystemSettings()
+   ```
+
+3. **Update Frontend:**
+   ```typescript
+   // In app/admin/settings/page.tsx
+   // Add new form field for the setting
+   // Update form validation schema
+   ```
+
 ## 🔒 Security Features
 
 ### Authentication Security
@@ -372,6 +473,7 @@ pnpm run update-statuses-prod
 - **Token Refresh** - Automatic token renewal
 - **Session Validation** - Server-side authentication verification
 - **Secure Logout** - Complete session cleanup
+- **Auto-logout Protection** - Configurable inactivity timeout
 
 ### Database Security
 - **Row Level Security (RLS)** - Database-level access control
@@ -384,6 +486,7 @@ pnpm run update-statuses-prod
 - **Role Validation** - Admin-only endpoint protection
 - **CORS Configuration** - Proper cross-origin settings
 - **Rate Limiting** - Built-in Next.js protection
+- **CRON API Key** - Secure background job execution
 
 ### Data Security
 - **Audit Logging** - Complete trail of all changes
@@ -391,105 +494,159 @@ pnpm run update-statuses-prod
 - **Input Sanitization** - XSS protection
 - **Secure Headers** - Security-focused HTTP headers
 
-## 🆘 Troubleshooting
+## 🧪 Testing
+
+### Manual Testing
+1. **Settings Management:**
+   - Navigate to `/admin/settings`
+   - Modify each setting type and save
+   - Refresh page to verify persistence
+   - Check that changes are applied system-wide
+
+2. **Task Activation:**
+   ```bash
+   # Test task activation system
+   POST /api/test/task-activation
+   {
+     "action": "full_test",
+     "frequency": "every_day",
+     "testDate": "2024-01-15"
+   }
+   ```
+
+3. **Background Jobs:**
+   ```bash
+   # Test task generation
+   curl -X GET "http://localhost:3000/api/jobs/generate-instances?mode=daily"
+   
+   # Test status updates
+   curl -X GET "http://localhost:3000/api/jobs/update-statuses"
+   ```
+
+### Automated Testing Scripts
+- **`scripts/verify-settings-integration.ts`** - Settings integration verification
+- **`scripts/test-system-settings.ts`** - CRUD operations testing
+- **`scripts/check-schema.ts`** - Database schema validation
+
+## 🚨 Troubleshooting
 
 ### Common Issues
 
-#### Authentication Problems
-**"Error fetching position" in console:**
-- Verify user profiles have valid position_id values
-- Check RLS policies are applied correctly
-- Ensure user exists in Supabase Auth Dashboard
+#### Database Connection Issues
+```bash
+# Check database schema
+pnpm run check-schema
 
-**Login failures:**
-- Verify environment variables in `.env.local`
-- Check Supabase project URL and keys
-- Confirm user exists with correct position assignment
+# Verify Supabase connection
+# Check .env.local file for correct credentials
+```
 
-#### Task Generation Issues
-**No tasks appearing:**
-- Check master tasks have valid position assignments
-- Verify public holidays table is populated
-- Ensure master tasks are marked as 'active'
-- Check publish_at dates are not in the future
+#### Task Generation Problems
+```bash
+# Check task activation
+POST /api/test/task-activation
+{
+  "action": "cleanup_test_data"
+}
 
-**Recurrence engine errors:**
-- Run schema validation: `pnpm run check-schema`
-- Check migration status: `pnpm run run-migration`
-- Verify frequencies array format in master tasks
+# Verify holiday data
+GET /api/holidays
+```
 
-#### Database Issues
-**Schema errors:**
-- Run: `pnpm run check-schema` to identify issues
-- Apply missing migrations from `supabase/migrations/`
-- Verify RLS policies are active
+#### Settings Not Persisting
+```bash
+# Clear settings cache
+# Check admin permissions
+# Verify database connection
+```
 
-**Performance issues:**
-- Check database indexes on frequently queried columns
-- Monitor Supabase dashboard for slow queries
-- Consider archiving old completed tasks
+### Audit Log Constraint Issues
+If you encounter audit log constraint errors:
+```sql
+-- Run the fix script in Supabase SQL Editor
+-- File: supabase/fix-audit-constraint-manual.sql
+```
 
-### Debug Mode
-The application includes comprehensive logging:
-- **Browser Console:** Client-side errors and API responses
-- **Server Logs:** API endpoint errors and database issues
-- **Supabase Logs:** Database queries and RLS policy violations
+## 📈 Performance Optimization
 
-### Getting Help
-1. **Check Browser Console** - Detailed error messages with context
-2. **Review Server Logs** - API endpoint and database errors
-3. **Validate Database Schema** - Use `pnpm run check-schema`
-4. **Test API Endpoints** - Use browser dev tools Network tab
-5. **Check Supabase Dashboard** - Database logs and auth issues
+### Database Performance
+- **Proper Indexing** - Optimized queries for task instances and audit logs
+- **RLS Optimization** - Efficient row-level security policies
+- **Connection Pooling** - Supabase handles connection management
+
+### Application Performance
+- **Settings Caching** - 5-minute cache for system settings
+- **API Response Caching** - Strategic caching for frequently accessed data
+- **Lazy Loading** - Components loaded on demand
+- **Optimized Queries** - Minimal database round trips
+
+### Background Job Performance
+- **Batch Processing** - Bulk operations for task generation
+- **Error Handling** - Graceful failure recovery
+- **Monitoring** - Comprehensive logging for job execution
 
 ## 🔄 Maintenance
 
-### Regular Tasks
-- **Weekly:** Review missed tasks and completion rates
-- **Monthly:** Archive old completed tasks
-- **Quarterly:** Review and update master task templates
-- **Annually:** Update public holidays calendar
+### Regular Maintenance Tasks
+1. **Weekly:**
+   - Review audit logs for unusual activity
+   - Check background job execution logs
+   - Monitor database performance metrics
 
-### Performance Monitoring
-- Monitor Supabase dashboard for query performance
-- Track API response times
-- Review task completion metrics
-- Monitor background job execution
+2. **Monthly:**
+   - Archive old completed tasks
+   - Review and update public holidays
+   - Analyze task completion trends
 
-### Backup Strategy
-- Supabase provides automatic backups
-- Export critical configuration data regularly
-- Document any custom modifications
-- Maintain environment variable backups
+3. **Quarterly:**
+   - Review and update system settings
+   - Audit user permissions and positions
+   - Performance optimization review
 
-## 📄 License
+### Database Maintenance
+```bash
+# Clear old audit logs (optional)
+pnpm run clear-audit-log
 
-This project is private and confidential. All rights reserved.
+# Update database schema
+pnpm run run-migration
 
----
+# Verify system integrity
+pnpm run check-schema
+```
 
-## 🎯 Admin Access Guide
+## 📚 Additional Resources
 
-### First-Time Setup
-1. **Start Application:** `pnpm run dev`
-2. **Navigate to:** `http://localhost:3000`
-3. **Login Credentials:**
-   - Position: **Administrator**
-   - Password: **admin1234**
+### Key Files for Understanding the System
+- `lib/new-recurrence-engine.ts` - Core frequency logic (36 patterns)
+- `lib/new-task-generator.ts` - Task generation orchestration
+- `lib/system-settings.ts` - System configuration management
+- `lib/position-auth-context.tsx` - Authentication and authorization
+- `supabase/schema.sql` - Complete database schema
 
-### Available Admin Features
-- **Dashboard:** Real-time KPIs and performance metrics
-- **Master Tasks:** Create and manage task templates
-- **User Management:** Assign users to positions
-- **Reports:** Comprehensive analytics and reporting
-- **System Settings:** Configure application behavior
-- **Background Jobs:** Monitor automated processes
+### Environment Variables
+```bash
+# Required for basic operation
+NEXT_PUBLIC_SUPABASE_URL=your_supabase_project_url
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
+SUPABASE_SERVICE_ROLE_KEY=your_supabase_service_role_key
 
-### Troubleshooting Admin Access
-If you encounter authentication errors:
-1. Clear browser localStorage: `localStorage.clear()`
-2. Refresh the page
-3. Login again with Administrator credentials
-4. Ensure you're using the correct position (Administrator, not other roles)
+# Required for production cron jobs
+CRON_API_KEY=your_secure_cron_api_key
+NEXT_PUBLIC_SITE_URL=https://your-production-domain.com
+```
 
-The application is designed to be development-friendly with comprehensive error reporting and detailed logging for easy troubleshooting and maintenance.
+## 🎯 Conclusion
+
+The Pharmacy Intranet Portal is a comprehensive task management system designed specifically for pharmacy operations. It provides:
+
+- **Robust Task Management** with 36+ frequency patterns
+- **Secure Authentication** with role-based access control
+- **Automated Operations** with background job processing
+- **Comprehensive Reporting** with real-time analytics
+- **Flexible Configuration** with database-backed settings
+- **Production-Ready** with proper security and performance optimization
+
+The system is designed to handle complex pharmacy workflows while maintaining simplicity for end users and providing powerful administrative capabilities for system managers.
+
+For support or questions, refer to the API documentation, test endpoints, and comprehensive audit logging system built into the application.
