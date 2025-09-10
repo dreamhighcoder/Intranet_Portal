@@ -476,13 +476,42 @@ export default function ReportsPage() {
       color: COLORS[status as keyof typeof COLORS] || COLORS.primary
     }))
 
-    // Prepare bar chart data for missed tasks by position
-    const positionData = Object.entries(reportData.missedByPosition.positionStats || {}).map(([position, count]) => ({
-      position,
-      missed: count
+    // Abbreviation mapping for roles when labels don't fit
+    const ABBR_MAP: Record<string, string> = {
+      'pharmacy-assistant-s': 'PA',
+      'pharmacy-assistant': 'PA',
+      'dispensary-technician-s': 'DT',
+      'dispensary-technician': 'DT',
+      'daa-packer-s': 'DP',
+      'daa-packer': 'DP',
+      'pharmacist-primary': 'PH1',
+      'pharmacist-supporting': 'PH2',
+      'operational-managerial': 'OM',
+    }
+
+    // Normalize position name to kebab-case for lookup
+    const toKebab = (name: string) =>
+      name
+        .toLowerCase()
+        .replace(/\//g, ' ')
+        .replace(/\(|\)|,/g, ' ')
+        .replace(/&/g, ' and ')
+        .replace(/\s+/g, ' ')
+        .trim()
+        .replace(/\s/g, '-')
+
+    const abbreviatePosition = (name: string) => {
+      const key = toKebab(name)
+      return ABBR_MAP[key] || name
+    }
+
+    // Build bar chart data ensuring ALL positions are shown, defaulting to 0
+    const statsMap = reportData.missedByPosition.positionStats || {}
+    const positionData = positions.map((p) => ({
+      position: abbreviatePosition(p.name), // label (may be abbreviated)
+      fullPosition: p.name,                 // original name
+      missed: statsMap[p.name] || 0,
     }))
-
-
 
     return (
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
@@ -531,7 +560,18 @@ export default function ReportsPage() {
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="position" />
                 <YAxis />
-                <Tooltip />
+                <Tooltip content={({ active, payload, label }) => {
+                  if (active && payload && payload.length) {
+                    const item = payload[0].payload as { fullPosition?: string; position: string; missed: number }
+                    return (
+                      <div className="bg-white p-2 border rounded shadow text-sm">
+                        <div className="font-medium">{item.fullPosition || label}</div>
+                        <div>Missed: {item.missed}</div>
+                      </div>
+                    )
+                  }
+                  return null
+                }} />
                 <Bar dataKey="missed" fill={COLORS.missed} />
               </BarChart>
             </ResponsiveContainer>
