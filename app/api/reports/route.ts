@@ -14,6 +14,7 @@ import {
 } from '@/lib/timezone-utils'
 import { NewRecurrenceEngine, NewFrequencyType, type MasterTask as NewMasterTask } from '@/lib/new-recurrence-engine'
 import { HolidayChecker } from '@/lib/holiday-checker'
+import { calculateTaskStatus as calculateChecklistStatus } from '@/lib/task-status-calculator'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
@@ -398,12 +399,30 @@ async function generateTaskOccurrences(startDate: string, endDate: string, posit
         end_date: (task as any).end_date || undefined,
       }
 
-      // Calculate proper status using recurrence engine (same as checklist API)
-      const statusResult = recurrenceEngine.calculateTaskStatus(masterTaskForStatus, dateStr, now, isCompletedByAnyPosition)
-      
-      // Map status to match expected format
+      // Calculate status using the same shared calculator as the checklist to ensure consistency
+      // Prefer backend instance status for non-today dates; for today, use time-based calc
+      const detailedStatusFromInstance = existingInstance?.status
+        ? (existingInstance.status === 'done' ? 'completed'
+          : existingInstance.status === 'not_due' ? 'not_due_yet'
+          : existingInstance.status) // pass through 'overdue' | 'missed' | others
+        : undefined
+
+      const computed = calculateChecklistStatus({
+        date: dateStr,
+        master_task: {
+          due_time: (task as any).due_time || undefined,
+          created_at: task.created_at || undefined,
+          publish_delay: task.publish_delay || undefined,
+          start_date: (task as any).start_date || undefined,
+          end_date: (task as any).end_date || undefined,
+        },
+        detailed_status: detailedStatusFromInstance,
+        is_completed_for_position: isCompletedByAnyPosition,
+      }, dateStr)
+
+      // Map shared calculator result to report status format
       let status = 'due_today'
-      switch (statusResult.status) {
+      switch (computed) {
         case 'completed':
           status = 'done'
           break

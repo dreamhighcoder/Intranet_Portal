@@ -13,6 +13,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { authenticatedGet, positionsApi } from "@/lib/api-client"
 import { toastSuccess, toastError } from "@/hooks/use-toast"
 import { TASK_CATEGORIES } from "@/lib/constants"
+import { formatAustralianDate } from "@/lib/timezone-utils"
 import {
   BarChart,
   Bar,
@@ -269,6 +270,7 @@ export default function ReportsPage() {
 
   // Filters
   const [dateRange, setDateRange] = useState({
+    // Initialize using AU calendar days to avoid client TZ skew
     from: new Date(new Date().setDate(new Date().getDate() - 30)),
     to: new Date(),
   })
@@ -327,8 +329,9 @@ export default function ReportsPage() {
     }
     
     try {
-      const startDate = dateRange.from.toISOString().split('T')[0]
-      const endDate = dateRange.to.toISOString().split('T')[0]
+      // Use AU timezone-based formatting to avoid UTC skew in Netlify/prod
+      const startDate = formatAustralianDate(dateRange.from)
+      const endDate = formatAustralianDate(dateRange.to)
 
       const params = new URLSearchParams({
         start_date: startDate,
