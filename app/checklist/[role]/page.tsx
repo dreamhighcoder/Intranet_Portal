@@ -211,7 +211,13 @@ const getResponsibilityAbbreviation = (responsibility: string) => {
 const calculateDynamicTaskStatus = (task: ChecklistTask, currentDate: string): string => {
   return calculateTaskStatus({
     date: task.date,
-    master_task: task.master_task,
+    master_task: {
+      due_time: task.master_task?.due_time,
+      created_at: task.master_task?.created_at,
+      publish_delay: task.master_task?.publish_delay,
+      start_date: task.master_task?.start_date,
+      end_date: task.master_task?.end_date
+    },
     detailed_status: task.detailed_status,
     is_completed_for_position: task.is_completed_for_position,
     status: task.status,
@@ -1086,6 +1092,11 @@ export default function RoleChecklistPage() {
   const [selectedTask, setSelectedTask] = useState<ChecklistTask | null>(null)
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false)
   const [processingTasks, setProcessingTasks] = useState<Set<string>>(new Set())
+  
+  // Bulk action states
+  const [selectedTasks, setSelectedTasks] = useState<Set<string>>(new Set())
+  const [bulkDeleteConfirmModal, setBulkDeleteConfirmModal] = useState(false)
+  const [bulkActionLoading, setBulkActionLoading] = useState(false)
 
   // Load public holidays for current year to enable PH-aware UI lock/appearance
   useEffect(() => {
@@ -1615,38 +1626,44 @@ export default function RoleChecklistPage() {
       return true
     })
 
-    // Always sort by custom_order first (as set by administrator in Master Tasks Management)
-    // This ensures tasks are displayed in the order most recently saved by the administrator
+    // Sort by custom_order first (as set by administrator in Master Tasks Management)
+    // When custom_order >= 999999 (RESET_VALUE), use default 4-level hierarchical sorting
     return [...filtered].sort((a, b) => {
-      // 1. Primary sort: custom_order from master_tasks table
+      const RESET_VALUE = 999999 // Same value used in master-tasks management
+      
+      // 1. Primary sort: custom_order from master_tasks table (only when < RESET_VALUE)
       const aCustomOrder = a.master_task.custom_order
       const bCustomOrder = b.master_task.custom_order
 
-      // If both tasks have custom_order, sort by it
-      if (typeof aCustomOrder === 'number' && typeof bCustomOrder === 'number') {
+      // Check if custom_order is administrator-defined (< RESET_VALUE) vs default/reset (>= RESET_VALUE)
+      const aHasCustomOrder = typeof aCustomOrder === 'number' && aCustomOrder < RESET_VALUE
+      const bHasCustomOrder = typeof bCustomOrder === 'number' && bCustomOrder < RESET_VALUE
+
+      // If both tasks have administrator-defined custom_order, sort by it
+      if (aHasCustomOrder && bHasCustomOrder) {
         return aCustomOrder - bCustomOrder
       }
 
-      // If only one has custom_order, prioritize it (tasks with custom_order come first)
-      if (typeof aCustomOrder === 'number' && typeof bCustomOrder !== 'number') {
+      // If only one has administrator-defined custom_order, prioritize it
+      if (aHasCustomOrder && !bHasCustomOrder) {
         return -1
       }
-      if (typeof bCustomOrder === 'number' && typeof aCustomOrder !== 'number') {
+      if (bHasCustomOrder && !aHasCustomOrder) {
         return 1
       }
 
-      // Fallback sorting for tasks without custom_order: due_time, then frequency rank, then position display_order, then description
-      // 2. Sort by due_time (timing)
-      const aMin = parseDueTimeToMinutes(a.master_task.due_time)
-      const bMin = parseDueTimeToMinutes(b.master_task.due_time)
+      // Default 4-level hierarchical sorting for tasks without administrator-defined custom_order
+      // Level 1: Due Time (Timing) - Earlier times appear first, default 17:00 if no due time
+      const aMin = parseDueTimeToMinutes(a.master_task.due_time || '17:00')
+      const bMin = parseDueTimeToMinutes(b.master_task.due_time || '17:00')
       if (aMin !== bMin) return aMin - bMin
 
-      // 3. Sort by frequency rank
+      // Level 2: Frequency Priority - Based on the specified hierarchy
       const aRank = getFrequencyRankForDay(a.master_task.frequencies || [], currentDate)
       const bRank = getFrequencyRankForDay(b.master_task.frequencies || [], currentDate)
       if (aRank !== bRank) return aRank - bRank
 
-      // 4. Sort by position display_order (responsibility)
+      // Level 3: Position Order (Responsibility) - Uses first responsibility in array
       const aResponsibility = (a.master_task.responsibility || [])[0] || ''
       const bResponsibility = (b.master_task.responsibility || [])[0] || ''
 
@@ -1661,9 +1678,9 @@ export default function RoleChecklistPage() {
         if (aOrder !== bOrder) return aOrder - bOrder
       }
 
-      // 5. Sort by task description
-      const aDesc = a.master_task.description?.toLowerCase() || ''
-      const bDesc = b.master_task.description?.toLowerCase() || ''
+      // Level 4: Task Description - Alphabetical sorting (case-insensitive)
+      const aDesc = (a.master_task.description || '').toLowerCase()
+      const bDesc = (b.master_task.description || '').toLowerCase()
       if (aDesc !== bDesc) return aDesc.localeCompare(bDesc)
 
       return 0
