@@ -19,6 +19,7 @@ import { toKebabCase } from '@/lib/responsibility-mapper'
 import { authenticatedGet, authenticatedPost, positionsApi, publicHolidaysApi } from '@/lib/api-client'
 import TaskDetailModal from '@/components/checklist/TaskDetailModal'
 import { getAustralianNow, getAustralianToday, formatAustralianDate, parseAustralianDate, createAustralianDateTime, australianNowUtcISOString, toAustralianTime } from '@/lib/timezone-utils'
+import { calculateTaskStatus } from '@/lib/task-status-calculator'
 
 // Shared UI holiday set for PH-aware business day checks
 let UI_HOLIDAY_SET = new Set<string>()
@@ -208,84 +209,15 @@ const getResponsibilityAbbreviation = (responsibility: string) => {
 
 // Calculate dynamic task status with proper frequency rules implementation
 const calculateDynamicTaskStatus = (task: ChecklistTask, currentDate: string): string => {
-  try {
-    // Completed takes precedence
-    if (task.is_completed_for_position || task.status === 'completed') return 'completed'
-
-    // Use backend's detailed status if available (preferred)
-    if (task.detailed_status) {
-      switch (task.detailed_status) {
-        case 'completed':
-          return 'completed'
-        case 'not_due_yet':
-          return 'not_due_yet'
-        case 'due_today':
-          return 'due_today'
-        case 'overdue':
-          return 'overdue'
-        case 'missed':
-          return 'missed'
-        default:
-          return 'pending'
-      }
-    }
-
-    // Fallback: Calculate status using frontend logic
-    const now = getAustralianNow()
-    const todayStr = getAustralianToday()
-    const today = parseAustralianDate(todayStr)
-    const instanceDate = parseAustralianDate(task.date)
-    const viewDate = parseAustralianDate(currentDate || todayStr)
-    const isViewingToday = viewDate.getTime() === today.getTime()
-
-    // Check visibility window (never show before creation/publish/start; hide after end)
-    let visibilityStart: Date | null = null
-    let visibilityEnd: Date | null = null
-    
-    try {
-      const createdAtIso = task?.master_task?.created_at
-      const publishDelay = task?.master_task?.publish_delay // YYYY-MM-DD
-      const startDate = task?.master_task?.start_date // YYYY-MM-DD
-      const endDate = task?.master_task?.end_date // YYYY-MM-DD
-
-      const dates: Date[] = []
-      if (createdAtIso) {
-        const createdAtAU = toAustralianTime(new Date(createdAtIso))
-        dates.push(parseAustralianDate(formatAustralianDate(createdAtAU)))
-      }
-      if (publishDelay) dates.push(parseAustralianDate(publishDelay))
-      if (startDate) dates.push(parseAustralianDate(startDate))
-      if (dates.length > 0) visibilityStart = new Date(Math.max(...dates.map(d => d.getTime())))
-      if (endDate) visibilityEnd = parseAustralianDate(endDate)
-    } catch { }
-
-    if (visibilityStart && viewDate < visibilityStart) return 'not_visible'
-    if (visibilityEnd && viewDate > visibilityEnd) return 'not_visible'
-
-    // Get the highest priority status from all frequencies
-    const frequencies = task?.master_task?.frequencies || []
-    if (frequencies.length === 0) return 'pending'
-
-    const priority: Record<string, number> = { 
-      not_due_yet: 1, 
-      due_today: 2, 
-      overdue: 3, 
-      missed: 4 
-    }
-    let bestStatus = 'not_due_yet'
-
-    for (const freq of frequencies) {
-      const status = calculateStatusForFrequency(task, freq, viewDate, now, isViewingToday)
-      if (priority[status] > priority[bestStatus]) {
-        bestStatus = status
-      }
-    }
-
-    return bestStatus
-  } catch (error) {
-    console.error('Error calculating task status:', error)
-    return 'pending'
-  }
+  return calculateTaskStatus({
+    date: task.date,
+    master_task: task.master_task,
+    detailed_status: task.detailed_status,
+    is_completed_for_position: task.is_completed_for_position,
+    status: task.status,
+    lock_date: task.lock_date,
+    lock_time: task.lock_time
+  }, currentDate)
 }
 
 // Calculate status for a specific frequency
@@ -1366,8 +1298,8 @@ export default function RoleChecklistPage() {
 
         data.data.forEach((task: ChecklistTask) => {
           if (task.status !== 'completed') {
-            // Use backend's detailed status if available, otherwise calculate dynamically
-            const status = task.detailed_status || calculateDynamicTaskStatus(task, currentDate)
+            // Always use dynamic calculation to handle time-sensitive status properly
+            const status = calculateDynamicTaskStatus(task, currentDate)
             
             switch (status) {
               case 'not_due_yet':

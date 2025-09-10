@@ -6,6 +6,7 @@ import { ChecklistQuerySchema } from '@/lib/validation-schemas'
 import { toKebabCase, getSearchOptions } from '@/lib/responsibility-mapper'
 import { getAustralianNow, getAustralianToday, createAustralianDateTime, parseAustralianDate, formatAustralianDate, toAustralianTime } from '@/lib/timezone-utils'
 import { getSystemSettings } from '@/lib/system-settings'
+import { calculateTaskStatusForCounts } from '@/lib/task-status-calculator'
 
 // Use service role key to bypass RLS for server-side reads (match checklist API)
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
@@ -182,37 +183,43 @@ export async function GET(request: NextRequest) {
       const comps = instance ? (completionsByInstance.get(instance.id) || []) : []
       const isCompletedForRole = comps.some(c => (c.position_name || '').toLowerCase().replace(/[^a-z0-9]+/g, '-') === normalizedRole)
 
-      if (isCompletedForRole) {
-        counts.completed++
-        return
-      }
+      // Use the shared status calculation utility
+      const taskStatus = calculateTaskStatusForCounts({
+        date: validatedDate,
+        master_task: {
+          due_time: task.due_time,
+          created_at: task.created_at,
+          publish_delay: task.publish_delay,
+          start_date: (task as any).start_date,
+          end_date: (task as any).end_date
+        },
+        detailed_status: instance?.detailed_status,
+        is_completed_for_position: isCompletedForRole,
+        status: instance?.status,
+        lock_date: instance?.lock_date,
+        lock_time: instance?.lock_time
+      }, validatedDate)
 
-      // Check instance status if it exists
-      if (instance?.status === 'missed') {
-        counts.missed++
-        return
-      }
-
-      if (instance?.status === 'overdue') {
-        counts.total++
-        counts.overdue++
-        return
-      }
-
-      // Pending tasks to do today
-      counts.total++
-
-      // Only compute due/overdue for today if no explicit status
-      if (validatedDate === getAustralianToday() && !instance?.status) {
-        counts.dueToday++
-        
-        // Due time calculation: use task.due_time or treat as end-of-day
-        const due = task.due_time ? task.due_time : '23:59'
-        const dueDateTime = createAustralianDateTime(validatedDate, due)
-        
-        if (now > dueDateTime) counts.overdue++
-      } else if (validatedDate === getAustralianToday()) {
-        counts.dueToday++
+      // Count based on calculated status
+      switch (taskStatus) {
+        case 'completed':
+          counts.completed++
+          break
+        case 'due_today':
+          counts.total++
+          counts.dueToday++
+          break
+        case 'overdue':
+          counts.total++
+          counts.overdue++
+          break
+        case 'missed':
+          counts.missed++
+          break
+        case 'not_due_yet':
+        default:
+          // Don't count not_due_yet tasks in total
+          break
       }
 
       // New tasks: align with checklist page "is_new" logic (12 hours after activation, not completed)
