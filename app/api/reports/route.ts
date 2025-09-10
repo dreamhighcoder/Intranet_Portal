@@ -546,19 +546,38 @@ async function getMissedTasksByPositionReport(startDate?: string | null, endDate
   }
 
   try {
-    // Get all positions
+    // Get all positions (excluding Administrator)
     const { data: positions } = await supabaseServer
       .from('positions')
       .select('id, name')
       .neq('name', 'Administrator')
 
+    // Generate all occurrences ONCE for the date range (unfiltered by position)
+    const allOccurrences = await generateTaskOccurrences(startDate, endDate, null, category)
+    const missedOccurrences = allOccurrences.filter(task => task.status === 'missed')
+
+    // Build stats by mapping responsibilities to positions
     const positionStats: Record<string, number> = {}
 
-    // Generate missed tasks for each position
-    for (const position of positions || []) {
-      const taskOccurrences = await generateTaskOccurrences(startDate, endDate, position.id, category)
-      const missedCount = taskOccurrences.filter(task => task.status === 'missed').length
-      positionStats[position.name] = missedCount
+    // Pre-compute responsibility variants for each position for faster checks
+    const positionResponsibilityMap: Record<string, { name: string; variants: string[] }> = {}
+    for (const pos of positions || []) {
+      const responsibility = await getResponsibilityForPosition(pos.id)
+      const variants = buildResponsibilityVariants(responsibility, responsibility)
+      positionResponsibilityMap[pos.id] = { name: pos.name, variants }
+      positionStats[pos.name] = 0
+    }
+
+    // Tally missed tasks per position by overlapping responsibility labels
+    for (const occ of missedOccurrences) {
+      const occResp = occ.responsibility || []
+      for (const posId in positionResponsibilityMap) {
+        const { name, variants } = positionResponsibilityMap[posId]
+        const matches = occResp.some(r => variants.includes((r || '').trim()) )
+        if (matches) {
+          positionStats[name] = (positionStats[name] || 0) + 1
+        }
+      }
     }
 
     return NextResponse.json({

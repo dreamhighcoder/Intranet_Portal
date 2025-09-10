@@ -73,13 +73,13 @@ const formatStatus = (status: string) => {
     case 'missed':
       return '❌ Missed'
     case 'done':
-      return '✓ Done'
+      return '✓ Completed'
     case 'overdue':
       return '⚠️ Overdue'
     case 'due_today':
       return '⏰ Due Today'
     case 'not_due':
-      return '📅 Not Due'
+      return '📅 Not Due Yet'
     default:
       return formatted
   }
