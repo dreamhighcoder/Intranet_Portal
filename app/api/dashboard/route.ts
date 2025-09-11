@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/auth-middleware'
 import { createClient } from '@supabase/supabase-js'
-import { getAustralianNow, getAustralianToday, formatAustralianDate, createAustralianDateTime, fromAustralianTime, australianNowUtcISOString } from '@/lib/timezone-utils'
+import { getAustralianNow, getAustralianToday, formatAustralianDate, createAustralianDateTime, fromAustralianTime, australianNowUtcISOString, parseAustralianDate } from '@/lib/timezone-utils'
 import { getSystemSettings } from '@/lib/system-settings'
+import { generateTaskOccurrences } from '@/lib/task-occurrence-generator'
 
 // Use service role client to bypass RLS (we enforce auth/authorization in code)
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
@@ -37,102 +38,73 @@ export async function GET(request: NextRequest) {
     
     console.log('Dashboard API: Query params:', { positionId, dateRange })
 
-    // Calculate date range using Australian timezone
-    const australianNow = getAustralianNow()
-    const endDate = new Date(australianNow)
-    const startDate = new Date(australianNow)
-    startDate.setDate(endDate.getDate() - parseInt(dateRange))
-
+    // Calculate date range for the past N days (inclusive)
+    // If today is Sept 11 and dateRange is 7, we want Sept 5-11 (7 days total)
+    const todayStr = getAustralianToday()
+    const endDate = parseAustralianDate(todayStr) // Use today as end date
+    const startDate = new Date(endDate)
+    startDate.setDate(endDate.getDate() - (parseInt(dateRange) - 1)) // -6 for 7 days total
+    
+    // For missed task tracking, we need to look back further to find when tasks first became missed
+    const extendedStartDate = new Date(endDate)
+    extendedStartDate.setDate(endDate.getDate() - (parseInt(dateRange) + 30 - 1)) // Look back 30 extra days
+    
     const startDateStr = formatAustralianDate(startDate)
     const endDateStr = formatAustralianDate(endDate)
-    const todayStr = getAustralianToday()
-
-    // Build base query with position filter if needed
-    let baseQuery = supabaseAdmin.from('task_instances')
+    const extendedStartDateStr = formatAustralianDate(extendedStartDate)
     
-    if (positionId && user.role !== 'admin') {
-      // Non-admin users can only see their own position
-      if (user.position_id !== positionId) {
-        return NextResponse.json({ error: 'Access denied' }, { status: 403 })
-      }
-    }
+    console.log('Dashboard API: Date range:', { startDateStr, endDateStr, todayStr, extendedStartDateStr })
 
-    // First, get master tasks that should have instances in the date range
-    let masterTasksQuery = supabaseAdmin
-      .from('master_tasks')
-      .select(`
-        id,
-        title,
-        categories,
-        responsibility,
-        publish_status
-      `)
-      .eq('publish_status', 'active')
-
-    if (positionId) {
-      const responsibilityValue = await getResponsibilityFromPositionId(positionId)
-      if (responsibilityValue) {
-        // Filter by responsibility array containing the mapped value
-        masterTasksQuery = masterTasksQuery.contains('responsibility', [responsibilityValue])
-      }
-    }
-
-    const { data: masterTasks, error: masterTasksError } = await masterTasksQuery
-
-    if (masterTasksError) {
-      console.error('Dashboard API: Error fetching master tasks:', masterTasksError)
-      return NextResponse.json({ 
-        error: 'Failed to fetch master tasks', 
-        details: masterTasksError
-      }, { status: 500 })
-    }
-
-    // Then get task instances for these master tasks in the date range
-    let tasksQuery = baseQuery
-      .select(`
-        id,
-        status,
-        due_date,
-        due_time,
-        instance_date,
-        completed_at,
-        created_at,
-        master_task_id
-      `)
-      .gte('due_date', startDateStr)
-      .lte('due_date', endDateStr)
-
-    if (masterTasks && masterTasks.length > 0) {
-      const masterTaskIds = masterTasks.map(mt => mt.id)
-      tasksQuery = tasksQuery.in('master_task_id', masterTaskIds)
-    } else {
-      // No master tasks found, return empty results
-      tasksQuery = tasksQuery.eq('id', 'non-existent-id') // This will return no results
-    }
-
-    console.log('Dashboard API: Executing tasks query...')
-    const { data: tasks, error: tasksError } = await tasksQuery
-
-    if (tasksError) {
-      console.error('Dashboard API: Error fetching tasks:', {
-        message: tasksError.message,
-        details: tasksError.details,
-        hint: tasksError.hint,
-        code: tasksError.code
-      })
-      return NextResponse.json({ 
-        error: 'Failed to fetch dashboard data', 
-        details: {
-          message: tasksError.message,
-          code: tasksError.code,
-          hint: tasksError.hint
-        }
-      }, { status: 500 })
-    }
+    // Generate task occurrences for the extended date range to track when tasks first became missed
+    const allTaskOccurrences = await generateTaskOccurrences(extendedStartDateStr, endDateStr, positionId)
     
-    // Handle case where no tasks exist
-    if (!tasks || tasks.length === 0) {
-      console.log('Dashboard API: No tasks found, returning empty dashboard data')
+    // Filter to get only the last 7 days for main dashboard stats
+    const taskOccurrences = allTaskOccurrences.filter(occ => occ.date >= startDateStr)
+    
+    console.log('Dashboard API: Generated task occurrences:', taskOccurrences.length)
+
+    // Handle case where no task occurrences exist
+    if (!taskOccurrences || taskOccurrences.length === 0) {
+      console.log('Dashboard API: No task occurrences from generator; falling back to per-position counts for overdue')
+
+      // Fallback: compute today's overdue across positions to match homepage cards
+      let todayOverdueAcrossPositions = 0
+      try {
+        const { data: positions } = await supabaseAdmin
+          .from('positions')
+          .select('id, name, display_name')
+        const nonAdminPositions = (positions || []).filter(p => (p.name || '') !== 'Administrator')
+
+        // Build absolute origin for internal fetches (more reliable than nextUrl as base)
+        const origin = (() => {
+          try { return new URL(request.url).origin } catch { return '' }
+        })()
+
+        const perPositionOverdueCounts = await Promise.all(
+          nonAdminPositions.map(async (pos) => {
+            try {
+              const display = (pos as any).display_name || pos.name
+              const roleParam = display
+              const urlStr = origin ? `${origin}/api/checklist/counts?role=${encodeURIComponent(roleParam)}&date=${todayStr}`
+                                    : `/api/checklist/counts?role=${encodeURIComponent(roleParam)}&date=${todayStr}`
+              const res = await fetch(urlStr)
+              if (!res.ok) return 0
+              const json = await res.json().catch(() => null)
+              if (json && json.success && json.data && typeof json.data.overdue === 'number') {
+                return json.data.overdue as number
+              }
+              return 0
+            } catch (inner) {
+              console.warn('Dashboard API: fallback per-position counts fetch failed for position', pos?.name, inner)
+              return 0
+            }
+          })
+        )
+        todayOverdueAcrossPositions = perPositionOverdueCounts.reduce((a, b) => a + b, 0)
+      } catch (e) {
+        console.warn('Dashboard API: Fallback overdue computation failed:', e)
+      }
+
       return NextResponse.json({
         summary: {
           totalTasks: 0,
@@ -141,57 +113,111 @@ export async function GET(request: NextRequest) {
           avgTimeToCompleteHours: 0,
           newSince9am: 0,
           missedLast7Days: 0,
-          overdueTasks: 0
+          overdueTasks: todayOverdueAcrossPositions
         },
         today: {
           total: 0,
           completed: 0,
           pending: 0,
-          overdue: 0
+          overdue: todayOverdueAcrossPositions,
+          missed: 0
         },
-        categoryStats: {},
-        recentActivity: [],
-        upcomingTasks: [],
-        trends: [],
-        dateRange: {
-          start: startDateStr,
-          end: endDateStr,
-          days: parseInt(dateRange)
-        },
-        generatedAt: australianNowUtcISOString()
-      })
-    }
-    
-    console.log('Dashboard API: Tasks fetched successfully:', tasks?.length || 0, 'tasks')
-
-    // Create a map of master tasks for easy lookup
-    const masterTasksMap = new Map()
-    if (masterTasks) {
-      masterTasks.forEach(mt => {
-        masterTasksMap.set(mt.id, mt)
+        categories: {},
+        recentTasks: []
       })
     }
 
-    // Enhance task instances with master task data
-    const enhancedTasks = (tasks || []).map(task => ({
-      ...task,
-      master_tasks: masterTasksMap.get(task.master_task_id)
+    // Convert task occurrences to the format expected by the rest of the function
+    const tasksWithDynamicStatus = taskOccurrences.map(occurrence => ({
+      id: `${occurrence.masterTaskId}:${occurrence.date}`,
+      master_task_id: occurrence.masterTaskId,
+      instance_date: occurrence.date,
+      due_date: occurrence.date,
+      status: occurrence.status === 'completed' ? 'done' : 'not_due',
+      completed_at: occurrence.completedAt,
+      created_at: null,
+      lock_date: null,
+      lock_time: null,
+      detailed_status: null,
+      dynamicStatus: occurrence.status,
+      master_tasks: {
+        title: occurrence.title,
+        categories: occurrence.categories,
+        due_time: occurrence.dueTime
+      }
     }))
-
-    // Calculate KPIs
-    const allTasks = enhancedTasks
-    const todayTasks = allTasks.filter(task => task.due_date === todayStr)
-    const completedTasks = allTasks.filter(task => task.status === 'done')
-    const overdueTasks = allTasks.filter(task => task.status === 'overdue')
-    const missedTasks = allTasks.filter(task => task.status === 'missed')
     
-    // On-time completion rate (completed_at UTC vs AUS end-of-day for due_date)
+    // Filter tasks by their dynamic status
+    const completedTasks = tasksWithDynamicStatus.filter(task => task.dynamicStatus === 'completed')
+    const todayTasks = tasksWithDynamicStatus.filter(task => task.instance_date === todayStr)
+    
+    // Convert ALL task occurrences (extended range) to find when tasks first became overdue
+    const allTasksWithDynamicStatus = allTaskOccurrences.map(occurrence => ({
+      id: `${occurrence.masterTaskId}:${occurrence.date}`,
+      master_task_id: occurrence.masterTaskId,
+      instance_date: occurrence.date,
+      due_date: occurrence.date,
+      status: occurrence.status === 'completed' ? 'done' : 'not_due',
+      completed_at: occurrence.completedAt,
+      created_at: null,
+      lock_date: null,
+      lock_time: null,
+      detailed_status: null,
+      dynamicStatus: occurrence.status,
+      master_tasks: {
+        title: occurrence.title,
+        categories: occurrence.categories,
+        due_time: occurrence.dueTime
+      }
+    }))
+    
+    // Sort all tasks by date to find first occurrence of overdue/missed status
+    const sortedAllTasks = allTasksWithDynamicStatus.sort((a, b) => a.instance_date.localeCompare(b.instance_date))
+    
+    // For "Overdue Tasks" metric: Use current overdue count from today's checklist
+    // This aligns with the checklist display and shows current operational overdue tasks
+
+    // For today's section: show actual overdue tasks today (for operational purposes)
+    const todayOverdueTasksActual = todayTasks.filter(t => t.dynamicStatus === 'overdue')
+
+    // Use generator-derived current overdue count (unique tasks) to match checklist display
+    // Avoid per-position aggregation to prevent double counting multi-responsibility tasks
+    const todayOverdueAcrossPositions = todayOverdueTasksActual.length
+    
+    // For "Missed Tasks (7 days)" metric: Count ALL missed tasks within the last 7 days
+    // Among tasks that are assigned to today's checklist based on their frequency
+    // Example: 39 missed on Sept 10 + 39 missed on Sept 11 = 78 total (for tasks that also appear today)
+    const todayMasterIds = new Set(
+      allTaskOccurrences
+        .filter(occ => occ.date === todayStr)
+        .map(occ => occ.masterTaskId)
+    )
+    const missedTasksLast7Days = tasksWithDynamicStatus.filter(task => 
+      task.dynamicStatus === 'missed' &&
+      task.instance_date >= startDateStr &&
+      todayMasterIds.has(task.master_task_id)
+    )
+    
+    console.log('Dashboard API: Date range for filtering:', { startDateStr, endDateStr })
+    console.log('Dashboard API: All occurrences (extended) count:', allTaskOccurrences.length)
+    console.log('Dashboard API: Window occurrences (7d) count:', tasksWithDynamicStatus.length)
+    console.log('Dashboard API: Today overdue tasks (actual):', todayOverdueTasksActual.length, '| across positions:', todayOverdueAcrossPositions)
+    console.log('Dashboard API: Missed tasks (7 days, appear-today) count:', missedTasksLast7Days.length)
+    
+    // On-time completion rate (completed_at must be on/before AUS due date AND due time)
     const onTimeCompletions = completedTasks.filter(task => {
       if (!task.completed_at || !task.due_date) return false
-      const ausEndOfDay = createAustralianDateTime(task.due_date as string, '23:59:59')
-      const ausEndOfDayUtc = fromAustralianTime(ausEndOfDay)
-      const completedUtc = new Date(task.completed_at as string)
-      return completedUtc <= ausEndOfDayUtc
+      try {
+        // Prefer task-specific due_time if present; otherwise fall back to 23:59:59
+        const dueTime = task.master_tasks?.due_time || '23:59:59'
+        const ausDueDateTime = createAustralianDateTime(task.due_date as string, dueTime)
+        const ausDueDateTimeUtc = fromAustralianTime(ausDueDateTime)
+        const completedUtc = new Date(task.completed_at as string)
+        return completedUtc <= ausDueDateTimeUtc
+      } catch (error) {
+        console.error('Error calculating on-time completion:', error)
+        return false
+      }
     })
     
     const onTimeCompletionRate = completedTasks.length > 0 
@@ -199,247 +225,110 @@ export async function GET(request: NextRequest) {
       : 0
 
     // Average time to complete (in hours)
-    // Calculate time from when task became available (instance_date) to when it was completed
     const completionTimes = completedTasks
       .filter(task => task.completed_at && task.instance_date)
       .map(task => {
-        // Task becomes available at start of instance_date (00:00) in Australia/Sydney
-        const availableAus = createAustralianDateTime(task.instance_date as string, '00:00')
-        const availableUtc = fromAustralianTime(availableAus)
-        // completed_at stored in UTC
-        const completedUtc = new Date(task.completed_at as string)
-        
-        const hoursToComplete = (completedUtc.getTime() - availableUtc.getTime()) / (1000 * 60 * 60)
-        return Math.abs(hoursToComplete)
+        try {
+          // Task becomes available at start of instance_date (00:00) in Australia/Sydney
+          const availableAus = createAustralianDateTime(task.instance_date as string, '00:00')
+          const availableUtc = fromAustralianTime(availableAus)
+          // completed_at stored in UTC
+          const completedUtc = new Date(task.completed_at as string)
+          
+          const hoursToComplete = (completedUtc.getTime() - availableUtc.getTime()) / (1000 * 60 * 60)
+          return Math.abs(hoursToComplete)
+        } catch (error) {
+          console.error('Error calculating completion time:', error)
+          return 0
+        }
       })
     
     const avgTimeToComplete = completionTimes.length > 0
       ? Math.round((completionTimes.reduce((sum, time) => sum + time, 0) / completionTimes.length) * 100) / 100
       : 0
 
-    // Tasks created since system new task hour today (Australia/Sydney)
-    const settings = await getSystemSettings()
-    const newTaskHourAus = createAustralianDateTime(getAustralianToday(), settings.new_since_hour)
-    const newTaskHourUtc = fromAustralianTime(newTaskHourAus)
-    const newSince9am = allTasks.filter(task => {
-      const createdUtc = new Date(task.created_at as string)
-      return createdUtc >= newTaskHourUtc
+    // Tasks created since 9am today
+    const nineAmToday = createAustralianDateTime(todayStr, '09:00')
+    const nineAmTodayUtc = fromAustralianTime(nineAmToday)
+    const newSince9am = tasksWithDynamicStatus.filter(task => {
+      if (!task.created_at) return false
+      try {
+        const createdUtc = new Date(task.created_at as string)
+        return createdUtc >= nineAmTodayUtc
+      } catch (error) {
+        return false
+      }
     }).length
 
-    // Tasks due today by status
-    const dueTodayStats = {
-      total: todayTasks.length,
-      completed: todayTasks.filter(task => task.status === 'done').length,
-      pending: todayTasks.filter(task => ['not_due', 'due_today'].includes(task.status)).length,
-      overdue: todayTasks.filter(task => task.status === 'overdue').length
-    }
-
-    // Missed tasks by position (for admin view)
-    let missedByPosition = {}
-    if (user.role === 'admin') {
-      missedByPosition = missedTasks.reduce((acc: any, task) => {
-        // Use responsibility array or fallback to 'Unassigned'
-        const responsibilities = task.master_tasks?.responsibility || []
-        if (responsibilities.length > 0) {
-          responsibilities.forEach((resp: string) => {
-            acc[resp] = (acc[resp] || 0) + 1
-          })
-        } else {
-          acc['Unassigned'] = (acc['Unassigned'] || 0) + 1
-        }
-        return acc
-      }, {})
-    }
-
     // Category breakdown
-    const categoryStats = allTasks.reduce((acc: any, task) => {
-      const categories = task.master_tasks?.categories || ['Uncategorized']
-      // Handle both array and single string for backward compatibility
-      const categoryArray = Array.isArray(categories) ? categories : [categories]
-      
-      categoryArray.forEach(category => {
-        const categoryName = category || 'Uncategorized'
-        if (!acc[categoryName]) {
-          acc[categoryName] = { total: 0, completed: 0, missed: 0, overdue: 0 }
-        }
-        acc[categoryName].total++
-        if (task.status === 'done') acc[categoryName].completed++
-        if (task.status === 'missed') acc[categoryName].missed++
-        if (task.status === 'overdue') acc[categoryName].overdue++
-      })
-      return acc
-    }, {})
+    const categories: Record<string, { total: number; completed: number; missed: number; overdue: number }> = {}
+    tasksWithDynamicStatus.forEach(task => {
+      const category = task.master_tasks?.categories?.[0] || 'general'
+      if (!categories[category]) {
+        categories[category] = { total: 0, completed: 0, missed: 0, overdue: 0 }
+      }
+      categories[category].total++
+      if (task.dynamicStatus === 'completed') categories[category].completed++
+      if (task.dynamicStatus === 'missed') categories[category].missed++
+      if (task.dynamicStatus === 'overdue') categories[category].overdue++
+    })
 
-    // Recent activity (last 10 completed tasks)
-    const recentActivity = completedTasks
-      .sort((a, b) => new Date(b.completed_at!).getTime() - new Date(a.completed_at!).getTime())
-      .slice(0, 10)
+    // Recent tasks (last 5 completed or missed)
+    const recentTasks = tasksWithDynamicStatus
+      .filter(task => ['completed', 'missed'].includes(task.dynamicStatus))
+      .sort((a, b) => {
+        const aTime = a.completed_at || a.created_at || '1970-01-01'
+        const bTime = b.completed_at || b.created_at || '1970-01-01'
+        return new Date(bTime).getTime() - new Date(aTime).getTime()
+      })
+      .slice(0, 5)
       .map(task => ({
         id: task.id,
-        title: task.master_tasks?.title,
-        responsibilities: task.master_tasks?.responsibility || [],
-        completed_at: task.completed_at,
-        categories: task.master_tasks?.categories || []
+        title: task.master_tasks?.title || 'Unknown Task',
+        status: task.dynamicStatus,
+        date: task.instance_date || task.due_date,
+        completedAt: task.completed_at
       }))
 
-    // Upcoming tasks (next 7 days) using Australian date range
-    const upcomingEndDateAus = new Date(australianNow)
-    upcomingEndDateAus.setDate(upcomingEndDateAus.getDate() + 7)
-    const upcomingEndDateStr = formatAustralianDate(upcomingEndDateAus)
-    
-    let upcomingQuery = baseQuery
-      .select(`
-        id,
-        status,
-        due_date,
-        due_time,
-        master_task_id
-      `)
-      .gt('due_date', todayStr)
-      .lte('due_date', upcomingEndDateStr)
-      .in('status', ['not_due', 'due_today'])
-      .order('due_date', { ascending: true })
-      .limit(10)
-
-    if (masterTasks && masterTasks.length > 0) {
-      const masterTaskIds = masterTasks.map(mt => mt.id)
-      upcomingQuery = upcomingQuery.in('master_task_id', masterTaskIds)
-    } else {
-      upcomingQuery = upcomingQuery.eq('id', 'non-existent-id')
-    }
-
-    const { data: upcomingTasksRaw } = await upcomingQuery
-    
-    // Enhance upcoming tasks with master task data
-    const upcomingTasks = (upcomingTasksRaw || []).map(task => ({
-      ...task,
-      master_tasks: masterTasksMap.get(task.master_task_id)
-    }))
-
-    const dashboardData = {
-      // Core KPIs
+    const response = {
       summary: {
-        totalTasks: allTasks.length,
+        totalTasks: tasksWithDynamicStatus.length,
         completedTasks: completedTasks.length,
         onTimeCompletionRate,
         avgTimeToCompleteHours: avgTimeToComplete,
         newSince9am,
-        missedLast7Days: missedTasks.length,
-        overdueTasks: overdueTasks.length
+        missedLast7Days: missedTasksLast7Days.length,
+        // Show current operational overdue count (aligns with homepage checklists and widget description)
+        overdueTasks: todayOverdueAcrossPositions
       },
-
-      // Today's tasks
-      today: dueTodayStats,
-
-      // Position breakdown (admin only)
-      ...(user.role === 'admin' && { missedByPosition }),
-
-      // Category breakdown
-      categoryStats,
-
-      // Recent activity
-      recentActivity,
-
-      // Upcoming tasks
-      upcomingTasks: upcomingTasks || [],
-
-      // Trends (simple day-by-day for the range) - skip if no task instances
-      trends: allTasks.length > 0 ? await calculateTrends(startDateStr, endDateStr, positionId) : [],
-
-      // Metadata
-      dateRange: {
-        start: startDateStr,
-        end: endDateStr,
-        days: parseInt(dateRange)
+      today: {
+        total: todayTasks.length,
+        completed: todayTasks.filter(t => t.dynamicStatus === 'completed').length,
+        pending: todayTasks.filter(t => ['not_due_yet', 'due_today', 'pending'].includes(t.dynamicStatus)).length,
+        // Align with checklist widget: use aggregated per-position overdue for today's operational view
+        overdue: todayOverdueAcrossPositions,
+        missed: todayTasks.filter(t => t.dynamicStatus === 'missed').length
       },
-      generatedAt: australianNowUtcISOString()
+      categories,
+      recentTasks
     }
 
-    console.log('Dashboard API: Returning dashboard data:', {
-      totalTasks: dashboardData.summary.totalTasks,
-      completedTasks: dashboardData.summary.completedTasks,
-      categoryCount: Object.keys(dashboardData.categoryStats).length
+    console.log('Dashboard API: Returning response:', {
+      totalTasks: response.summary.totalTasks,
+      completedTasks: response.summary.completedTasks,
+      missedTasks: response.summary.missedLast7Days,
+      overdueTasks: response.summary.overdueTasks,
+      todayOverdue: response.today.overdue,
+      todayTotal: response.today.total
     })
 
-    return NextResponse.json(dashboardData)
+    return NextResponse.json(response)
+
   } catch (error) {
-    if (error instanceof Error && error.message.includes('Authentication')) {
-      return NextResponse.json({ error: 'Authentication required' }, { status: 401 })
-    }
-    
-    console.error('Dashboard API unexpected error:', {
-      message: error instanceof Error ? error.message : String(error),
-      stack: error instanceof Error ? error.stack : undefined,
-      error: error
-    })
+    console.error('Dashboard API: Unexpected error:', error)
     return NextResponse.json({ 
       error: 'Internal server error',
-      details: error instanceof Error ? error.message : String(error)
+      details: error instanceof Error ? error.message : 'Unknown error'
     }, { status: 500 })
-  }
-}
-
-async function calculateTrends(startDate: string, endDate: string, positionId?: string | null) {
-  try {
-    // First get master tasks for the position
-    let masterTasksQuery = supabaseAdmin
-      .from('master_tasks')
-      .select('id, responsibility')
-      .eq('publish_status', 'active')
-
-    if (positionId) {
-      const responsibilityValue = await getResponsibilityFromPositionId(positionId)
-      if (responsibilityValue) {
-        masterTasksQuery = masterTasksQuery.contains('responsibility', [responsibilityValue])
-      }
-    }
-
-    const { data: masterTasks } = await masterTasksQuery
-
-    // Then get task instances
-    let query = supabaseAdmin
-      .from('task_instances')
-      .select(`
-        due_date,
-        status,
-        completed_at,
-        master_task_id
-      `)
-      .gte('due_date', startDate)
-      .lte('due_date', endDate)
-
-    if (masterTasks && masterTasks.length > 0) {
-      const masterTaskIds = masterTasks.map(mt => mt.id)
-      query = query.in('master_task_id', masterTaskIds)
-    } else {
-      query = query.eq('id', 'non-existent-id')
-    }
-
-    const { data: trendTasks } = await query
-
-    if (!trendTasks) return []
-
-    // Group by date
-    const dailyStats = trendTasks.reduce((acc: any, task) => {
-      const date = task.due_date
-      if (!acc[date]) {
-        acc[date] = { total: 0, completed: 0, missed: 0, overdue: 0 }
-      }
-      acc[date].total++
-      if (task.status === 'done') acc[date].completed++
-      if (task.status === 'missed') acc[date].missed++
-      if (task.status === 'overdue') acc[date].overdue++
-      return acc
-    }, {})
-
-    // Convert to array format
-    return Object.entries(dailyStats).map(([date, stats]: [string, any]) => ({
-      date,
-      ...stats,
-      completionRate: stats.total > 0 ? Math.round((stats.completed / stats.total) * 100) : 0
-    })).sort((a, b) => a.date.localeCompare(b.date))
-  } catch (error) {
-    console.error('Error calculating trends:', error)
-    return []
   }
 }

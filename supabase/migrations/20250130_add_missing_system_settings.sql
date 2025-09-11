@@ -6,12 +6,12 @@ INSERT INTO system_settings (key, value, description, data_type, is_public)
 SELECT * FROM (VALUES
     -- Ensure all required settings exist
     ('timezone', 'Australia/Sydney', 'Default timezone for the pharmacy', 'string', true),
-    ('new_since_hour', '09:00', 'Hour to mark tasks as "new since" for the day', 'string', true),
+    ('new_since_hour', '00:00', 'Hour to mark tasks as "new since" for the day', 'string', true),
     ('daily_task_cutoff', '23:59', 'Cutoff time for daily tasks (Every Day, Weekly)', 'string', false),
     ('auto_logout_enabled', 'true', 'Enable auto-logout after completing all tasks', 'boolean', true),
     ('auto_logout_delay_seconds', '300', 'Delay in seconds before auto-logout (5 minutes default)', 'number', true),
-    ('task_generation_days_forward', '365', 'Days in the future to generate tasks for', 'number', false),
-    ('task_generation_days_back', '30', 'Days in the past to generate tasks for', 'number', false),
+    ('task_generation_days_forward', '999999', 'Days in the future to generate tasks for', 'number', false),
+    ('task_generation_days_back', '0', 'Days in the past to generate tasks for', 'number', false),
     ('business_days', '[1,2,3,4,5,6]', 'Business operating days (1=Mon, 2=Tue, etc, 6=Sat)', 'json', true),
     ('ph_substitution_enabled', 'true', 'Enable public holiday substitution rules', 'boolean', false)
 ) AS new_settings(key, value, description, data_type, is_public)

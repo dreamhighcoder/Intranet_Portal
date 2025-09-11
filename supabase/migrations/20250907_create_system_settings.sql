@@ -6,13 +6,13 @@ CREATE TABLE IF NOT EXISTS system_settings (
     timezone TEXT NOT NULL DEFAULT 'Australia/Sydney',
     
     -- Task timing settings
-    new_since_hour TIME NOT NULL DEFAULT '09:00:00',
+    new_since_hour TIME NOT NULL DEFAULT '00:00:00',
     missed_cutoff_time TIME NOT NULL DEFAULT '23:59:00',
     default_due_time TIME NOT NULL DEFAULT '17:00:00',
     
     -- Task generation settings
-    task_generation_days_ahead INTEGER NOT NULL DEFAULT 365,
-    task_generation_days_behind INTEGER NOT NULL DEFAULT 30,
+    task_generation_days_ahead INTEGER NOT NULL DEFAULT 999999,
+    task_generation_days_behind INTEGER NOT NULL DEFAULT 0,
     working_days TEXT[] NOT NULL DEFAULT ARRAY['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'],
     public_holiday_push_forward BOOLEAN NOT NULL DEFAULT true,
     
@@ -59,11 +59,11 @@ INSERT INTO system_settings (
 ) 
 SELECT 
     'Australia/Sydney',
-    '09:00:00',
+    '00:00:00',
     '23:59:00',
     '17:00:00',
-    365,
-    30,
+    999999,
+    0,
     ARRAY['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'],
     true,
     true,

@@ -3,12 +3,12 @@ import { SystemSettings } from './system-settings'
 
 const DEFAULT_SETTINGS: SystemSettings = {
   timezone: 'Australia/Sydney',
-  new_since_hour: '09:00',
+  new_since_hour: '00:00',
   missed_cutoff_time: '23:59',
   auto_logout_enabled: true,
   auto_logout_delay_minutes: 5,
-  task_generation_days_ahead: 365,
-  task_generation_days_behind: 30,
+  task_generation_days_ahead: 999999,
+  task_generation_days_behind: 0,
   working_days: ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'],
   public_holiday_push_forward: true
 }

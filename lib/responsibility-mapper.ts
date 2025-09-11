@@ -109,3 +109,26 @@ export function filterTasksByResponsibility<T extends { responsibility: string[]
     return false
   })
 }
+
+/**
+ * Build responsibility variants to match DB values
+ * Used for position filtering in queries
+ */
+export function buildResponsibilityVariants(name?: string | null, displayName?: string | null): string[] {
+  const set = new Set<string>()
+  const add = (v?: string | null) => {
+    if (!v) return
+    const raw = v.trim()
+    if (!raw) return
+    set.add(raw)
+    const lower = raw.toLowerCase()
+    set.add(lower)
+    const kebab = raw.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')
+    set.add(kebab)
+    set.add(kebab.replace(/-/g, '_'))
+    set.add(kebab.replace(/-/g, ' '))
+  }
+  add(name)
+  add(displayName)
+  return Array.from(set)
+}

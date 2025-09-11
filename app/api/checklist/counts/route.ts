@@ -112,7 +112,13 @@ export async function GET(request: NextRequest) {
           description: task.description || '',
           responsibility: task.responsibility || [],
           categories: task.categories || [],
-          frequencies: (task.frequencies || []) as any,
+          // Normalize legacy monthly frequency aliases to engine enums (match checklist API)
+          frequencies: ((task.frequencies || []) as any).map((f: string) =>
+            f === 'start_every_month' || f === 'start_of_month' ? 'start_of_every_month'
+            : f === 'every_month' ? 'once_monthly'
+            : f === 'end_every_month' ? 'end_of_every_month'
+            : f
+          ) as any,
           timing: task.timing || 'anytime_during_day',
           active: task.publish_status === 'active',
           publish_delay: (task as any).publish_delay || undefined,
@@ -128,24 +134,49 @@ export async function GET(request: NextRequest) {
 
     // Fetch existing task instances (same table as checklist API)
     const masterTaskIds = filteredTasks.map(t => t.id)
-    const { data: instances, error: instancesError } = masterTaskIds.length > 0
-      ? await supabaseAdmin
-          .from('task_instances')
-          .select('id, master_task_id, status, created_at, instance_date')
-          .in('master_task_id', masterTaskIds)
-          .eq('instance_date', validatedDate)
-      : { data: [], error: null as any }
+    let existingInstances: any[] = []
+    if (masterTaskIds.length > 0) {
+      const viewDate = parseAustralianDate(validatedDate)
+      const searchStartDate = new Date(viewDate)
+      searchStartDate.setDate(viewDate.getDate() - 60)
 
-    if (instancesError) {
-      console.error('Error fetching task instances:', instancesError)
-      // Non-fatal: continue with empty instances but expose reason for debugging
+      const { data, error: instancesError } = await supabaseAdmin
+        .from('task_instances')
+        .select('id, master_task_id, status, completed_by, completed_at, created_at, instance_date, due_date, lock_date, lock_time, detailed_status')
+        .in('master_task_id', masterTaskIds)
+        .gte('instance_date', formatAustralianDate(searchStartDate))
+        .lte('instance_date', validatedDate)
+
+      if (instancesError) {
+        console.error('Error fetching task instances:', instancesError)
+      }
+      existingInstances = data || []
     }
 
+    // Build instance map using same relevance rules as checklist API
     const instanceMap = new Map<string, any>()
-    ;(instances || []).forEach(inst => instanceMap.set(inst.master_task_id, inst))
+    if (existingInstances.length > 0) {
+      const taskInstanceGroups = new Map<string, any[]>()
+      existingInstances.forEach(inst => {
+        const key = inst.master_task_id
+        if (!taskInstanceGroups.has(key)) taskInstanceGroups.set(key, [])
+        taskInstanceGroups.get(key)!.push(inst)
+      })
+
+      taskInstanceGroups.forEach((instances, taskId) => {
+        const sorted = instances.sort((a, b) => {
+          if (a.status === 'done' && b.status !== 'done') return -1
+          if (b.status === 'done' && a.status !== 'done') return 1
+          if (a.instance_date === validatedDate && b.instance_date !== validatedDate) return -1
+          if (b.instance_date === validatedDate && a.instance_date !== validatedDate) return 1
+          return new Date(b.instance_date).getTime() - new Date(a.instance_date).getTime()
+        })
+        instanceMap.set(taskId, sorted[0])
+      })
+    }
 
     // Fetch position-specific completions for these instances
-    const instanceIds = (instances || []).map(i => i.id)
+    const instanceIds = existingInstances.map(i => i.id)
     let completionsByInstance = new Map<string, any[]>()
     if (instanceIds.length > 0) {
       const { data: completions, error: completionsError } = await supabaseAdmin
@@ -183,21 +214,46 @@ export async function GET(request: NextRequest) {
       const comps = instance ? (completionsByInstance.get(instance.id) || []) : []
       const isCompletedForRole = comps.some(c => (c.position_name || '').toLowerCase().replace(/[^a-z0-9]+/g, '-') === normalizedRole)
 
-      // Use the shared status calculation utility
+      // Compute engine status and feed into the same client-side calculator inputs
+      const mtForStatus: NewMasterTask = {
+        id: task.id,
+        title: task.title || '',
+        description: task.description || '',
+        responsibility: task.responsibility || [],
+        categories: task.categories || [],
+        // normalize monthly aliases (same as checklist)
+        frequencies: ((task.frequencies || []) as any).map((f: string) =>
+          f === 'start_every_month' || f === 'start_of_month' ? 'start_of_every_month'
+          : f === 'every_month' ? 'once_monthly'
+          : f === 'end_every_month' ? 'end_of_every_month'
+          : f
+        ) as any,
+        timing: task.timing || 'anytime_during_day',
+        active: task.publish_status === 'active',
+        publish_delay: (task as any).publish_delay || undefined,
+        due_date: (task as any).due_date || undefined,
+        due_time: task.due_time || undefined,
+        created_at: task.created_at || undefined,
+        start_date: (task as any).start_date || undefined,
+        end_date: (task as any).end_date || undefined,
+      }
+      const statusInfo = recurrenceEngine.calculateTaskStatus(mtForStatus, validatedDate, now, isCompletedForRole)
+
       const taskStatus = calculateTaskStatusForCounts({
         date: validatedDate,
+        due_date: statusInfo.dueDate || undefined,
         master_task: {
-          due_time: task.due_time,
-          created_at: task.created_at,
-          publish_delay: task.publish_delay,
-          start_date: (task as any).start_date,
-          end_date: (task as any).end_date
+          due_time: statusInfo.dueTime || undefined,
+          created_at: task.created_at || undefined,
+          publish_delay: (task as any).publish_delay || undefined,
+          start_date: (task as any).start_date || undefined,
+          end_date: (task as any).end_date || undefined,
         },
-        detailed_status: instance?.detailed_status,
+        detailed_status: statusInfo.status,
         is_completed_for_position: isCompletedForRole,
-        status: instance?.status,
-        lock_date: instance?.lock_date,
-        lock_time: instance?.lock_time
+        status: instance?.status || undefined,
+        lock_date: statusInfo.lockDate || undefined,
+        lock_time: statusInfo.lockTime || undefined,
       }, validatedDate)
 
       // Count based on calculated status

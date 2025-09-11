@@ -4,98 +4,18 @@ import { createClient } from '@supabase/supabase-js'
 import { getResponsibilityForPosition } from '@/lib/position-utils'
 import { 
   createAustralianDateTime, 
-  fromAustralianTime, 
-  getAustralianDateRange, 
-  isAustralianTimePast,
-  parseAustralianDate,
-  formatAustralianDate,
-  toAustralianTime,
-  getAustralianNow
+  fromAustralianTime
 } from '@/lib/timezone-utils'
-import { NewRecurrenceEngine, NewFrequencyType, type MasterTask as NewMasterTask } from '@/lib/new-recurrence-engine'
-import { HolidayChecker } from '@/lib/holiday-checker'
-import { calculateTaskStatus as calculateChecklistStatus } from '@/lib/task-status-calculator'
+import { generateTaskOccurrences } from '@/lib/task-occurrence-generator'
+import { getSearchOptions, toKebabCase } from '@/lib/responsibility-mapper'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
 const supabaseServer = createClient(supabaseUrl, supabaseServiceKey)
 
-// Convert string frequencies to NewFrequencyType enum values
-function convertStringFrequenciesToEnum(frequencies: string[]): NewFrequencyType[] {
-  const frequencyMap: { [key: string]: NewFrequencyType } = {
-    'once_off': NewFrequencyType.ONCE_OFF,
-    'every_day': NewFrequencyType.EVERY_DAY,
-    'once_weekly': NewFrequencyType.ONCE_WEEKLY,
-    'weekly': NewFrequencyType.ONCE_WEEKLY, // Legacy mapping
-    'monday': NewFrequencyType.MONDAY,
-    'tuesday': NewFrequencyType.TUESDAY,
-    'wednesday': NewFrequencyType.WEDNESDAY,
-    'thursday': NewFrequencyType.THURSDAY,
-    'friday': NewFrequencyType.FRIDAY,
-    'saturday': NewFrequencyType.SATURDAY,
-    'once_monthly': NewFrequencyType.ONCE_MONTHLY,
-    'start_of_every_month': NewFrequencyType.START_OF_EVERY_MONTH,
-    'start_every_month': NewFrequencyType.START_OF_EVERY_MONTH, // Legacy mapping
-    'end_every_month': NewFrequencyType.END_OF_EVERY_MONTH, // Legacy mapping
-    'start_of_month_jan': NewFrequencyType.START_OF_MONTH_JAN,
-    'start_of_month_feb': NewFrequencyType.START_OF_MONTH_FEB,
-    'start_of_month_mar': NewFrequencyType.START_OF_MONTH_MAR,
-    'start_of_month_apr': NewFrequencyType.START_OF_MONTH_APR,
-    'start_of_month_may': NewFrequencyType.START_OF_MONTH_MAY,
-    'start_of_month_jun': NewFrequencyType.START_OF_MONTH_JUN,
-    'start_of_month_jul': NewFrequencyType.START_OF_MONTH_JUL,
-    'start_of_month_aug': NewFrequencyType.START_OF_MONTH_AUG,
-    'start_of_month_sep': NewFrequencyType.START_OF_MONTH_SEP,
-    'start_of_month_oct': NewFrequencyType.START_OF_MONTH_OCT,
-    'start_of_month_nov': NewFrequencyType.START_OF_MONTH_NOV,
-    'start_of_month_dec': NewFrequencyType.START_OF_MONTH_DEC,
-    'end_of_every_month': NewFrequencyType.END_OF_EVERY_MONTH,
-    'end_of_month_jan': NewFrequencyType.END_OF_MONTH_JAN,
-    'end_of_month_feb': NewFrequencyType.END_OF_MONTH_FEB,
-    'end_of_month_mar': NewFrequencyType.END_OF_MONTH_MAR,
-    'end_of_month_apr': NewFrequencyType.END_OF_MONTH_APR,
-    'end_of_month_may': NewFrequencyType.END_OF_MONTH_MAY,
-    'end_of_month_jun': NewFrequencyType.END_OF_MONTH_JUN,
-    'end_of_month_jul': NewFrequencyType.END_OF_MONTH_JUL,
-    'end_of_month_aug': NewFrequencyType.END_OF_MONTH_AUG,
-    'end_of_month_sep': NewFrequencyType.END_OF_MONTH_SEP,
-    'end_of_month_oct': NewFrequencyType.END_OF_MONTH_OCT,
-    'end_of_month_nov': NewFrequencyType.END_OF_MONTH_NOV,
-    'end_of_month_dec': NewFrequencyType.END_OF_MONTH_DEC,
-    // Additional legacy mappings
-    'once_off_sticky': NewFrequencyType.ONCE_OFF,
-    'specific_weekdays': NewFrequencyType.ONCE_WEEKLY, // This will need special handling for weekdays
-    'monthly': NewFrequencyType.ONCE_MONTHLY // Legacy mapping
-  }
 
-  const converted = frequencies
-    .map(freq => frequencyMap[freq])
-    .filter(Boolean)
-  
 
-  
-  return converted
-}
 
-// Build responsibility variants to match DB values
-function buildResponsibilityVariants(name?: string | null, displayName?: string | null): string[] {
-  const set = new Set<string>()
-  const add = (v?: string | null) => {
-    if (!v) return
-    const raw = v.trim()
-    if (!raw) return
-    set.add(raw)
-    const lower = raw.toLowerCase()
-    set.add(lower)
-    const kebab = raw.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')
-    set.add(kebab)
-    set.add(kebab.replace(/-/g, '_'))
-    set.add(kebab.replace(/-/g, ' '))
-  }
-  add(name)
-  add(displayName)
-  return Array.from(set)
-}
 
 export async function GET(request: NextRequest) {
   try {
@@ -136,328 +56,7 @@ export async function GET(request: NextRequest) {
   }
 }
 
-// Generate task occurrences for the date range using the same logic as checklist API
-async function generateTaskOccurrences(startDate: string, endDate: string, positionId?: string | null, category?: string | null) {
-  // Get holidays for the recurrence engine
-  const { data: holidays } = await supabaseServer
-    .from('public_holidays')
-    .select('date, name')
-    .order('date')
 
-  // Create the recurrence engine
-  const holidayChecker = new HolidayChecker(holidays || [])
-  const recurrenceEngine = new NewRecurrenceEngine(holidayChecker)
-
-  // Get date range
-  const startDateObj = parseAustralianDate(startDate)
-  const endDateObj = parseAustralianDate(endDate)
-  const dateRange = getAustralianDateRange(startDateObj, endDateObj)
-
-  // Generate task occurrences for each date in the range
-  const taskOccurrences: Array<{
-    masterTaskId: string
-    title: string
-    description: string
-    categories: string[]
-    responsibility: string[]
-    date: string
-    status: string
-    completedAt?: string
-    dueTime?: string
-  }> = []
-
-  // Process each date in the range
-  for (const dateStr of dateRange) {
-    // Build master_tasks query for this date
-    let taskQuery = supabaseServer
-      .from('master_tasks')
-      .select(`
-        id,
-        title,
-        description,
-        responsibility,
-        categories,
-        publish_status,
-        publish_delay,
-        start_date,
-        end_date,
-        due_date,
-        due_time,
-        frequencies,
-        timing,
-        created_at,
-        updated_at
-      `)
-      .eq('publish_status', 'active')
-
-    // Apply position filter if specified
-    if (positionId) {
-      const responsibilityValue = await getResponsibilityForPosition(positionId)
-      if (responsibilityValue) {
-        const responsibilityVariants = buildResponsibilityVariants(responsibilityValue, responsibilityValue)
-        taskQuery = taskQuery.overlaps('responsibility', responsibilityVariants)
-      }
-    }
-
-    const { data: masterTasks, error: tasksError } = await taskQuery
-    if (tasksError) {
-      console.error('Reports: error fetching master tasks', tasksError)
-      throw new Error('Failed to fetch master tasks')
-    }
-
-    // Apply category filter in memory (after DB query)
-    const filteredTasks = (masterTasks || []).filter(task => {
-      if (category && category !== 'all') {
-        const categories = task.categories || []
-        return categories.includes(category)
-      }
-      return true
-    })
-
-    // Filter tasks based on recurrence rules and date (using same logic as checklist API)
-    const tasksForDate = filteredTasks.filter(task => {
-      try {
-        // Server-side visibility window enforcement (same as checklist API)
-        let visibilityStart: Date | null = null
-        let visibilityEnd: Date | null = null
-        try {
-          const createdAtIso = task.created_at as string | undefined
-          const publishDelay = task.publish_delay as string | undefined // YYYY-MM-DD
-          const startDate = (task as any).start_date as string | undefined // YYYY-MM-DD
-          const endDate = (task as any).end_date as string | undefined // YYYY-MM-DD
-
-          const startCandidates: Date[] = []
-          if (createdAtIso) {
-            const createdAtAU = toAustralianTime(new Date(createdAtIso))
-            startCandidates.push(parseAustralianDate(formatAustralianDate(createdAtAU)))
-          }
-          if (publishDelay) startCandidates.push(parseAustralianDate(publishDelay))
-          if (startDate) startCandidates.push(parseAustralianDate(startDate))
-          if (startCandidates.length > 0) visibilityStart = new Date(Math.max(...startCandidates.map(d => d.getTime())))
-          if (endDate) visibilityEnd = parseAustralianDate(endDate)
-        } catch {}
-
-        const viewDate = parseAustralianDate(dateStr)
-        if (visibilityStart && viewDate < visibilityStart) return false
-        if (visibilityEnd && viewDate > visibilityEnd) return false
-
-        // Convert task to NewMasterTask format for new engine
-        const masterTask: NewMasterTask = {
-          id: task.id,
-          title: task.title || '',
-          description: task.description || '',
-          responsibility: task.responsibility || [],
-          categories: task.categories || [],
-          // Normalize legacy monthly frequency aliases to engine enums (same as checklist API)
-          frequencies: ((task.frequencies || []) as any).map((f: string) =>
-            f === 'start_every_month' || f === 'start_of_month' ? 'start_of_every_month'
-            : f === 'every_month' ? 'once_monthly'
-            : f === 'end_every_month' ? 'end_of_every_month'
-            : f
-          ) as any,
-          timing: task.timing || 'anytime_during_day',
-          active: task.publish_status === 'active',
-          publish_delay: task.publish_delay || undefined,
-          due_date: task.due_date || undefined,
-          due_time: task.due_time || undefined,
-          created_at: task.created_at || undefined,
-          start_date: (task as any).start_date || undefined,
-          end_date: (task as any).end_date || undefined,
-        }
-
-        return recurrenceEngine.shouldTaskAppearOnDate(masterTask, dateStr)
-      } catch (error) {
-        console.error('Error checking task recurrence:', error)
-        return true // Default to showing the task if there's an error
-      }
-    })
-
-    // Get existing task instances for this date
-    const masterTaskIds = tasksForDate.map(task => task.id)
-    let existingInstances: any[] = []
-    let positionCompletions: any[] = []
-    
-    if (masterTaskIds.length > 0) {
-      // Look back for carryover instances (same as checklist API)
-      const viewDate = parseAustralianDate(dateStr)
-      const searchStartDate = new Date(viewDate)
-      searchStartDate.setDate(viewDate.getDate() - 60) // Look back 60 days for any carryover instances
-      
-      // Get task instances
-      const { data, error: instancesError } = await supabaseServer
-        .from('task_instances')
-        .select('id, master_task_id, status, completed_by, completed_at, created_at, instance_date, due_date')
-        .in('master_task_id', masterTaskIds)
-        .gte('instance_date', formatAustralianDate(searchStartDate))
-        .lte('instance_date', dateStr)
-
-      if (!instancesError && data) {
-        existingInstances = data
-      }
-
-      // Get position-specific completions if we have instances
-      if (existingInstances.length > 0) {
-        const instanceIds = existingInstances.map(inst => inst.id)
-        const { data: completionsData, error: completionsError } = await supabaseServer
-          .from('task_position_completions')
-          .select(`
-            task_instance_id,
-            position_id,
-            position_name,
-            completed_by,
-            completed_at,
-            is_completed,
-            positions!inner(name)
-          `)
-          .in('task_instance_id', instanceIds)
-          .eq('is_completed', true)
-
-        if (!completionsError && completionsData) {
-          positionCompletions = completionsData
-        }
-      }
-    }
-
-    // Create maps for quick lookup (same as checklist API)
-    const instanceMap = new Map<string, any>()
-    const completionsByInstanceMap = new Map<string, any[]>()
-    
-    if (existingInstances.length > 0) {
-      // For each master task, find the most relevant instance
-      const taskInstanceGroups = new Map<string, any[]>()
-      
-      existingInstances.forEach(instance => {
-        const taskId = instance.master_task_id
-        if (!taskInstanceGroups.has(taskId)) {
-          taskInstanceGroups.set(taskId, [])
-        }
-        taskInstanceGroups.get(taskId)!.push(instance)
-      })
-      
-      taskInstanceGroups.forEach((instances, taskId) => {
-        // Sort instances by relevance (same logic as checklist API)
-        const sortedInstances = instances.sort((a, b) => {
-          // First priority: completed instances (status = 'done')
-          if (a.status === 'done' && b.status !== 'done') return -1
-          if (b.status === 'done' && a.status !== 'done') return 1
-          
-          // Second priority: exact date match (for non-completed instances)
-          if (a.instance_date === dateStr && b.instance_date !== dateStr) return -1
-          if (b.instance_date === dateStr && a.instance_date !== dateStr) return 1
-          
-          // Third priority: most recent instance_date
-          return new Date(b.instance_date).getTime() - new Date(a.instance_date).getTime()
-        })
-        
-        instanceMap.set(taskId, sortedInstances[0])
-      })
-    }
-    
-    if (positionCompletions.length > 0) {
-      positionCompletions.forEach(completion => {
-        const instanceId = completion.task_instance_id
-        if (!completionsByInstanceMap.has(instanceId)) {
-          completionsByInstanceMap.set(instanceId, [])
-        }
-        completionsByInstanceMap.get(instanceId)!.push(completion)
-      })
-    }
-
-    // Calculate status for each task using the same logic as checklist API
-    const now = getAustralianNow()
-    
-    for (const task of tasksForDate) {
-      const existingInstance = instanceMap.get(task.id)
-      const taskCompletions = existingInstance ? completionsByInstanceMap.get(existingInstance.id) || [] : []
-      
-      // Determine if task is completed by any position (for reports, we consider any completion)
-      let isCompletedByAnyPosition = false
-      if (existingInstance && taskCompletions.length > 0) {
-        isCompletedByAnyPosition = true
-      }
-
-      // Convert task to NewMasterTask format for status calculation
-      const masterTaskForStatus: NewMasterTask = {
-        id: task.id,
-        title: task.title || '',
-        description: task.description || '',
-        responsibility: task.responsibility || [],
-        categories: task.categories || [],
-        frequencies: ((task.frequencies || []) as any).map((f: string) =>
-          f === 'start_every_month' || f === 'start_of_month' ? 'start_of_every_month'
-          : f === 'every_month' ? 'once_monthly'
-          : f === 'end_every_month' ? 'end_of_every_month'
-          : f
-        ) as any,
-        timing: task.timing || 'anytime_during_day',
-        active: task.publish_status === 'active',
-        publish_delay: task.publish_delay || undefined,
-        due_date: task.due_date || undefined,
-        due_time: task.due_time || undefined,
-        created_at: task.created_at || undefined,
-        start_date: (task as any).start_date || undefined,
-        end_date: (task as any).end_date || undefined,
-      }
-
-      // Calculate status using the same shared calculator as the checklist to ensure consistency
-      // Prefer backend instance status for non-today dates; for today, use time-based calc
-      const detailedStatusFromInstance = existingInstance?.status
-        ? (existingInstance.status === 'done' ? 'completed'
-          : existingInstance.status === 'not_due' ? 'not_due_yet'
-          : existingInstance.status) // pass through 'overdue' | 'missed' | others
-        : undefined
-
-      const computed = calculateChecklistStatus({
-        date: dateStr,
-        master_task: {
-          due_time: (task as any).due_time || undefined,
-          created_at: task.created_at || undefined,
-          publish_delay: task.publish_delay || undefined,
-          start_date: (task as any).start_date || undefined,
-          end_date: (task as any).end_date || undefined,
-        },
-        detailed_status: detailedStatusFromInstance,
-        is_completed_for_position: isCompletedByAnyPosition,
-      }, dateStr)
-
-      // Map shared calculator result to report status format
-      let status = 'due_today'
-      switch (computed) {
-        case 'completed':
-          status = 'done'
-          break
-        case 'not_due_yet':
-          status = 'not_due'
-          break
-        case 'due_today':
-          status = 'due_today'
-          break
-        case 'overdue':
-          status = 'overdue'
-          break
-        case 'missed':
-          status = 'missed'
-          break
-        default:
-          status = 'due_today'
-      }
-
-      taskOccurrences.push({
-        masterTaskId: task.id,
-        title: task.title || '',
-        description: task.description || '',
-        categories: task.categories || [],
-        responsibility: task.responsibility || [],
-        date: dateStr,
-        status,
-        completedAt: existingInstance?.completed_at,
-        dueTime: task.due_time
-      })
-    }
-  }
-
-  return taskOccurrences
-}
 
 async function getCompletionRateReport(startDate?: string | null, endDate?: string | null, positionId?: string | null, category?: string | null) {
   if (!startDate || !endDate) {
@@ -468,10 +67,10 @@ async function getCompletionRateReport(startDate?: string | null, endDate?: stri
     const taskOccurrences = await generateTaskOccurrences(startDate, endDate, positionId, category)
 
     const totalTasks = taskOccurrences.length
-    const completedTasks = taskOccurrences.filter(task => task.status === 'done').length
+    const completedTasks = taskOccurrences.filter(task => task.status === 'completed').length
     
     const onTimeCompletions = taskOccurrences.filter(task => {
-      if (!(task.status === 'done' && task.completedAt)) return false
+      if (!(task.status === 'completed' && task.completedAt)) return false
       
       // Check if completed on time (by end of the due date)
       const ausEndOfDay = createAustralianDateTime(task.date, '23:59:59')
@@ -504,7 +103,7 @@ async function getTaskSummaryReport(startDate?: string | null, endDate?: string 
   try {
     const taskOccurrences = await generateTaskOccurrences(startDate, endDate, positionId, category)
 
-    // Count by status
+    // Count by status - map from shared generator status values to report format
     const statusCounts = {
       done: 0,
       overdue: 0,
@@ -514,10 +113,24 @@ async function getTaskSummaryReport(startDate?: string | null, endDate?: string 
     }
 
     taskOccurrences.forEach(task => {
-      if (statusCounts.hasOwnProperty(task.status)) {
-        statusCounts[task.status as keyof typeof statusCounts]++
-      } else {
-        statusCounts.due_today++ // Default for unknown statuses
+      switch (task.status) {
+        case 'completed':
+          statusCounts.done++
+          break
+        case 'overdue':
+          statusCounts.overdue++
+          break
+        case 'missed':
+          statusCounts.missed++
+          break
+        case 'due_today':
+          statusCounts.due_today++
+          break
+        case 'not_due_yet':
+          statusCounts.not_due++
+          break
+        default:
+          statusCounts.due_today++ // Default for unknown statuses
       }
     })
 
@@ -581,8 +194,8 @@ async function getMissedTasksByPositionReport(startDate?: string | null, endDate
     // Pre-compute responsibility variants for each position for faster checks
     const positionResponsibilityMap: Record<string, { name: string; variants: string[] }> = {}
     for (const pos of positions || []) {
-      const responsibility = await getResponsibilityForPosition(pos.id)
-      const variants = buildResponsibilityVariants(responsibility, responsibility)
+      const normalizedRole = toKebabCase(pos.name)
+      const variants = getSearchOptions(normalizedRole)
       positionResponsibilityMap[pos.id] = { name: pos.name, variants }
       positionStats[pos.name] = 0
     }
@@ -648,7 +261,7 @@ async function getAverageCompletionTimeReport(startDate?: string | null, endDate
   try {
     const taskOccurrences = await generateTaskOccurrences(startDate, endDate, positionId, category)
     const completedTasks = taskOccurrences.filter(task => 
-      task.status === 'done' && task.completedAt
+      task.status === 'completed' && task.completedAt
     )
 
     if (completedTasks.length === 0) {

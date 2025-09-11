@@ -25,6 +25,7 @@ import {
 } from "lucide-react"
 import { useRouter } from "next/navigation"
 import { getAustralianToday, formatAustralianDate, toAustralianTime, getAustralianNow, parseAustralianDate } from "@/lib/timezone-utils"
+import { calculateTaskStatus } from "@/lib/task-status-calculator"
 
 interface CalendarDay {
   date: string
@@ -245,84 +246,58 @@ export default function CalendarPage() {
     }
   }
 
-  // Calculate dynamic summary stats based on current view settings
+  // Calculate dynamic summary stats using the same logic as Daily Checklist
   const calculateDynamicSummary = () => {
     if (!calendarData) return null
 
+    // First, try to use the API summary if it exists and is reliable
+    // The Calendar API already calculates summary statistics based on task instances
+    if (calendarData.summary) {
+      return {
+        totalTasks: calendarData.summary.totalTasks,
+        completedTasks: calendarData.summary.completedTasks,
+        pendingTasks: calendarData.summary.pendingTasks,
+        overdueTasks: calendarData.summary.overdueTasks,
+        missedTasks: calendarData.summary.missedTasks,
+        completionRate: calendarData.summary.completionRate
+      }
+    }
+
+    // Fallback: Calculate from calendar day data using dynamic status calculation
+    // This ensures consistency with Daily Checklist logic
     const today = getAustralianToday()
     const todayDate = parseAustralianDate(today)
     const currentAusDate = getAustralianNow()
     
-    // Debug: Log the calendar data to understand what we're working with
-    console.log('=== SUMMARY CALCULATION DEBUG ===')
-    console.log('View mode:', view)
-    console.log('Calendar data length:', calendarData.calendar.length)
-    console.log('Date range:', calendarData.metadata.startDate, 'to', calendarData.metadata.endDate)
-    console.log('Calendar days:', calendarData.calendar.map(d => ({ date: d.date, total: d.total })))
-    
-    // For now, let's use the calendar data as-is to see what we get
-    // This will help us understand if the issue is in the API or in our calculation
-    const relevantDays = calendarData.calendar
-    
     // Determine the summary period based on view mode
-    let summaryStartDate: Date
-    let summaryEndDate: Date
-    let isCurrentPeriod = false
+    let relevantDays = calendarData.calendar
     
     if (view === 'month') {
-      // Month view: Summary is for the entire month
+      // Month view: Summary is for the entire month, but only up to today if current month
       const viewingMonth = currentDate.getMonth()
       const viewingYear = currentDate.getFullYear()
       const currentMonth = currentAusDate.getMonth()
       const currentYear = currentAusDate.getFullYear()
       
-      // Month boundaries
-      summaryStartDate = new Date(viewingYear, viewingMonth, 1)
-      const monthEndDate = new Date(viewingYear, viewingMonth + 1, 0) // Last day of month
-      
-      // Check if viewing current month
-      isCurrentPeriod = (viewingYear === currentYear && viewingMonth === currentMonth)
+      const isCurrentPeriod = (viewingYear === currentYear && viewingMonth === currentMonth)
       
       if (isCurrentPeriod) {
         // Current month: only count up to today
-        summaryEndDate = todayDate
-      } else {
-        // Past or future month: count entire month
-        summaryEndDate = monthEndDate
+        const todayStr = formatAustralianDate(todayDate)
+        relevantDays = calendarData.calendar.filter(day => day.date <= todayStr)
       }
-      
-      // Filter calendar days based on the calculated summary period
-      const summaryStartDateStr = formatAustralianDate(summaryStartDate)
-      const summaryEndDateStr = formatAustralianDate(summaryEndDate)
-      
-      console.log('Month view - filtering from', summaryStartDateStr, 'to', summaryEndDateStr)
-      
-      const filteredDays = calendarData.calendar.filter(day => {
-        return day.date >= summaryStartDateStr && day.date <= summaryEndDateStr
-      })
-      
-      console.log('Month view - filtered days:', filteredDays.length)
-      
     } else {
       // Week view: Summary is for the specific week being viewed
       const startDate = parseAustralianDate(calendarData.metadata.startDate)
       const endDate = parseAustralianDate(calendarData.metadata.endDate)
       
-      summaryStartDate = startDate
-      
-      // Check if today falls within the current week range
-      isCurrentPeriod = (todayDate >= startDate && todayDate <= endDate)
+      const isCurrentPeriod = (todayDate >= startDate && todayDate <= endDate)
       
       if (isCurrentPeriod) {
         // Current week: only count up to today
-        summaryEndDate = todayDate
-      } else {
-        // Past or future week: count entire week
-        summaryEndDate = endDate
+        const todayStr = formatAustralianDate(todayDate)
+        relevantDays = calendarData.calendar.filter(day => day.date <= todayStr)
       }
-      
-      // For week view, use all the calendar data (which should be just the week)
-      console.log('Week view - using all calendar data:', calendarData.calendar.length, 'days')
     }
     
     // Calculate totals from the relevant days
@@ -335,9 +310,6 @@ export default function CalendarPage() {
     const completionRate = totalTasks > 0 
       ? Math.round((completedTasks / totalTasks) * 100 * 100) / 100
       : 0
-    
-    console.log('Summary result:', { totalTasks, completedTasks, pendingTasks, overdueTasks, completionRate })
-    console.log('=== END DEBUG ===')
     
     return {
       totalTasks,

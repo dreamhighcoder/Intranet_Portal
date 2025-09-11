@@ -4,7 +4,7 @@ import { useEffect, useState } from "react"
 import { usePositionAuth } from "@/lib/position-auth-context"
 import { Navigation } from "@/components/navigation"
 import { KPIWidgets } from "@/components/admin/kpi-widgets"
-import { RecentMissedTasks } from "@/components/admin/recent-missed-tasks"
+
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -76,8 +76,6 @@ export default function AdminDashboard() {
       </div>
     )
   }
-
-
 
   if (!user || !isAdmin) return null
 
@@ -217,12 +215,7 @@ export default function AdminDashboard() {
           </div>
         </div>
 
-        {/* Recent Missed Tasks */}
-        <div>
-          <h2 className="text-xl sm:text-2xl font-bold mb-0 sm:mb-1 text-[var(--color-text)]">Recent Issues</h2>
-          <p className="text-sm text-[var(--color-text-secondary)] mb-4 sm:mb-6">Showing missed and overdue tasks from the last 3 days (Australia/Sydney).</p>
-          <RecentMissedTasks />
-        </div>
+
       </main>
     </div>
   )

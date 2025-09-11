@@ -1096,8 +1096,8 @@ export default function RoleChecklistPage() {
   
   // Bulk action states
   const [selectedTasks, setSelectedTasks] = useState<Set<string>>(new Set())
-  const [bulkDeleteConfirmModal, setBulkDeleteConfirmModal] = useState(false)
-  const [bulkActionLoading, setBulkActionLoading] = useState(false)
+  const [setBulkDeleteConfirmModal] = useState(false)
+  const [setBulkActionLoading] = useState(false)
 
   // Load public holidays for current year to enable PH-aware UI lock/appearance
   useEffect(() => {

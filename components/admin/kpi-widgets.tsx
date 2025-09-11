@@ -12,6 +12,8 @@ interface DashboardStats {
   avgTimeToCompleteHours: number
   missedLast7Days: number
   totalTasks: number
+  overdueTasks: number
+  completedTasks: number
 }
 
 export function KPIWidgets() {
@@ -54,7 +56,9 @@ export function KPIWidgets() {
             onTimeCompletionRate: Math.round(data.summary.onTimeCompletionRate || 0),
             avgTimeToCompleteHours: Math.round((data.summary.avgTimeToCompleteHours || 0) * 10) / 10,
             missedLast7Days: data.summary.missedLast7Days || 0,
-            totalTasks: data.summary.completedTasks || 0,
+            totalTasks: data.summary.totalTasks || 0,
+            overdueTasks: data.summary.overdueTasks || 0,
+            completedTasks: data.summary.completedTasks || 0,
           })
         } else {
           // If no data or no summary, show zeros but don't show error
@@ -64,6 +68,8 @@ export function KPIWidgets() {
             avgTimeToCompleteHours: 0,
             missedLast7Days: 0,
             totalTasks: 0,
+            overdueTasks: 0,
+            completedTasks: 0,
           })
         }
       } catch (error) {
@@ -74,6 +80,8 @@ export function KPIWidgets() {
           avgTimeToCompleteHours: 0,
           missedLast7Days: 0,
           totalTasks: 0,
+          overdueTasks: 0,
+          completedTasks: 0,
         })
       } finally {
         setIsLoading(false)
@@ -109,12 +117,12 @@ export function KPIWidgets() {
       bgColor: "bg-red-100",
     },
     {
-      title: "Total Completed Tasks (7 days)",
-      value: isLoading ? "..." : stats?.totalTasks || 0,
-      description: "Total completed tasks in last 7 days",
+      title: "Overdue Tasks",
+      value: isLoading ? "..." : stats?.overdueTasks || 0,
+      description: "Tasks currently overdue",
       icon: Calendar,
-      color: "text-purple-600",
-      bgColor: "bg-purple-100",
+      color: "text-orange-600",
+      bgColor: "bg-orange-100",
     },
   ]
 

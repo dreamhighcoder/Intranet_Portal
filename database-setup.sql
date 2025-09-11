@@ -8,12 +8,12 @@
 CREATE TABLE IF NOT EXISTS system_settings (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   timezone TEXT NOT NULL DEFAULT 'Australia/Sydney',
-  new_since_hour TIME NOT NULL DEFAULT '09:00:00',
+  new_since_hour TIME NOT NULL DEFAULT '00:00:00',
   missed_cutoff_time TIME NOT NULL DEFAULT '23:59:00',
   auto_logout_enabled BOOLEAN NOT NULL DEFAULT true,
   auto_logout_delay_minutes INTEGER NOT NULL DEFAULT 5,
-  task_generation_days_ahead INTEGER NOT NULL DEFAULT 365,
-  task_generation_days_behind INTEGER NOT NULL DEFAULT 30,
+  task_generation_days_ahead INTEGER NOT NULL DEFAULT 999999,
+  task_generation_days_behind INTEGER NOT NULL DEFAULT 0,
   working_days TEXT[] NOT NULL DEFAULT ARRAY['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'],
   public_holiday_push_forward BOOLEAN NOT NULL DEFAULT true,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -41,7 +41,7 @@ BEGIN
   
   -- Check and add new_since_hour column
   IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'system_settings' AND column_name = 'new_since_hour') THEN
-    ALTER TABLE system_settings ADD COLUMN new_since_hour TIME NOT NULL DEFAULT '09:00:00';
+    ALTER TABLE system_settings ADD COLUMN new_since_hour TIME NOT NULL DEFAULT '00:00:00';
   END IF;
   
   -- Check and add missed_cutoff_time column
@@ -61,12 +61,12 @@ BEGIN
   
   -- Check and add task_generation_days_ahead column
   IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'system_settings' AND column_name = 'task_generation_days_ahead') THEN
-    ALTER TABLE system_settings ADD COLUMN task_generation_days_ahead INTEGER NOT NULL DEFAULT 365;
+    ALTER TABLE system_settings ADD COLUMN task_generation_days_ahead INTEGER NOT NULL DEFAULT 999999;
   END IF;
   
   -- Check and add task_generation_days_behind column
   IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'system_settings' AND column_name = 'task_generation_days_behind') THEN
-    ALTER TABLE system_settings ADD COLUMN task_generation_days_behind INTEGER NOT NULL DEFAULT 30;
+    ALTER TABLE system_settings ADD COLUMN task_generation_days_behind INTEGER NOT NULL DEFAULT 0;
   END IF;
   
   -- Check and add working_days column
@@ -120,8 +120,8 @@ SELECT
   '23:59:00',
   true,
   5,
-  365,
-  30,
+  999999,
+  0,
   ARRAY['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'],
   true,
   NOW(),
