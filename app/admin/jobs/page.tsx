@@ -103,21 +103,21 @@ export default function SystemHealthPage() {
         setResults(prev => ({ ...prev, [testType]: result }))
       } else {
         // Set error result if API call fails
-        setResults(prev => ({ 
-          ...prev, 
-          [testType]: { 
-            success: false, 
-            message: `Test failed: API call returned no data` 
-          } 
+        setResults(prev => ({
+          ...prev,
+          [testType]: {
+            success: false,
+            message: `Test failed: API call returned no data`
+          }
         }))
       }
     } catch (error) {
-      setResults(prev => ({ 
-        ...prev, 
-        [testType]: { 
-          success: false, 
-          message: `Error: ${error instanceof Error ? error.message : 'Unknown error'}` 
-        } 
+      setResults(prev => ({
+        ...prev,
+        [testType]: {
+          success: false,
+          message: `Error: ${error instanceof Error ? error.message : 'Unknown error'}`
+        }
       }))
     } finally {
       setIsRunning(null)
@@ -131,21 +131,21 @@ export default function SystemHealthPage() {
       if (result) {
         setResults(prev => ({ ...prev, emergency: result }))
       } else {
-        setResults(prev => ({ 
-          ...prev, 
-          emergency: { 
-            success: false, 
-            message: `Emergency fix failed: API call returned no data` 
-          } 
+        setResults(prev => ({
+          ...prev,
+          emergency: {
+            success: false,
+            message: `Emergency fix failed: API call returned no data`
+          }
         }))
       }
     } catch (error) {
-      setResults(prev => ({ 
-        ...prev, 
-        emergency: { 
-          success: false, 
-          message: `Error: ${error instanceof Error ? error.message : 'Unknown error'}` 
-        } 
+      setResults(prev => ({
+        ...prev,
+        emergency: {
+          success: false,
+          message: `Error: ${error instanceof Error ? error.message : 'Unknown error'}`
+        }
       }))
     } finally {
       setIsRunning(null)
@@ -183,14 +183,13 @@ export default function SystemHealthPage() {
               <div className="flex items-center space-x-4">
                 <div className="text-right">
                   <div className="text-sm text-white">System Status</div>
-                  <Badge className={`${
-                    systemHealth.status === 'healthy' ? 'bg-green-500 text-white' :
+                  <Badge className={`${systemHealth.status === 'healthy' ? 'bg-green-500 text-white' :
                     systemHealth.status === 'warning' ? 'bg-yellow-500 text-white' :
-                    'bg-red-500 text-white'
-                  }`}>
+                      'bg-red-500 text-white'
+                    }`}>
                     {systemHealth.status === 'healthy' ? '✓ Healthy' :
-                     systemHealth.status === 'warning' ? '⚠ Warning' :
-                     '✗ Error'}
+                      systemHealth.status === 'warning' ? '⚠ Warning' :
+                        '✗ Error'}
                   </Badge>
                 </div>
                 <Activity className="w-8 h-8 text-white" />
@@ -269,14 +268,14 @@ export default function SystemHealthPage() {
                     {systemHealth.metrics.activeMasterTasks}
                   </p>
                 </div>
-                
+
                 <div className="text-center p-4 bg-green-50 rounded-lg">
                   <h3 className="font-semibold text-green-800">Completions Today</h3>
                   <p className="text-2xl font-bold text-green-600 mt-1">
                     {systemHealth.metrics.completionsToday}
                   </p>
                 </div>
-                
+
                 <div className="text-center p-4 bg-purple-50 rounded-lg">
                   <h3 className="font-semibold text-purple-800">Database Status</h3>
                   <p className="text-lg font-bold mt-1">
@@ -304,7 +303,7 @@ export default function SystemHealthPage() {
               <p className="text-[var(--color-text-secondary)]">
                 Run diagnostic tests to verify system components are working correctly
               </p>
-              
+
               <div className="space-y-2">
                 <Button
                   onClick={() => runDiagnosticTest('recurrence')}
@@ -318,7 +317,7 @@ export default function SystemHealthPage() {
                   )}
                   Test Recurrence Engine
                 </Button>
-                
+
                 <Button
                   onClick={() => runDiagnosticTest('performance')}
                   disabled={isRunning === 'performance'}
@@ -352,33 +351,35 @@ export default function SystemHealthPage() {
                 <div className="space-y-2">
                   {Object.entries(results).map(([key, result]) => (
                     <Alert key={key} className={result.success ? "border-green-200 bg-green-50" : "border-red-200 bg-red-50"}>
-                      <div className="flex items-start">
-                        {result.success ? (
+                      {result.success ? (
+                        <div>
                           <CheckCircle className="w-4 h-4 text-green-600 mr-2 mt-0.5" />
-                        ) : (
-                          <AlertCircle className="w-4 h-4 text-red-600 mr-2 mt-0.5" />
-                        )}
-                        <div className="flex-1">
-                          <AlertDescription className={result.success ? "text-green-800" : "text-red-800"}>
-                            <strong>{key.replace('-', ' ').toUpperCase()}:</strong> {result.message}
-                            {result.stats && (
-                              <div className="mt-2 text-sm">
-                                {key === 'recurrence' && result.stats.tasksProcessed !== undefined && (
-                                  <>Tasks Processed: {result.stats.tasksProcessed} | Duration: {result.stats.duration}ms</>
-                                )}
-                                {key === 'performance' && result.stats.apiResponseTime !== undefined && (
-                                  <>API Response: {result.stats.apiResponseTime}ms | DB Query: {result.stats.databaseQueryTime}ms | Status: {result.stats.status}</>
-                                )}
-                                {key === 'data-integrity' && result.stats.issuesFound !== undefined && (
-                                  <>Issues Found: {result.stats.issuesFound} | Status: {result.stats.status}</>
-                                )}
-                                {!['recurrence', 'performance', 'data-integrity'].includes(key) && (
-                                  <pre className="whitespace-pre-wrap">{JSON.stringify(result.stats, null, 2)}</pre>
-                                )}
-                              </div>
-                            )}
-                          </AlertDescription>
                         </div>
+                      ) : (
+                        <div>
+                          <AlertCircle className="w-4 h-4 text-red-600 mr-2 mt-0.5" />
+                        </div>
+                      )}
+                      <div className="flex-1 ml-6">
+                        <AlertDescription className={result.success ? "text-green-800" : "text-red-800"}>
+                          <strong>{key.replace('-', ' ').toUpperCase()}:</strong> {result.message}
+                          {result.stats && (
+                            <div className="text-sm">
+                              {key === 'recurrence' && result.stats.tasksProcessed !== undefined && (
+                                <>Tasks Processed: {result.stats.tasksProcessed} | Duration: {result.stats.duration}ms</>
+                              )}
+                              {key === 'performance' && result.stats.apiResponseTime !== undefined && (
+                                <>API Response: {result.stats.apiResponseTime}ms | DB Query: {result.stats.databaseQueryTime}ms | Status: {result.stats.status}</>
+                              )}
+                              {key === 'data-integrity' && result.stats.issuesFound !== undefined && (
+                                <>Issues Found: {result.stats.issuesFound} | Status: {result.stats.status}</>
+                              )}
+                              {!['recurrence', 'performance', 'data-integrity'].includes(key) && (
+                                <pre className="whitespace-pre-wrap">{JSON.stringify(result.stats, null, 2)}</pre>
+                              )}
+                            </div>
+                          )}
+                        </AlertDescription>
                       </div>
                     </Alert>
                   ))}
@@ -397,16 +398,18 @@ export default function SystemHealthPage() {
             </CardHeader>
             <CardContent className="space-y-4">
               <Alert className="border-yellow-200 bg-yellow-50">
-                <AlertCircle className="w-4 h-4 text-yellow-600" />
-                <AlertDescription className="text-yellow-800">
+                <div>
+                  <AlertCircle className="w-4 h-4 text-yellow-600 mt-0.5" />
+                </div>
+                <AlertDescription className="text-yellow-800 ml-6">
                   <strong>Note:</strong> The system operates automatically. These tools are only for emergency situations or troubleshooting.
                 </AlertDescription>
               </Alert>
-              
+
               <p className="text-[var(--color-text-secondary)]">
                 Emergency data repair and manual intervention tools
               </p>
-              
+
               <Button
                 onClick={runEmergencyFix}
                 disabled={isRunning === 'emergency'}
@@ -422,25 +425,27 @@ export default function SystemHealthPage() {
 
               {results.emergency && (
                 <Alert className={results.emergency.success ? "border-green-200 bg-green-50" : "border-red-200 bg-red-50"}>
-                  <div className="flex items-start">
-                    {results.emergency.success ? (
+                  {results.emergency.success ? (
+                    <div>
                       <CheckCircle className="w-4 h-4 text-green-600 mr-2 mt-0.5" />
-                    ) : (
-                      <AlertCircle className="w-4 h-4 text-red-600 mr-2 mt-0.5" />
-                    )}
-                    <div className="flex-1">
-                      <AlertDescription className={results.emergency.success ? "text-green-800" : "text-red-800"}>
-                        {results.emergency.message}
-                        {results.emergency.stats && (
-                          <div className="mt-2 text-sm">
-                            Total Tasks: {results.emergency.stats.totalTasks || 0} | 
-                            New Instances: {results.emergency.stats.newInstances || 0} | 
-                            Total Instances: {results.emergency.stats.totalInstances || 0} | 
-                            Errors: {results.emergency.stats.errors || 0}
-                          </div>
-                        )}
-                      </AlertDescription>
                     </div>
+                  ) : (
+                    <div>
+                      <AlertCircle className="w-4 h-4 text-red-600 mr-2 mt-0.5" />
+                    </div>
+                  )}
+                  <div className="flex-1 ml-6">
+                    <AlertDescription className={results.emergency.success ? "text-green-800" : "text-red-800"}>
+                      {results.emergency.message}
+                      {results.emergency.stats && (
+                        <div className="text-sm">
+                          Total Tasks: {results.emergency.stats.totalTasks || 0} |
+                          New Instances: {results.emergency.stats.newInstances || 0} |
+                          Total Instances: {results.emergency.stats.totalInstances || 0} |
+                          Errors: {results.emergency.stats.errors || 0}
+                        </div>
+                      )}
+                    </AlertDescription>
                   </div>
                 </Alert>
               )}
@@ -458,12 +463,12 @@ export default function SystemHealthPage() {
               <div className="text-center p-3 bg-green-50 rounded-lg">
                 <h3 className="font-semibold text-green-800">System Status</h3>
                 <p className="text-sm text-green-600 mt-1">
-                  ✅ Fully Automatic Operation<br />
-                  ✅ Real-time Status Updates<br />
-                  ✅ Dynamic Task Generation
+                  Fully Automatic Operation<br />
+                  Real-time Status Updates<br />
+                  Dynamic Task Generation
                 </p>
               </div>
-              
+
               <div className="text-center p-3 bg-blue-50 rounded-lg">
                 <h3 className="font-semibold text-blue-800">Environment</h3>
                 <p className="text-sm text-blue-600 mt-1">
@@ -472,7 +477,7 @@ export default function SystemHealthPage() {
                   API: {systemHealth.status === 'error' ? 'Error' : 'Operational'}
                 </p>
               </div>
-              
+
               <div className="text-center p-3 bg-purple-50 rounded-lg">
                 <h3 className="font-semibold text-purple-800">Actions</h3>
                 <Button
@@ -504,14 +509,14 @@ export default function SystemHealthPage() {
           <CardContent>
             <div className="space-y-4 text-sm text-[var(--color-text-secondary)]">
               <div className="p-4 bg-green-50 border border-green-200 rounded-lg">
-                <h4 className="font-semibold text-green-800 mb-2">✅ Fully Automatic Operation</h4>
+                <h4 className="flex font-semibold text-green-800 mb-2"><CheckCircle className="w-4 h-4 text-green-600 mr-2 mt-0.5" />Fully Automatic Operation</h4>
                 <p className="text-green-700">
-                  The system operates completely automatically without requiring manual intervention. 
+                  The system operates completely automatically without requiring manual intervention.
                   Tasks appear immediately when activated and statuses update in real-time.
                 </p>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 ml-4">
                 <div>
                   <h4 className="font-semibold text-[var(--color-text)] mb-2">🔄 Dynamic Task Generation</h4>
                   <ul className="list-disc list-inside space-y-1">
@@ -521,7 +526,7 @@ export default function SystemHealthPage() {
                     <li>Recurrence rules calculated in real-time</li>
                   </ul>
                 </div>
-                
+
                 <div>
                   <h4 className="font-semibold text-[var(--color-text)] mb-2">⚡ Real-time Status Updates</h4>
                   <ul className="list-disc list-inside space-y-1">
@@ -533,7 +538,7 @@ export default function SystemHealthPage() {
                 </div>
               </div>
 
-              <div>
+              <div className="ml-4">
                 <h4 className="font-semibold text-[var(--color-text)] mb-2">🛠️ When to Use These Tools</h4>
                 <ul className="list-disc list-inside space-y-1">
                   <li><strong>Diagnostic Tests:</strong> Verify system components are working correctly</li>
@@ -545,7 +550,7 @@ export default function SystemHealthPage() {
 
               <div className="p-3 bg-blue-50 border border-blue-200 rounded">
                 <p className="text-blue-800">
-                  <strong>💡 Pro Tip:</strong> The system is designed to be maintenance-free. 
+                  <strong>💡 Pro Tip:</strong> The system is designed to be maintenance-free.
                   These diagnostic tools are provided for monitoring and troubleshooting purposes only.
                 </p>
               </div>

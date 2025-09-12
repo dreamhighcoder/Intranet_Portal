@@ -17,9 +17,9 @@ async function getResponsibilityFromPositionId(positionId: string): Promise<stri
     .select('name')
     .eq('id', positionId)
     .single()
-  
+
   if (!position) return null
-  
+
   // The responsibility values in the database are the display names, not the value keys
   // So we return the position name directly
   return position.name
@@ -27,16 +27,11 @@ async function getResponsibilityFromPositionId(positionId: string): Promise<stri
 
 export async function GET(request: NextRequest) {
   try {
-    console.log('Dashboard API: Starting request')
-    
     const user = await requireAuth(request)
-    console.log('Dashboard API: Authenticated user:', { id: user.id, role: user.role })
-    
+
     const searchParams = request.nextUrl.searchParams
     const positionId = searchParams.get('position_id')
     const dateRange = searchParams.get('date_range') || '7' // days
-    
-    console.log('Dashboard API: Query params:', { positionId, dateRange })
 
     // Calculate date range for the past N days (inclusive)
     // If today is Sept 11 and dateRange is 7, we want Sept 5-11 (7 days total)
@@ -44,23 +39,23 @@ export async function GET(request: NextRequest) {
     const endDate = parseAustralianDate(todayStr) // Use today as end date
     const startDate = new Date(endDate)
     startDate.setDate(endDate.getDate() - (parseInt(dateRange) - 1)) // -6 for 7 days total
-    
+
     // For missed task tracking, we need to look back further to find when tasks first became missed
     const extendedStartDate = new Date(endDate)
     extendedStartDate.setDate(endDate.getDate() - (parseInt(dateRange) + 30 - 1)) // Look back 30 extra days
-    
+
     const startDateStr = formatAustralianDate(startDate)
     const endDateStr = formatAustralianDate(endDate)
     const extendedStartDateStr = formatAustralianDate(extendedStartDate)
-    
+
     console.log('Dashboard API: Date range:', { startDateStr, endDateStr, todayStr, extendedStartDateStr })
 
     // Generate task occurrences for the extended date range to track when tasks first became missed
     const allTaskOccurrences = await generateTaskOccurrences(extendedStartDateStr, endDateStr, positionId)
-    
+
     // Filter to get only the last 7 days for main dashboard stats
     const taskOccurrences = allTaskOccurrences.filter(occ => occ.date >= startDateStr)
-    
+
     console.log('Dashboard API: Generated task occurrences:', taskOccurrences.length)
 
     // Handle case where no task occurrences exist
@@ -72,7 +67,7 @@ export async function GET(request: NextRequest) {
       try {
         const { data: positions } = await supabaseAdmin
           .from('positions')
-          .select('id, name, display_name')
+          .select('id, name')
         const nonAdminPositions = (positions || []).filter(p => (p.name || '') !== 'Administrator')
 
         // Build absolute origin for internal fetches (more reliable than nextUrl as base)
@@ -83,10 +78,9 @@ export async function GET(request: NextRequest) {
         const perPositionOverdueCounts = await Promise.all(
           nonAdminPositions.map(async (pos) => {
             try {
-              const display = (pos as any).display_name || pos.name
-              const roleParam = display
+              const roleParam = pos.name
               const urlStr = origin ? `${origin}/api/checklist/counts?role=${encodeURIComponent(roleParam)}&date=${todayStr}`
-                                    : `/api/checklist/counts?role=${encodeURIComponent(roleParam)}&date=${todayStr}`
+                : `/api/checklist/counts?role=${encodeURIComponent(roleParam)}&date=${todayStr}`
               const res = await fetch(urlStr)
               if (!res.ok) return 0
               const json = await res.json().catch(() => null)
@@ -146,11 +140,11 @@ export async function GET(request: NextRequest) {
         due_time: occurrence.dueTime
       }
     }))
-    
+
     // Filter tasks by their dynamic status
     const completedTasks = tasksWithDynamicStatus.filter(task => task.dynamicStatus === 'completed')
     const todayTasks = tasksWithDynamicStatus.filter(task => task.instance_date === todayStr)
-    
+
     // Convert ALL task occurrences (extended range) to find when tasks first became overdue
     const allTasksWithDynamicStatus = allTaskOccurrences.map(occurrence => ({
       id: `${occurrence.masterTaskId}:${occurrence.date}`,
@@ -170,20 +164,55 @@ export async function GET(request: NextRequest) {
         due_time: occurrence.dueTime
       }
     }))
-    
+
     // Sort all tasks by date to find first occurrence of overdue/missed status
     const sortedAllTasks = allTasksWithDynamicStatus.sort((a, b) => a.instance_date.localeCompare(b.instance_date))
-    
-    // For "Overdue Tasks" metric: Use current overdue count from today's checklist
-    // This aligns with the checklist display and shows current operational overdue tasks
+
+    // For "Overdue Tasks" metric: Count overdue tasks across all positions individually
+    // This counts shared tasks multiple times (once per position) unlike checklist which counts them once
 
     // For today's section: show actual overdue tasks today (for operational purposes)
     const todayOverdueTasksActual = todayTasks.filter(t => t.dynamicStatus === 'overdue')
 
-    // Use generator-derived current overdue count (unique tasks) to match checklist display
-    // Avoid per-position aggregation to prevent double counting multi-responsibility tasks
-    const todayOverdueAcrossPositions = todayOverdueTasksActual.length
-    
+    // For overdue count, use per-position counting by making internal API calls
+    // This matches exactly how the homepage cards work and ensures consistency
+    let todayOverdueAcrossPositions = 0
+    try {
+      const { data: positions } = await supabaseAdmin
+        .from('positions')
+        .select('id, name')
+      const nonAdminPositions = (positions || []).filter(p => (p.name || '') !== 'Administrator')
+
+      // Build absolute origin for internal fetches
+      const origin = (() => {
+        try { return new URL(request.url).origin } catch { return '' }
+      })()
+
+      const perPositionOverdueCounts = await Promise.all(
+        nonAdminPositions.map(async (pos) => {
+          try {
+            const roleParam = pos.name
+            const urlStr = origin ? `${origin}/api/checklist/counts?role=${encodeURIComponent(roleParam)}&date=${todayStr}`
+              : `/api/checklist/counts?role=${encodeURIComponent(roleParam)}&date=${todayStr}`
+            const res = await fetch(urlStr)
+            if (!res.ok) return 0
+            const json = await res.json().catch(() => null)
+            if (json && json.success && json.data && typeof json.data.overdue === 'number') {
+              return json.data.overdue as number
+            }
+            return 0
+          } catch (inner) {
+            return 0
+          }
+        })
+      )
+      todayOverdueAcrossPositions = perPositionOverdueCounts.reduce((a, b) => a + b, 0)
+    } catch (e) {
+      // Fallback to unified count if per-position fails
+      const allCurrentlyOverdueTasks = allTasksWithDynamicStatus.filter(t => t.dynamicStatus === 'overdue')
+      todayOverdueAcrossPositions = allCurrentlyOverdueTasks.length
+    }
+
     // For "Missed Tasks (7 days)" metric: Count ALL missed tasks within the last 7 days
     // Among tasks that are assigned to today's checklist based on their frequency
     // Example: 39 missed on Sept 10 + 39 missed on Sept 11 = 78 total (for tasks that also appear today)
@@ -192,18 +221,18 @@ export async function GET(request: NextRequest) {
         .filter(occ => occ.date === todayStr)
         .map(occ => occ.masterTaskId)
     )
-    const missedTasksLast7Days = tasksWithDynamicStatus.filter(task => 
+    const missedTasksLast7Days = tasksWithDynamicStatus.filter(task =>
       task.dynamicStatus === 'missed' &&
       task.instance_date >= startDateStr &&
       todayMasterIds.has(task.master_task_id)
     )
-    
+
     console.log('Dashboard API: Date range for filtering:', { startDateStr, endDateStr })
     console.log('Dashboard API: All occurrences (extended) count:', allTaskOccurrences.length)
     console.log('Dashboard API: Window occurrences (7d) count:', tasksWithDynamicStatus.length)
-    console.log('Dashboard API: Today overdue tasks (actual):', todayOverdueTasksActual.length, '| across positions:', todayOverdueAcrossPositions)
+    console.log('Dashboard API: Today overdue tasks (actual):', todayOverdueTasksActual.length, '| all currently overdue across positions:', todayOverdueAcrossPositions)
     console.log('Dashboard API: Missed tasks (7 days, appear-today) count:', missedTasksLast7Days.length)
-    
+
     // On-time completion rate (completed_at must be on/before AUS due date AND due time)
     const onTimeCompletions = completedTasks.filter(task => {
       if (!task.completed_at || !task.due_date) return false
@@ -219,8 +248,8 @@ export async function GET(request: NextRequest) {
         return false
       }
     })
-    
-    const onTimeCompletionRate = completedTasks.length > 0 
+
+    const onTimeCompletionRate = completedTasks.length > 0
       ? Math.round((onTimeCompletions.length / completedTasks.length) * 100 * 100) / 100
       : 0
 
@@ -234,7 +263,7 @@ export async function GET(request: NextRequest) {
           const availableUtc = fromAustralianTime(availableAus)
           // completed_at stored in UTC
           const completedUtc = new Date(task.completed_at as string)
-          
+
           const hoursToComplete = (completedUtc.getTime() - availableUtc.getTime()) / (1000 * 60 * 60)
           return Math.abs(hoursToComplete)
         } catch (error) {
@@ -242,7 +271,7 @@ export async function GET(request: NextRequest) {
           return 0
         }
       })
-    
+
     const avgTimeToComplete = completionTimes.length > 0
       ? Math.round((completionTimes.reduce((sum, time) => sum + time, 0) / completionTimes.length) * 100) / 100
       : 0
@@ -326,7 +355,7 @@ export async function GET(request: NextRequest) {
 
   } catch (error) {
     console.error('Dashboard API: Unexpected error:', error)
-    return NextResponse.json({ 
+    return NextResponse.json({
       error: 'Internal server error',
       details: error instanceof Error ? error.message : 'Unknown error'
     }, { status: 500 })
