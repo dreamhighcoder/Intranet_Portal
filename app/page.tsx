@@ -81,11 +81,11 @@ export default function HomePage() {
 
         const checklists = positionsOrdered.map((position: any, index: number) => {
           const display = position.displayName || position.name
-          
+
           // Get the appropriate icon for this position
           // For positions with specific icons, use those; for new positions, use fallback icons
           const icon = getPositionIcon(display, index)
-          
+
           return ({
             title: `Checklist – ${display}`,
             description: getPositionDescription(display),
@@ -186,7 +186,7 @@ export default function HomePage() {
 
       <main className="max-w-content-lg mx-auto px-4 sm:px-6 lg:px-18 py-6 sm:py-8">
         {/* Welcome Banner */}
-        <div className="mb-8">
+        <div className="mb-4 lg:mb-6 lg:mt- xl:mb-10 xl:mt-2">
           <div
             className="pharmacy-gradient rounded-lg p-4 sm:p-6 relative overflow-hidden"
             style={{
@@ -222,8 +222,8 @@ export default function HomePage() {
             </div>
 
             {/* Content */}
-            <div className="relative z-10">
-              <h1 className="text-2xl sm:text-3xl font-bold mb-2">Welcome to Richmond Pharmacy</h1>
+            <div className="relative z-10 py-2">
+              <h1 className="text-3xl sm:text-4xl font-bold mb-2">Welcome to Richmond Pharmacy</h1>
               <p className="opacity-90 text-sm sm:text-base">
                 Access your position-specific checklist to manage daily tasks and responsibilities
               </p>
@@ -233,9 +233,6 @@ export default function HomePage() {
 
         {/* Staff Checklists Section */}
         <div className="mb-8">
-          <h2 className="text-xl sm:text-2xl font-bold mb-4 sm:mb-6" style={{ color: "white" }}>
-            Staff Checklists
-          </h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
             {staffChecklists.map((checklist) => {
               const IconComponent = checklist.icon

@@ -89,6 +89,27 @@ export function KPIWidgets() {
     }
 
     fetchDashboardStats()
+
+    // Listen for task completion events to refresh KPI data
+    const onTaskStatusChanged = (e: Event) => {
+      const detail = (e as CustomEvent).detail
+      console.log('📊 KPIWidgets received task-status-changed event:', detail)
+      fetchDashboardStats()
+    }
+
+    const onTasksChanged = (e: Event) => {
+      const detail = (e as CustomEvent).detail
+      console.log('📊 KPIWidgets received tasks-changed event:', detail)
+      fetchDashboardStats()
+    }
+
+    window.addEventListener('task-status-changed', onTaskStatusChanged)
+    window.addEventListener('tasks-changed', onTasksChanged)
+
+    return () => {
+      window.removeEventListener('task-status-changed', onTaskStatusChanged)
+      window.removeEventListener('tasks-changed', onTasksChanged)
+    }
   }, [user, authLoading])
 
   const widgets = [

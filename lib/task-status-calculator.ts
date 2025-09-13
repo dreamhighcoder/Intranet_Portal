@@ -44,7 +44,10 @@ export type TaskStatus =
 export function calculateTaskStatus(task: TaskStatusInput, currentDate?: string): TaskStatus {
   try {
     // 1) Hard precedence: completion
-    if (task.is_completed_for_position || task.status === 'completed') return 'completed'
+    // For position-specific completion, only check is_completed_for_position
+    // The main task status (completed/done) is set when ANY position completes it,
+    // but we need position-specific completion status for shared tasks
+    if (task.is_completed_for_position) return 'completed'
 
     const now = getAustralianNow()
     const todayStr = currentDate || getAustralianToday()

@@ -270,8 +270,8 @@ export default function ReportsPage() {
 
   // Filters
   const [dateRange, setDateRange] = useState({
-    // Initialize using AU calendar days to avoid client TZ skew
-    from: new Date(new Date().setDate(new Date().getDate() - 30)),
+    // Default to last 30 days, but administrators can change this to any range they want
+    from: new Date(new Date().setDate(new Date().getDate() - 29)),
     to: new Date(),
   })
   const [selectedPosition, setSelectedPosition] = useState<string>("all")
@@ -290,6 +290,29 @@ export default function ReportsPage() {
     if (!authLoading && user && isAdmin) {
       loadPositions()
       loadReports()
+    }
+
+    // Listen for task completion events to refresh reports data
+    const onTaskStatusChanged = () => {
+      console.log('Reports: Task status changed, refreshing reports data')
+      if (user && isAdmin) {
+        loadReports()
+      }
+    }
+
+    const onTasksChanged = () => {
+      console.log('Reports: Tasks changed, refreshing reports data')
+      if (user && isAdmin) {
+        loadReports()
+      }
+    }
+
+    window.addEventListener('task-status-changed', onTaskStatusChanged)
+    window.addEventListener('tasks-changed', onTasksChanged)
+
+    return () => {
+      window.removeEventListener('task-status-changed', onTaskStatusChanged)
+      window.removeEventListener('tasks-changed', onTasksChanged)
     }
   }, [authLoading, user, isAdmin])
 
@@ -609,8 +632,8 @@ export default function ReportsPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {reportData.outstandingTasks.outstandingTasks.slice(0, 10).map((task) => (
-                  <TableRow key={task.id}>
+                {reportData.outstandingTasks.outstandingTasks.slice(0, 10).map((task, index) => (
+                  <TableRow key={`${task.id}-${index}`}>
                     <TableCell className="py-3">
                       <div className="max-w-full">
                         <div className="font-medium truncate">{task.master_tasks.title}</div>
@@ -648,8 +671,8 @@ export default function ReportsPage() {
 
           {/* Mobile Card Layout */}
           <div className="lg:hidden space-y-4">
-            {reportData.outstandingTasks.outstandingTasks.slice(0, 10).map((task) => (
-              <Card key={task.id} className="border border-gray-200">
+            {reportData.outstandingTasks.outstandingTasks.slice(0, 10).map((task, index) => (
+              <Card key={`${task.id}-${index}`} className="border border-gray-200">
                 <CardContent className="p-4">
                   <div className="space-y-3">
                     {/* Title and Description */}

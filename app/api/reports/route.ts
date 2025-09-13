@@ -130,7 +130,9 @@ async function getTaskSummaryReport(startDate?: string | null, endDate?: string 
           statusCounts.not_due++
           break
         default:
-          statusCounts.due_today++ // Default for unknown statuses
+          // Unknown status - don't count it anywhere to avoid incorrect totals
+          console.warn('Reports API - Unknown task status:', task.status)
+          break
       }
     })
 

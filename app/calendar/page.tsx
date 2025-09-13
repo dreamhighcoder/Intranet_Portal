@@ -12,9 +12,9 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { authenticatedGet, positionsApi } from "@/lib/api-client"
 import { toastError } from "@/hooks/use-toast"
 import { toKebabCase } from "@/lib/responsibility-mapper"
-import { 
-  ChevronLeft, 
-  ChevronRight, 
+import {
+  ChevronLeft,
+  ChevronRight,
   Calendar as CalendarIcon,
   CheckCircle,
   Clock,
@@ -81,7 +81,7 @@ const dayNames = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
 export default function CalendarPage() {
   const { user, isLoading: authLoading, isAdmin } = usePositionAuth()
   const router = useRouter()
-  
+
   const [calendarData, setCalendarData] = useState<CalendarData | null>(null)
   const [positions, setPositions] = useState<Position[]>([])
   const [loading, setLoading] = useState(true)
@@ -89,7 +89,7 @@ export default function CalendarPage() {
   const [selectedPosition, setSelectedPosition] = useState<string>("all")
   const [datePickerOpen, setDatePickerOpen] = useState(false)
   const [loadingButton, setLoadingButton] = useState<string | null>(null)
-  
+
   // Ensure non-admins are locked to their own position
   useEffect(() => {
     if (!authLoading && user && !isAdmin) {
@@ -111,6 +111,25 @@ export default function CalendarPage() {
       loadPositions()
       loadCalendarData()
     }
+
+    // Listen for task completion events to refresh calendar data
+    const onTaskStatusChanged = () => {
+      console.log('Calendar: Task status changed, refreshing calendar data')
+      loadCalendarData()
+    }
+
+    const onTasksChanged = () => {
+      console.log('Calendar: Tasks changed, refreshing calendar data')
+      loadCalendarData()
+    }
+
+    window.addEventListener('task-status-changed', onTaskStatusChanged)
+    window.addEventListener('tasks-changed', onTasksChanged)
+
+    return () => {
+      window.removeEventListener('task-status-changed', onTaskStatusChanged)
+      window.removeEventListener('tasks-changed', onTasksChanged)
+    }
   }, [authLoading, user, currentDate, selectedPosition, view])
 
   // Reset loading button state when loading completes
@@ -122,7 +141,7 @@ export default function CalendarPage() {
 
   const loadPositions = async () => {
     if (!isAdmin) return
-    
+
     try {
       const positionsData = await positionsApi.getAll()
       // Filter out only exact 'Administrator'
@@ -138,21 +157,21 @@ export default function CalendarPage() {
     if (!calendarData) {
       setLoading(true)
     }
-    
+
     try {
       const year = currentDate.getFullYear()
       const month = currentDate.getMonth() + 1
-      
+
       const params = new URLSearchParams({
         year: year.toString(),
         month: month.toString(),
         view
       })
-      
+
       if (selectedPosition !== "all") {
         params.append('position_id', selectedPosition)
       }
-      
+
       if (view === "week") {
         params.append('date', formatAustralianDate(currentDate))
       }
@@ -172,7 +191,7 @@ export default function CalendarPage() {
   const navigateMonth = (direction: 'prev' | 'next') => {
     const buttonType = direction === 'prev' ? 'prev' : 'next'
     setLoadingButton(buttonType)
-    
+
     // Create a new Australian date based on current date
     const newDate = new Date(currentDate.getFullYear(), currentDate.getMonth(), currentDate.getDate())
     if (direction === 'prev') {
@@ -186,7 +205,7 @@ export default function CalendarPage() {
   const navigateWeek = (direction: 'prev' | 'next') => {
     const buttonType = direction === 'prev' ? 'prev' : 'next'
     setLoadingButton(buttonType)
-    
+
     // Create a new Australian date based on current date
     const newDate = new Date(currentDate.getFullYear(), currentDate.getMonth(), currentDate.getDate())
     if (direction === 'prev') {
@@ -246,78 +265,17 @@ export default function CalendarPage() {
     }
   }
 
-  // Calculate dynamic summary stats using the same logic as Daily Checklist
-  const calculateDynamicSummary = () => {
-    if (!calendarData) return null
+  // Get summary stats from API - now correctly calculated for current time
+  const getSummaryStats = () => {
+    if (!calendarData || !calendarData.summary) return null
 
-    // First, try to use the API summary if it exists and is reliable
-    // The Calendar API already calculates summary statistics based on task instances
-    if (calendarData.summary) {
-      return {
-        totalTasks: calendarData.summary.totalTasks,
-        completedTasks: calendarData.summary.completedTasks,
-        pendingTasks: calendarData.summary.pendingTasks,
-        overdueTasks: calendarData.summary.overdueTasks,
-        missedTasks: calendarData.summary.missedTasks,
-        completionRate: calendarData.summary.completionRate
-      }
-    }
-
-    // Fallback: Calculate from calendar day data using dynamic status calculation
-    // This ensures consistency with Daily Checklist logic
-    const today = getAustralianToday()
-    const todayDate = parseAustralianDate(today)
-    const currentAusDate = getAustralianNow()
-    
-    // Determine the summary period based on view mode
-    let relevantDays = calendarData.calendar
-    
-    if (view === 'month') {
-      // Month view: Summary is for the entire month, but only up to today if current month
-      const viewingMonth = currentDate.getMonth()
-      const viewingYear = currentDate.getFullYear()
-      const currentMonth = currentAusDate.getMonth()
-      const currentYear = currentAusDate.getFullYear()
-      
-      const isCurrentPeriod = (viewingYear === currentYear && viewingMonth === currentMonth)
-      
-      if (isCurrentPeriod) {
-        // Current month: only count up to today
-        const todayStr = formatAustralianDate(todayDate)
-        relevantDays = calendarData.calendar.filter(day => day.date <= todayStr)
-      }
-    } else {
-      // Week view: Summary is for the specific week being viewed
-      const startDate = parseAustralianDate(calendarData.metadata.startDate)
-      const endDate = parseAustralianDate(calendarData.metadata.endDate)
-      
-      const isCurrentPeriod = (todayDate >= startDate && todayDate <= endDate)
-      
-      if (isCurrentPeriod) {
-        // Current week: only count up to today
-        const todayStr = formatAustralianDate(todayDate)
-        relevantDays = calendarData.calendar.filter(day => day.date <= todayStr)
-      }
-    }
-    
-    // Calculate totals from the relevant days
-    const totalTasks = relevantDays.reduce((sum, day) => sum + day.total, 0)
-    const completedTasks = relevantDays.reduce((sum, day) => sum + day.completed, 0)
-    const pendingTasks = relevantDays.reduce((sum, day) => sum + day.pending, 0)
-    const overdueTasks = relevantDays.reduce((sum, day) => sum + day.overdue, 0)
-    const missedTasks = relevantDays.reduce((sum, day) => sum + day.missed, 0)
-    
-    const completionRate = totalTasks > 0 
-      ? Math.round((completedTasks / totalTasks) * 100 * 100) / 100
-      : 0
-    
     return {
-      totalTasks,
-      completedTasks,
-      pendingTasks,
-      overdueTasks,
-      missedTasks,
-      completionRate
+      totalTasks: calendarData.summary.totalTasks,
+      completedTasks: calendarData.summary.completedTasks,
+      pendingTasks: calendarData.summary.pendingTasks,
+      overdueTasks: calendarData.summary.overdueTasks,
+      missedTasks: calendarData.summary.missedTasks,
+      completionRate: calendarData.summary.completionRate
     }
   }
 
@@ -326,7 +284,7 @@ export default function CalendarPage() {
       // For admin users, navigate to admin checklist view with position filter applied
       let targetRole = 'administrator' // Admin role
       let url = `/checklist/${targetRole}?date=${date}&admin_mode=true`
-      
+
       // If a specific position is selected, add it as a responsibility filter parameter
       if (selectedPosition !== "all") {
         // Find the selected position and convert its name to responsibility format
@@ -337,17 +295,17 @@ export default function CalendarPage() {
           url += `&responsibility_filter=${responsibilityName}`
         }
       }
-      
+
       router.push(url)
     } else {
       // For regular users, navigate to their specific checklist
       let targetRole = 'pharmacist-in-charge' // default role
-      
+
       if (user?.position?.name) {
         // Convert position name to kebab-case for URL using the proper utility function
         targetRole = toKebabCase(user.position.name)
       }
-      
+
       router.push(`/checklist/${targetRole}?date=${date}`)
     }
   }
@@ -370,14 +328,13 @@ export default function CalendarPage() {
             // Interpret server date as Australian local date for display
             const date = toAustralianTime(new Date(day.date))
             const isToday = day.date === today
-            
+
             return (
               <div
                 key={day.date}
                 onClick={() => handleDayClick(day.date)}
-                className={`min-h-32 p-2 border rounded-lg cursor-pointer transition-all duration-200 hover:shadow-md hover:scale-[1.02] hover:border-blue-300 ${
-                  isToday ? 'bg-blue-50 border-blue-500 border-2 shadow-sm' : 'border-gray-200 bg-white hover:bg-blue-50'
-                } ${day.holiday ? 'bg-yellow-50 hover:bg-yellow-100' : ''}`}
+                className={`min-h-32 p-2 border rounded-lg cursor-pointer transition-all duration-200 hover:shadow-md hover:scale-[1.02] hover:border-blue-300 ${isToday ? 'bg-blue-50 border-blue-500 border-2 shadow-sm' : 'border-gray-200 bg-white hover:bg-blue-50'
+                  } ${day.holiday ? 'bg-yellow-50 hover:bg-yellow-100' : ''}`}
               >
                 <div className="flex items-center justify-between mb-2">
                   <span className={`text-sm font-medium ${isToday ? 'text-blue-600' : 'text-gray-900'}`}>
@@ -389,17 +346,17 @@ export default function CalendarPage() {
                     </Badge>
                   )}
                 </div>
-                
+
                 {day.holiday && (
                   <div className="text-xs text-yellow-700 mb-1 font-medium">
                     {day.holiday}
                   </div>
                 )}
-                
+
                 <div className="space-y-1">
-                  {day.tasks.slice(0, 3).map(task => (
+                  {day.tasks.slice(0, 2).map((task, taskIndex) => (
                     <div
-                      key={task.id}
+                      key={`${task.id}-${day.date}-${taskIndex}`}
                       className={`text-xs p-1 rounded flex items-center space-x-1 ${getStatusColor(task.status)}`}
                     >
                       {getStatusIcon(task.status)}
@@ -408,7 +365,7 @@ export default function CalendarPage() {
                   ))}
                   {day.tasks.length > 3 && (
                     <div className="text-xs text-gray-500 truncate">
-                      +{day.tasks.length - 3} more
+                      +{day.tasks.length - 2} more
                     </div>
                   )}
                 </div>
@@ -427,13 +384,13 @@ export default function CalendarPage() {
     const dayOfWeek = ausFirst.getDay() // 0=Sun,1=Mon,...
     const diffToMonday = (dayOfWeek + 6) % 7
     startDate.setDate(startDate.getDate() - diffToMonday)
-    
+
     const days = []
     for (let i = 0; i < 42; i++) {
       const date = new Date(startDate.getFullYear(), startDate.getMonth(), startDate.getDate() + i)
       const dateStr = formatAustralianDate(date)
       const dayData = calendar.find(d => d.date === dateStr)
-      
+
       days.push({
         date: dateStr,
         day: date.getDate(),
@@ -462,17 +419,12 @@ export default function CalendarPage() {
           <div
             key={index}
             onClick={() => day.isCurrentMonth ? handleDayClick(day.date) : null}
-            className={`min-h-24 p-2 border rounded-lg transition-all duration-200 ${
-              day.isCurrentMonth ? 'cursor-pointer hover:shadow-md hover:scale-[1.02] hover:border-blue-300' : 'cursor-not-allowed'
-            } ${
-              day.isToday ? 'bg-blue-50 border-blue-300 border-2 shadow-sm' : 'border-gray-200 bg-white'
-            } ${
-              day.isCurrentMonth && !day.isToday ? 'hover:bg-blue-50' : ''
-            } ${
-              !day.isCurrentMonth ? 'bg-gray-50 text-gray-400' : ''
-            } ${
-              day.data.holiday && day.isCurrentMonth ? 'bg-yellow-50 hover:bg-yellow-100' : ''
-            }`}
+            className={`min-h-24 p-2 border rounded-lg transition-all duration-200 ${day.isCurrentMonth ? 'cursor-pointer hover:shadow-md hover:scale-[1.02] hover:border-blue-300' : 'cursor-not-allowed'
+              } ${day.isToday ? 'bg-blue-50 border-blue-300 border-2 shadow-sm' : 'border-gray-200 bg-white'
+              } ${day.isCurrentMonth && !day.isToday ? 'hover:bg-blue-50' : ''
+              } ${!day.isCurrentMonth ? 'bg-gray-50 text-gray-400' : ''
+              } ${day.data.holiday && day.isCurrentMonth ? 'bg-yellow-50 hover:bg-yellow-100' : ''
+              }`}
           >
             <div className="flex items-center justify-between mb-1">
               <span className={`text-sm ${day.isToday ? 'font-bold text-blue-600' : 'font-medium'}`}>
@@ -484,17 +436,17 @@ export default function CalendarPage() {
                 </Badge>
               )}
             </div>
-            
+
             {day.data.holiday && (
               <div className="text-xs text-yellow-700 mb-1 font-medium truncate">
                 {day.data.holiday}
               </div>
             )}
-            
+
             <div className="space-y-1">
-              {day.data.tasks.slice(0, 2).map(task => (
+              {day.data.tasks.slice(0, 2).map((task, taskIndex) => (
                 <div
-                  key={task.id}
+                  key={`${task.id}-${day.date}-${taskIndex}`}
                   className={`text-xs p-1 rounded flex items-center space-x-1 ${getStatusColor(task.status)}`}
                 >
                   {getStatusIcon(task.status)}
@@ -552,7 +504,7 @@ export default function CalendarPage() {
                 <ChevronLeft className="w-4 h-4" />
               )}
             </Button>
-            
+
             <Popover open={datePickerOpen} onOpenChange={setDatePickerOpen}>
               <PopoverTrigger asChild>
                 <Button
@@ -569,7 +521,7 @@ export default function CalendarPage() {
                     <>
                       <CalendarIcon className="w-4 h-4" />
                       <span>
-                        {view === 'month' 
+                        {view === 'month'
                           ? `${monthNames[toAustralianTime(currentDate).getMonth()]} ${toAustralianTime(currentDate).getFullYear()}`
                           : `Week of ${formatAustralianDate(currentDate)}`
                         }
@@ -588,7 +540,7 @@ export default function CalendarPage() {
                 />
               </PopoverContent>
             </Popover>
-            
+
             <Button
               variant="outline"
               size="sm"
@@ -601,7 +553,7 @@ export default function CalendarPage() {
                 <ChevronRight className="w-4 h-4" />
               )}
             </Button>
-            
+
             <Button
               variant="outline"
               size="sm"
@@ -657,20 +609,20 @@ export default function CalendarPage() {
 
         {/* Summary Stats */}
         {calendarData && (() => {
-          const dynamicSummary = calculateDynamicSummary()
-          if (!dynamicSummary) return null
-          
+          const summaryStats = getSummaryStats()
+          if (!summaryStats) return null
+
           return (
-            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-4 mb-6">
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-6">
               <Card className="bg-white rounded-lg border border-[var(--color-border)] py-4 flex flex-col sm:flex-row gap-4">
                 <CardContent>
                   <div className="flex items-center space-x-4">
-                    <div className="p-2 bg-blue-100 rounded-lg">
-                      <CalendarIcon className="w-6 h-6 text-blue-600" />
+                    <div className="p-2 bg-pink-100 rounded-lg">
+                      <CalendarIcon className="w-6 h-6 text-pink-600" />
                     </div>
                     <div>
                       <p className="text-sm text-gray-600 hidden sm:inline">Total Tasks</p>
-                      <p className="text-lg font-semibold">{dynamicSummary.totalTasks}</p>
+                      <p className="text-lg font-semibold">{summaryStats.totalTasks}</p>
                     </div>
                   </div>
                 </CardContent>
@@ -684,7 +636,7 @@ export default function CalendarPage() {
                     </div>
                     <div>
                       <p className="text-sm text-gray-600 hidden sm:inline">Completed</p>
-                      <p className="text-lg font-semibold">{dynamicSummary.completedTasks}</p>
+                      <p className="text-lg font-semibold">{summaryStats.completedTasks}</p>
                     </div>
                   </div>
                 </CardContent>
@@ -693,12 +645,12 @@ export default function CalendarPage() {
               <Card className="bg-white rounded-lg border border-[var(--color-border)] py-4 flex flex-col sm:flex-row gap-4">
                 <CardContent>
                   <div className="flex items-center space-x-4">
-                    <div className="p-2 bg-yellow-100 rounded-lg">
-                      <Clock className="w-6 h-6 text-yellow-600" />
+                    <div className="p-2 bg-blue-100 rounded-lg">
+                      <Clock className="w-6 h-6 text-blue-600" />
                     </div>
                     <div>
                       <p className="text-sm text-gray-600 hidden sm:inline">Pending</p>
-                      <p className="text-lg font-semibold">{dynamicSummary.pendingTasks}</p>
+                      <p className="text-lg font-semibold">{summaryStats.pendingTasks}</p>
                     </div>
                   </div>
                 </CardContent>
@@ -712,11 +664,26 @@ export default function CalendarPage() {
                     </div>
                     <div>
                       <p className="text-sm text-gray-600 hidden sm:inline">Overdue</p>
-                      <p className="text-lg font-semibold">{dynamicSummary.overdueTasks}</p>
+                      <p className="text-lg font-semibold">{summaryStats.overdueTasks}</p>
                     </div>
                   </div>
                 </CardContent>
               </Card>
+
+              <Card className="bg-white rounded-lg border border-[var(--color-border)] py-4 flex flex-col sm:flex-row gap-4">
+                <CardContent>
+                  <div className="flex items-center space-x-4">
+                    <div className="p-2 bg-gray-200 rounded-lg">
+                      <XCircle className="w-6 h-6 text-gray-600" />
+                    </div>
+                    <div>
+                      <p className="text-sm text-gray-600 hidden sm:inline">Missed</p>
+                      <p className="text-lg font-semibold">{summaryStats.missedTasks}</p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
 
               <Card className="bg-white rounded-lg border border-[var(--color-border)] py-4 flex flex-col sm:flex-row gap-4">
                 <CardContent>
@@ -726,7 +693,7 @@ export default function CalendarPage() {
                     </div>
                     <div>
                       <p className="text-sm text-gray-600 hidden sm:inline">Completion Rate</p>
-                      <p className="text-lg font-semibold">{dynamicSummary.completionRate}%</p>
+                      <p className="text-lg font-semibold">{summaryStats.completionRate}%</p>
                     </div>
                   </div>
                 </CardContent>
@@ -781,7 +748,7 @@ export default function CalendarPage() {
                 </div>
               </div>
               <div className="flex items-center space-x-2">
-                <div className="flex items-center space-x-1 text-xs p-1 rounded bg-gray-100 text-gray-800 border-gray-200">
+                <div className="flex items-center space-x-1 text-xs p-1 rounded bg-gray-200 text-gray-800 border-gray-200">
                   <XCircle className="w-3 h-3" />
                   <span>Missed</span>
                 </div>

@@ -80,7 +80,27 @@ export async function GET(request: NextRequest) {
     const holidayChecker = await createHolidayChecker()
     const recurrenceEngine = new NewRecurrenceEngine(holidayChecker)
 
+    // First, get all task instances for today to find tasks that might have been completed
+    // even if they don't normally appear today according to recurrence rules
+    const { data: todayInstances, error: todayInstancesError } = await supabaseAdmin
+      .from('task_instances')
+      .select('master_task_id, status')
+      .eq('instance_date', validatedDate)
+      .eq('status', 'done')
+      .in('master_task_id', (masterTasks || []).map(t => t.id))
+
+    if (todayInstancesError) {
+      console.error('Error fetching today instances:', todayInstancesError)
+    }
+
+    const completedTaskIds = new Set((todayInstances || []).map(inst => inst.master_task_id))
+
+
     const filteredTasks = (masterTasks || []).filter(task => {
+      // If this task has a completed instance today, always include it
+      if (completedTaskIds.has(task.id)) {
+        return true
+      }
       // First check visibility window (never show before creation/publish/start; hide after end)
       let visibilityStart: Date | null = null
       let visibilityEnd: Date | null = null
@@ -142,7 +162,7 @@ export async function GET(request: NextRequest) {
 
       const { data, error: instancesError } = await supabaseAdmin
         .from('task_instances')
-        .select('id, master_task_id, status, completed_by, completed_at, created_at, instance_date, due_date, lock_date, lock_time, detailed_status')
+        .select('id, master_task_id, status, completed_by, completed_at, created_at, instance_date, due_date')
         .in('master_task_id', masterTaskIds)
         .gte('instance_date', formatAustralianDate(searchStartDate))
         .lte('instance_date', validatedDate)
@@ -164,11 +184,15 @@ export async function GET(request: NextRequest) {
       })
 
       taskInstanceGroups.forEach((instances, taskId) => {
+        // Prefer today's instance first, then completed, then most recent by date
         const sorted = instances.sort((a, b) => {
-          if (a.status === 'done' && b.status !== 'done') return -1
-          if (b.status === 'done' && a.status !== 'done') return 1
+          // 1) Prefer instance for the validated date (today)
           if (a.instance_date === validatedDate && b.instance_date !== validatedDate) return -1
           if (b.instance_date === validatedDate && a.instance_date !== validatedDate) return 1
+          // 2) Then prefer completed instance
+          if (a.status === 'done' && b.status !== 'done') return -1
+          if (b.status === 'done' && a.status !== 'done') return 1
+          // 3) Finally, most recent by instance_date
           return new Date(b.instance_date).getTime() - new Date(a.instance_date).getTime()
         })
         instanceMap.set(taskId, sorted[0])
@@ -181,7 +205,7 @@ export async function GET(request: NextRequest) {
     if (instanceIds.length > 0) {
       const { data: completions, error: completionsError } = await supabaseAdmin
         .from('task_position_completions')
-        .select('task_instance_id, position_name, is_completed')
+        .select('task_instance_id, position_id, position_name, is_completed')
         .in('task_instance_id', instanceIds)
         .eq('is_completed', true)
 
@@ -208,11 +232,25 @@ export async function GET(request: NextRequest) {
 
     const now = getAustralianNow()
     const normalizedRole = toKebabCase(validatedRole)
+    const requestedPositionId = request.nextUrl.searchParams.get('positionId')
 
+
+    
     filteredTasks.forEach(task => {
       const instance = instanceMap.get(task.id)
       const comps = instance ? (completionsByInstance.get(instance.id) || []) : []
-      const isCompletedForRole = comps.some(c => (c.position_name || '').toLowerCase().replace(/[^a-z0-9]+/g, '-') === normalizedRole)
+      
+
+      
+      // Prefer matching by position_id when provided; fallback to normalized position_name
+      const isCompletedForRole = comps.some(c => {
+        const matchById = requestedPositionId && c.position_id && String(c.position_id) === String(requestedPositionId)
+        const matchByName = toKebabCase(c.position_name || '') === normalizedRole
+        
+
+        
+        return matchById || matchByName
+      })
 
       // Compute engine status and feed into the same client-side calculator inputs
       const mtForStatus: NewMasterTask = {
@@ -252,9 +290,11 @@ export async function GET(request: NextRequest) {
         detailed_status: statusInfo.status,
         is_completed_for_position: isCompletedForRole,
         status: instance?.status || undefined,
-        lock_date: statusInfo.lockDate || undefined,
-        lock_time: statusInfo.lockTime || undefined,
+        lock_date: undefined, // Not available in task_instances table
+        lock_time: undefined, // Not available in task_instances table
       }, validatedDate)
+
+
 
       // Count based on calculated status
       switch (taskStatus) {
@@ -371,6 +411,8 @@ export async function GET(request: NextRequest) {
         }
       } catch {}
     })
+    
+
     
     // Metadata (optional)
     const { count: totalMasterTasks } = await supabaseAdmin

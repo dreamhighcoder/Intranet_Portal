@@ -14,6 +14,26 @@ const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
 const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey)
 
+// Convert responsibility name to position name format used in task_position_completions table
+function convertResponsibilityToPositionName(responsibility: string): string {
+  // The task_position_completions table stores position_name in kebab-case format
+  // Always normalize incoming responsibility to kebab-case first
+  const slug = toKebabCase((responsibility || '').trim())
+  const responsibilityToPositionMap: { [key: string]: string } = {
+    'pharmacy-assistant': 'pharmacy-assistant',
+    'pharmacy-assistant-s': 'pharmacy-assistant',
+    'dispensary-technician': 'dispensary-technician',
+    'dispensary-technician-s': 'dispensary-technician',
+    'daa-packer': 'daa-packer',
+    'daa-packer-s': 'daa-packer',
+    'pharmacist-primary': 'pharmacist-primary',
+    'pharmacist-supporting': 'pharmacist-supporting',
+    'operational-managerial': 'operational-managerial'
+  }
+
+  return responsibilityToPositionMap[slug] || slug
+}
+
 // Convert string frequencies to NewFrequencyType enum values
 function convertStringFrequenciesToEnum(frequencies: string[]): NewFrequencyType[] {
   const frequencyMap: { [key: string]: NewFrequencyType } = {
@@ -124,6 +144,8 @@ export async function generateTaskOccurrences(startDate: string, endDate: string
     return []
   }
 
+
+
   if (!masterTasks || masterTasks.length === 0) {
     return []
   }
@@ -142,47 +164,71 @@ export async function generateTaskOccurrences(startDate: string, endDate: string
   const taskOccurrences: TaskOccurrence[] = []
 
   // Get existing task instances for the date range, with 60-day lookback for carryover completions
+  // FIXED: Get ALL task instances first, then filter by master task IDs that match position
   const masterTaskIds = filteredTasks.map(t => t.id)
   let existingInstances: any[] = []
 
-  if (masterTaskIds.length > 0) {
-    const lookbackStart = new Date(startDate + 'T00:00:00')
-    lookbackStart.setDate(lookbackStart.getDate() - 60)
-    const lookbackStartStr = formatAustralianDate(lookbackStart)
+  const lookbackStart = new Date(startDate + 'T00:00:00')
+  lookbackStart.setDate(lookbackStart.getDate() - 60)
+  const lookbackStartStr = formatAustralianDate(lookbackStart)
 
-    const { data, error: instancesError } = await supabaseAdmin
-      .from('task_instances')
-      .select('id, master_task_id, status, completed_by, completed_at, created_at, instance_date, due_date, detailed_status')
-      .in('master_task_id', masterTaskIds)
-      .gte('instance_date', lookbackStartStr)
-      .lte('instance_date', endDate)
 
-    if (!instancesError && data) {
-      existingInstances = data
-    }
+
+  // Get ALL task instances in date range first
+  const { data: allInstancesInRange, error: instancesError } = await supabaseAdmin
+    .from('task_instances')
+    .select('id, master_task_id, status, completed_by, completed_at, created_at, instance_date, due_date')
+    .gte('instance_date', lookbackStartStr)
+    .lte('instance_date', endDate)
+
+  if (instancesError) {
+    console.error('Error querying task instances:', instancesError)
+  } else if (allInstancesInRange) {
+    // Filter instances to only include those whose master tasks match our position filter
+    existingInstances = allInstancesInRange.filter(instance => 
+      masterTaskIds.includes(instance.master_task_id)
+    )
   }
 
-  // Build quick lookup for instance-level position completions (any position)
+  // Build position-specific completion lookup
   const instanceIds = existingInstances.map(i => i.id)
   const positionCompletionByInstance = new Map<string, { completed_at: string }>()
+  const positionSpecificCompletions = new Map<string, Map<string, { completed_at: string, is_completed: boolean }>>()
+  
   if (instanceIds.length > 0) {
     const { data: posCompletions, error: posCompError } = await supabaseAdmin
       .from('task_position_completions')
-      .select('task_instance_id, completed_at, is_completed')
+      .select('task_instance_id, position_name, completed_at, is_completed')
       .in('task_instance_id', instanceIds)
-      .eq('is_completed', true)
 
-    if (!posCompError && Array.isArray(posCompletions)) {
-      // Keep earliest completion time per instance for consistency
+    if (posCompError) {
+      console.error('Error querying position completions:', posCompError)
+    } else if (Array.isArray(posCompletions)) {
       posCompletions.forEach(pc => {
-        const key = pc.task_instance_id as string
-        const ts = pc.completed_at as string
-        if (!positionCompletionByInstance.has(key)) {
-          positionCompletionByInstance.set(key, { completed_at: ts })
-        } else {
-          const existing = positionCompletionByInstance.get(key)!
-          if (new Date(ts).getTime() < new Date(existing.completed_at).getTime()) {
-            positionCompletionByInstance.set(key, { completed_at: ts })
+        const instanceId = pc.task_instance_id as string
+        const positionName = pc.position_name as string
+        const completedAt = pc.completed_at as string
+        const isCompleted = pc.is_completed as boolean
+        
+        // Store position-specific completion data
+        if (!positionSpecificCompletions.has(instanceId)) {
+          positionSpecificCompletions.set(instanceId, new Map())
+        }
+        positionSpecificCompletions.get(instanceId)!.set(positionName, {
+          completed_at: completedAt,
+          is_completed: isCompleted
+        })
+        
+        // Also maintain the general completion lookup for backward compatibility
+        if (isCompleted) {
+          const key = instanceId
+          if (!positionCompletionByInstance.has(key)) {
+            positionCompletionByInstance.set(key, { completed_at: completedAt })
+          } else {
+            const existing = positionCompletionByInstance.get(key)!
+            if (new Date(completedAt).getTime() < new Date(existing.completed_at).getTime()) {
+              positionCompletionByInstance.set(key, { completed_at: completedAt })
+            }
           }
         }
       })
@@ -198,9 +244,11 @@ export async function generateTaskOccurrences(startDate: string, endDate: string
 
   // Track latest completed instance date per task (for carryover completion logic)
   const latestDoneByTask = new Map<string, { date: string; completed_at: string | null }>()
+  let completedInstancesCount = 0
   existingInstances.forEach(inst => {
     const hasPositionCompletion = positionCompletionByInstance.has(inst.id)
     if (inst.status === 'done' || hasPositionCompletion) {
+      completedInstancesCount++
       const effectiveCompletedAt = inst.completed_at || positionCompletionByInstance.get(inst.id)?.completed_at || null
       const prev = latestDoneByTask.get(inst.master_task_id)
       if (!prev || inst.instance_date > prev.date) {
@@ -208,6 +256,8 @@ export async function generateTaskOccurrences(startDate: string, endDate: string
       }
     }
   })
+  
+
 
   // Generate task occurrences for each date
   for (const dateStr of dateRange) {
@@ -275,9 +325,13 @@ export async function generateTaskOccurrences(startDate: string, endDate: string
       // Calculate dynamic status using the recurrence engine
       const now = getAustralianNow()
 
-      // Determine completion considering carryover: if latest done instance is on or before this date, treat as completed
-      const latestDone = latestDoneByTask.get(task.id)
-      const isCompleted = existingInstance?.status === 'done' || (latestDone && latestDone.date <= dateStr)
+      // Determine completion status
+      // Only mark as completed if there's an actual task instance for this specific date
+      // This matches the checklist behavior and avoids false carryover completions
+      const isCompleted = existingInstance?.status === 'done' || 
+                         (existingInstance && positionCompletionByInstance.has(existingInstance.id))
+      
+
       
       const masterTask: NewMasterTask = {
         id: task.id,
@@ -300,23 +354,90 @@ export async function generateTaskOccurrences(startDate: string, endDate: string
         due_date: task.due_date || undefined
       }
       
-      const statusResult = recurrenceEngine.calculateTaskStatus(masterTask, dateStr, now, isCompleted)
-      const dynamicStatus = statusResult.status
+      // Compute base dynamic status without treating any-position completion as done
+      const baseStatusResult = recurrenceEngine.calculateTaskStatus(masterTask, dateStr, now, false)
+      const baseDynamicStatus = baseStatusResult.status
 
       // Prefer position-specific completion timestamp when present
       const effectiveCompletedAt = existingInstance?.completed_at || (existingInstance ? positionCompletionByInstance.get(existingInstance.id)?.completed_at : undefined)
 
-      taskOccurrences.push({
-        masterTaskId: task.id,
-        title: task.title,
-        description: task.description || '',
-        categories: task.categories || [],
-        responsibility: task.responsibility || [],
-        date: dateStr,
-        status: dynamicStatus,
-        completedAt: effectiveCompletedAt || null,
-        dueTime: task.due_time
-      })
+      // When no position filter is applied, generate one occurrence per responsibility
+      if (!positionId && task.responsibility && task.responsibility.length > 0) {
+        // Generate separate occurrence for each responsibility/position
+        for (const responsibility of task.responsibility) {
+          // Convert responsibility to position name format for lookup
+          const positionName = convertResponsibilityToPositionName(responsibility)
+          
+          // Check if this specific position completed the task
+          let positionSpecificCompleted = false
+          let positionSpecificCompletedAt = null
+          
+          if (existingInstance && positionSpecificCompletions.has(existingInstance.id)) {
+            const positionCompletions = positionSpecificCompletions.get(existingInstance.id)!
+            const positionCompletion = positionCompletions.get(positionName)
+            
+            if (positionCompletion && positionCompletion.is_completed) {
+              positionSpecificCompleted = true
+              positionSpecificCompletedAt = positionCompletion.completed_at
+            }
+          }
+          
+          // Calculate status for this specific position
+          const positionStatus = positionSpecificCompleted ? 'completed' : baseDynamicStatus
+          
+          taskOccurrences.push({
+            masterTaskId: task.id,
+            title: task.title,
+            description: task.description || '',
+            categories: task.categories || [],
+            responsibility: [responsibility], // Single responsibility for this occurrence
+            date: dateStr,
+            status: positionStatus,
+            completedAt: positionSpecificCompletedAt,
+            dueTime: task.due_time
+          })
+        }
+      } else {
+        // When position filter is applied, generate single occurrence (existing behavior)
+        // Do NOT treat any-position completion as completed when a specific position is filtered unless that position completed it.
+        let finalStatus = baseDynamicStatus
+        let finalCompletedAt = effectiveCompletedAt || null
+
+        if (positionId) {
+          // Check the selected position's display name -> map to kebab-case -> lookup completion for this instance only for that position
+          try {
+            const { data: pos } = await supabaseAdmin
+              .from('positions')
+              .select('name')
+              .eq('id', positionId)
+              .maybeSingle()
+            if (pos && existingInstance && positionSpecificCompletions.has(existingInstance.id)) {
+              const positionName = convertResponsibilityToPositionName(toKebabCase(pos.name))
+              const posMap = positionSpecificCompletions.get(existingInstance.id)!
+              const posComp = posMap.get(positionName)
+              if (posComp && posComp.is_completed) {
+                finalStatus = 'completed'
+                finalCompletedAt = posComp.completed_at
+              }
+            }
+          } catch {}
+        } else if (isCompleted) {
+          // No position selected: only set completed if the instance is marked done (all-position completion semantics are handled per-responsibility above)
+          finalStatus = 'completed'
+        }
+        
+        taskOccurrences.push({
+          masterTaskId: task.id,
+          title: task.title,
+          description: task.description || '',
+          categories: task.categories || [],
+          responsibility: task.responsibility || [],
+          date: dateStr,
+          status: finalStatus,
+          completedAt: finalCompletedAt,
+          dueTime: task.due_time
+        })
+      }
     }
   }
 

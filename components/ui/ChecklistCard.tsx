@@ -63,7 +63,7 @@ export default function ChecklistCard({
           return
         }
 
-        const queryParams = new URLSearchParams({ date: dateToUse, role: roleSlug })
+        const queryParams = new URLSearchParams({ date: dateToUse, role: roleSlug, positionId })
         const url = `/api/checklist/counts?${queryParams.toString()}`
         const response = await fetch(url, { cache: 'no-store' })
 
@@ -103,6 +103,7 @@ export default function ChecklistCard({
     const onPositionsUpdated = () => fetchTaskCounts()
     const onTasksChanged = (e: Event) => {
       const detail = (e as CustomEvent).detail as { role?: string; date?: string; action?: string } | undefined
+      console.log('🏠 ChecklistCard received tasks-changed event:', detail, 'for role:', role)
       // Refresh all cards whenever any task changes; use provided date if present
       fetchTaskCounts(detail?.date)
     }

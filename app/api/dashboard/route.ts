@@ -10,6 +10,12 @@ const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
 const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey)
 
+// Simple in-memory cache for KPI and overdue data
+const kpiCache = new Map()
+const overdueCache = new Map()
+const KPI_CACHE_DURATION = 5 * 60 * 1000 // 5 minutes
+const OVERDUE_CACHE_DURATION = 2 * 60 * 1000 // 2 minutes (shorter for more frequent updates)
+
 // Helper function to map position ID to responsibility value
 async function getResponsibilityFromPositionId(positionId: string): Promise<string | null> {
   const { data: position } = await supabaseAdmin
@@ -48,20 +54,14 @@ export async function GET(request: NextRequest) {
     const endDateStr = formatAustralianDate(endDate)
     const extendedStartDateStr = formatAustralianDate(extendedStartDate)
 
-    console.log('Dashboard API: Date range:', { startDateStr, endDateStr, todayStr, extendedStartDateStr })
-
     // Generate task occurrences for the extended date range to track when tasks first became missed
     const allTaskOccurrences = await generateTaskOccurrences(extendedStartDateStr, endDateStr, positionId)
 
     // Filter to get only the last 7 days for main dashboard stats
     const taskOccurrences = allTaskOccurrences.filter(occ => occ.date >= startDateStr)
 
-    console.log('Dashboard API: Generated task occurrences:', taskOccurrences.length)
-
     // Handle case where no task occurrences exist
     if (!taskOccurrences || taskOccurrences.length === 0) {
-      console.log('Dashboard API: No task occurrences from generator; falling back to per-position counts for overdue')
-
       // Fallback: compute today's overdue across positions to match homepage cards
       let todayOverdueAcrossPositions = 0
       try {
@@ -141,9 +141,22 @@ export async function GET(request: NextRequest) {
       }
     }))
 
-    // Filter tasks by their dynamic status
+    // Calculate metrics directly from task occurrence data for better performance
+    // This avoids multiple API calls and provides faster loading
     const completedTasks = tasksWithDynamicStatus.filter(task => task.dynamicStatus === 'completed')
-    const todayTasks = tasksWithDynamicStatus.filter(task => task.instance_date === todayStr)
+    const completedTasksAcrossPositions = completedTasks.length
+    const totalTasksAcrossPositions = tasksWithDynamicStatus.length
+
+    // Calculate new tasks (tasks that appeared today and are not completed)
+    const todayTasksForNewCount = tasksWithDynamicStatus.filter(task => task.instance_date === todayStr)
+    const newTasksAcrossPositions = todayTasksForNewCount.filter(task =>
+      task.dynamicStatus !== 'completed' && task.dynamicStatus !== 'missed'
+    ).length
+
+
+
+    // Filter today's tasks for additional calculations
+    const todayTasksFiltered = tasksWithDynamicStatus.filter(task => task.instance_date === todayStr)
 
     // Convert ALL task occurrences (extended range) to find when tasks first became overdue
     const allTasksWithDynamicStatus = allTaskOccurrences.map(occurrence => ({
@@ -172,45 +185,68 @@ export async function GET(request: NextRequest) {
     // This counts shared tasks multiple times (once per position) unlike checklist which counts them once
 
     // For today's section: show actual overdue tasks today (for operational purposes)
-    const todayOverdueTasksActual = todayTasks.filter(t => t.dynamicStatus === 'overdue')
+    const todayOverdueTasksActual = todayTasksFiltered.filter(t => t.dynamicStatus === 'overdue')
 
-    // For overdue count, use per-position counting by making internal API calls
-    // This matches exactly how the homepage cards work and ensures consistency
+    // Get overdue count with caching for better performance
     let todayOverdueAcrossPositions = 0
-    try {
-      const { data: positions } = await supabaseAdmin
-        .from('positions')
-        .select('id, name')
-      const nonAdminPositions = (positions || []).filter(p => (p.name || '') !== 'Administrator')
 
-      // Build absolute origin for internal fetches
-      const origin = (() => {
-        try { return new URL(request.url).origin } catch { return '' }
-      })()
+    // Check cache first - include current 10-minute window for frequent updates
+    const currentTenMinutes = Math.floor(Date.now() / (10 * 60 * 1000))
+    const overdueCacheKey = `overdue-${todayStr}-${currentTenMinutes}`
+    const cachedOverdue = overdueCache.get(overdueCacheKey)
 
-      const perPositionOverdueCounts = await Promise.all(
-        nonAdminPositions.map(async (pos) => {
-          try {
-            const roleParam = pos.name
-            const urlStr = origin ? `${origin}/api/checklist/counts?role=${encodeURIComponent(roleParam)}&date=${todayStr}`
-              : `/api/checklist/counts?role=${encodeURIComponent(roleParam)}&date=${todayStr}`
-            const res = await fetch(urlStr)
-            if (!res.ok) return 0
-            const json = await res.json().catch(() => null)
-            if (json && json.success && json.data && typeof json.data.overdue === 'number') {
-              return json.data.overdue as number
+    if (cachedOverdue && (Date.now() - cachedOverdue.timestamp) < OVERDUE_CACHE_DURATION) {
+      todayOverdueAcrossPositions = cachedOverdue.count
+    } else {
+      try {
+        const { data: positions } = await supabaseAdmin
+          .from('positions')
+          .select('id, name')
+        const nonAdminPositions = (positions || []).filter(p => (p.name || '') !== 'Administrator')
+
+        // Build absolute origin for internal fetches
+        const origin = (() => {
+          try { return new URL(request.url).origin } catch { return '' }
+        })()
+
+        // Get overdue count for each position using the same API the homepage uses
+        const perPositionOverdueCounts = await Promise.all(
+          nonAdminPositions.map(async (pos) => {
+            try {
+              const roleParam = pos.name
+              const urlStr = origin ? `${origin}/api/checklist/counts?role=${encodeURIComponent(roleParam)}&date=${todayStr}`
+                : `/api/checklist/counts?role=${encodeURIComponent(roleParam)}&date=${todayStr}`
+              const res = await fetch(urlStr)
+              if (!res.ok) {
+                console.warn(`Dashboard API: Failed to fetch overdue count for ${pos.name}:`, res.status)
+                return 0
+              }
+              const json = await res.json().catch(() => null)
+              if (json && json.success && json.data && typeof json.data.overdue === 'number') {
+
+                return json.data.overdue as number
+              }
+              return 0
+            } catch (inner) {
+              console.error(`Dashboard API: Error fetching overdue count for ${pos.name}:`, inner)
+              return 0
             }
-            return 0
-          } catch (inner) {
-            return 0
-          }
+          })
+        )
+
+        todayOverdueAcrossPositions = perPositionOverdueCounts.reduce((a, b) => a + b, 0)
+
+        // Cache the result
+        overdueCache.set(overdueCacheKey, {
+          count: todayOverdueAcrossPositions,
+          timestamp: Date.now()
         })
-      )
-      todayOverdueAcrossPositions = perPositionOverdueCounts.reduce((a, b) => a + b, 0)
-    } catch (e) {
-      // Fallback to unified count if per-position fails
-      const allCurrentlyOverdueTasks = allTasksWithDynamicStatus.filter(t => t.dynamicStatus === 'overdue')
-      todayOverdueAcrossPositions = allCurrentlyOverdueTasks.length
+
+      } catch (error) {
+        console.error('Dashboard API: Error calculating overdue tasks:', error)
+        // Fallback to simple count if calculation fails
+        todayOverdueAcrossPositions = todayOverdueTasksActual.length
+      }
     }
 
     // For "Missed Tasks (7 days)" metric: Count ALL missed tasks within the last 7 days
@@ -227,67 +263,112 @@ export async function GET(request: NextRequest) {
       todayMasterIds.has(task.master_task_id)
     )
 
-    console.log('Dashboard API: Date range for filtering:', { startDateStr, endDateStr })
-    console.log('Dashboard API: All occurrences (extended) count:', allTaskOccurrences.length)
-    console.log('Dashboard API: Window occurrences (7d) count:', tasksWithDynamicStatus.length)
-    console.log('Dashboard API: Today overdue tasks (actual):', todayOverdueTasksActual.length, '| all currently overdue across positions:', todayOverdueAcrossPositions)
-    console.log('Dashboard API: Missed tasks (7 days, appear-today) count:', missedTasksLast7Days.length)
+    // Calculate on-time completion rate and average time using actual completed task instances
+    // Query database directly for accurate KPI calculations with caching
+    let onTimeCompletionRate = 0
+    let avgTimeToComplete = 0
 
-    // On-time completion rate (completed_at must be on/before AUS due date AND due time)
-    const onTimeCompletions = completedTasks.filter(task => {
-      if (!task.completed_at || !task.due_date) return false
+    // Check cache first - use a more specific cache key that includes current hour
+    // This ensures the average time updates as new tasks are completed
+    const currentHour = new Date().getHours()
+    const cacheKey = `kpi-${startDateStr}-${endDateStr}-${currentHour}`
+    const cachedKPI = kpiCache.get(cacheKey)
+    if (cachedKPI && (Date.now() - cachedKPI.timestamp) < KPI_CACHE_DURATION) {
+      onTimeCompletionRate = cachedKPI.onTimeCompletionRate
+      avgTimeToComplete = cachedKPI.avgTimeToComplete
+    } else {
       try {
-        // Prefer task-specific due_time if present; otherwise fall back to 23:59:59
-        const dueTime = task.master_tasks?.due_time || '23:59:59'
-        const ausDueDateTime = createAustralianDateTime(task.due_date as string, dueTime)
-        const ausDueDateTimeUtc = fromAustralianTime(ausDueDateTime)
-        const completedUtc = new Date(task.completed_at as string)
-        return completedUtc <= ausDueDateTimeUtc
-      } catch (error) {
-        console.error('Error calculating on-time completion:', error)
-        return false
-      }
-    })
+        // Fetch completed task instances with minimal data for better performance
+        const { data: completedInstances, error: completedError } = await supabaseAdmin
+          .from('task_instances')
+          .select(`
+          id,
+          master_task_id,
+          instance_date,
+          completed_at
+        `)
+          .eq('status', 'done')
+          .gte('instance_date', startDateStr)
+          .lte('instance_date', endDateStr)
+          .not('completed_at', 'is', null)
 
-    const onTimeCompletionRate = completedTasks.length > 0
-      ? Math.round((onTimeCompletions.length / completedTasks.length) * 100 * 100) / 100
-      : 0
+        // Fetch master task data separately for better performance
+        let masterTasksData = {}
+        if (!completedError && completedInstances && completedInstances.length > 0) {
+          const masterTaskIds = [...new Set(completedInstances.map(i => i.master_task_id))]
+          const { data: masterTasks } = await supabaseAdmin
+            .from('master_tasks')
+            .select('id, due_time')
+            .in('id', masterTaskIds)
 
-    // Average time to complete (in hours)
-    const completionTimes = completedTasks
-      .filter(task => task.completed_at && task.instance_date)
-      .map(task => {
-        try {
-          // Task becomes available at start of instance_date (00:00) in Australia/Sydney
-          const availableAus = createAustralianDateTime(task.instance_date as string, '00:00')
-          const availableUtc = fromAustralianTime(availableAus)
-          // completed_at stored in UTC
-          const completedUtc = new Date(task.completed_at as string)
-
-          const hoursToComplete = (completedUtc.getTime() - availableUtc.getTime()) / (1000 * 60 * 60)
-          return Math.abs(hoursToComplete)
-        } catch (error) {
-          console.error('Error calculating completion time:', error)
-          return 0
+          if (masterTasks) {
+            masterTasksData = masterTasks.reduce((acc, task) => {
+              acc[task.id] = task
+              return acc
+            }, {})
+          }
         }
-      })
 
-    const avgTimeToComplete = completionTimes.length > 0
-      ? Math.round((completionTimes.reduce((sum, time) => sum + time, 0) / completionTimes.length) * 100) / 100
-      : 0
+        if (completedError) {
+          console.error('Dashboard API: Error fetching completed instances:', completedError)
+        }
 
-    // Tasks created since 9am today
-    const nineAmToday = createAustralianDateTime(todayStr, '09:00')
-    const nineAmTodayUtc = fromAustralianTime(nineAmToday)
-    const newSince9am = tasksWithDynamicStatus.filter(task => {
-      if (!task.created_at) return false
-      try {
-        const createdUtc = new Date(task.created_at as string)
-        return createdUtc >= nineAmTodayUtc
+        if (!completedError && completedInstances && completedInstances.length > 0) {
+          // Calculate on-time completion rate
+          const onTimeCompletions = completedInstances.filter(instance => {
+            try {
+              // Get due_time from the separate master tasks data
+              const masterTask = masterTasksData[instance.master_task_id]
+              const dueTime = masterTask?.due_time || '23:59:59'
+              const ausDueDateTime = createAustralianDateTime(instance.instance_date as string, dueTime)
+              const ausDueDateTimeUtc = fromAustralianTime(ausDueDateTime)
+              const completedUtc = new Date(instance.completed_at as string)
+              return completedUtc <= ausDueDateTimeUtc
+            } catch (error) {
+              console.error('Error calculating on-time completion:', error)
+              return false
+            }
+          })
+
+          onTimeCompletionRate = Math.round((onTimeCompletions.length / completedInstances.length) * 100 * 100) / 100
+
+          // Calculate average time to complete (in hours)
+          const completionTimes = completedInstances
+            .map(instance => {
+              try {
+                // Task becomes available at start of instance_date (00:00) in Australia/Sydney
+                const availableAus = createAustralianDateTime(instance.instance_date as string, '00:00')
+                const availableUtc = fromAustralianTime(availableAus)
+                // completed_at stored in UTC
+                const completedUtc = new Date(instance.completed_at as string)
+
+                const hoursToComplete = (completedUtc.getTime() - availableUtc.getTime()) / (1000 * 60 * 60)
+                return Math.abs(hoursToComplete)
+              } catch (error) {
+                console.error('Error calculating completion time:', error)
+                return 0
+              }
+            })
+            .filter(time => time > 0) // Filter out invalid times
+
+          avgTimeToComplete = completionTimes.length > 0
+            ? Math.round((completionTimes.reduce((sum, time) => sum + time, 0) / completionTimes.length) * 100) / 100
+            : 0
+
+          // Cache the results
+          kpiCache.set(cacheKey, {
+            onTimeCompletionRate,
+            avgTimeToComplete,
+            timestamp: Date.now()
+          })
+        }
       } catch (error) {
-        return false
+        console.error('Dashboard API: Error calculating KPIs from completed instances:', error)
       }
-    }).length
+    }
+
+    // Use aggregated new tasks count from per-position API calls
+    const newSince9am = newTasksAcrossPositions
 
     // Category breakdown
     const categories: Record<string, { total: number; completed: number; missed: number; overdue: number }> = {}
@@ -321,8 +402,8 @@ export async function GET(request: NextRequest) {
 
     const response = {
       summary: {
-        totalTasks: tasksWithDynamicStatus.length,
-        completedTasks: completedTasks.length,
+        totalTasks: totalTasksAcrossPositions, // Use per-position aggregated count
+        completedTasks: completedTasksAcrossPositions, // Use per-position aggregated count
         onTimeCompletionRate,
         avgTimeToCompleteHours: avgTimeToComplete,
         newSince9am,
@@ -331,25 +412,16 @@ export async function GET(request: NextRequest) {
         overdueTasks: todayOverdueAcrossPositions
       },
       today: {
-        total: todayTasks.length,
-        completed: todayTasks.filter(t => t.dynamicStatus === 'completed').length,
-        pending: todayTasks.filter(t => ['not_due_yet', 'due_today', 'pending'].includes(t.dynamicStatus)).length,
+        total: todayTasksFiltered.length,
+        completed: todayTasksFiltered.filter(t => t.dynamicStatus === 'completed').length,
+        pending: todayTasksFiltered.filter(t => ['not_due_yet', 'due_today', 'pending'].includes(t.dynamicStatus)).length,
         // Align with checklist widget: use aggregated per-position overdue for today's operational view
         overdue: todayOverdueAcrossPositions,
-        missed: todayTasks.filter(t => t.dynamicStatus === 'missed').length
+        missed: todayTasksFiltered.filter(t => t.dynamicStatus === 'missed').length
       },
       categories,
       recentTasks
     }
-
-    console.log('Dashboard API: Returning response:', {
-      totalTasks: response.summary.totalTasks,
-      completedTasks: response.summary.completedTasks,
-      missedTasks: response.summary.missedLast7Days,
-      overdueTasks: response.summary.overdueTasks,
-      todayOverdue: response.today.overdue,
-      todayTotal: response.today.total
-    })
 
     return NextResponse.json(response)
 

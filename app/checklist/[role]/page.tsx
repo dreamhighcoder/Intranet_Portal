@@ -14,7 +14,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Input } from '@/components/ui/input'
 import { Check, X, Eye, LogOut, Settings, ChevronRight, Search, Clock, Users } from 'lucide-react'
 import Link from 'next/link'
-import { toastError, toastSuccess } from '@/hooks/use-toast'
+import { toastError, toastSuccess, toastWarning } from '@/hooks/use-toast'
 import { toKebabCase } from '@/lib/responsibility-mapper'
 import { authenticatedGet, authenticatedPost, positionsApi, publicHolidaysApi } from '@/lib/api-client'
 import TaskDetailModal from '@/components/checklist/TaskDetailModal'
@@ -1072,6 +1072,11 @@ export default function RoleChecklistPage() {
     return getAustralianToday()
   })
 
+  // Helper to check if we're viewing today's date
+  const isViewingToday = useMemo(() => {
+    return currentDate === getAustralianToday()
+  }, [currentDate])
+
   const [selectedCategory, setSelectedCategory] = useState("all")
   const [selectedStatus, setSelectedStatus] = useState("all")
   const [selectedResponsibility, setSelectedResponsibility] = useState("all")
@@ -1404,8 +1409,13 @@ export default function RoleChecklistPage() {
   }
 
   const handleTaskComplete = async (taskId: string) => {
+    console.log('🔄 handleTaskComplete called with taskId:', taskId)
+    
     // Prevent multiple simultaneous requests for the same task
-    if (processingTasks.has(taskId)) return
+    if (processingTasks.has(taskId)) {
+      console.log('⚠️ Task already processing, skipping:', taskId)
+      return
+    }
 
     // Add to processing set
     setProcessingTasks(prev => new Set(prev).add(taskId))
@@ -1414,16 +1424,19 @@ export default function RoleChecklistPage() {
     setTasks(prevTasks =>
       prevTasks.map(task =>
         task.id === taskId
-          ? { ...task, status: 'completed', completed_at: australianNowUtcISOString() }
+          ? { ...task, status: 'completed', completed_at: australianNowUtcISOString(), is_completed_for_position: true }
           : task
       )
     )
 
     try {
+      console.log('📡 Sending completion request for taskId:', taskId)
       const result = await authenticatedPost('/api/checklist/complete', {
         taskId,
         action: 'complete'
       })
+
+      console.log('📡 Completion API response:', result)
 
       if (!result || !result.success) {
         throw new Error(result?.error || 'Failed to complete task')
@@ -1435,8 +1448,22 @@ export default function RoleChecklistPage() {
 
       // Broadcast event so homepage cards refresh their counts
       try {
+        console.log('🔔 Broadcasting tasks-changed event:', { date: currentDate, role })
         window.dispatchEvent(new CustomEvent('tasks-changed', { detail: { date: currentDate, role } }))
-      } catch { }
+        // Also broadcast a general task update event for other components
+        console.log('🔔 Broadcasting task-status-changed event:', { taskId, date: currentDate, role, action: 'complete' })
+        window.dispatchEvent(new CustomEvent('task-status-changed', { 
+          detail: { 
+            taskId: taskId, 
+            date: currentDate, 
+            role, 
+            action: 'complete',
+            timestamp: Date.now()
+          } 
+        }))
+      } catch (error) {
+        console.error('Error broadcasting events:', error)
+      }
     } catch (error) {
       console.error('Error completing task:', error)
       // Revert optimistic update on error
@@ -1453,8 +1480,13 @@ export default function RoleChecklistPage() {
   }
 
   const handleTaskUndo = async (taskId: string) => {
+    console.log('🔄 handleTaskUndo called with taskId:', taskId)
+    
     // Prevent multiple simultaneous requests for the same task
-    if (processingTasks.has(taskId)) return
+    if (processingTasks.has(taskId)) {
+      console.log('⚠️ Task already processing, skipping:', taskId)
+      return
+    }
 
     // Add to processing set
     setProcessingTasks(prev => new Set(prev).add(taskId))
@@ -1463,16 +1495,19 @@ export default function RoleChecklistPage() {
     setTasks(prevTasks =>
       prevTasks.map(task =>
         task.id === taskId
-          ? { ...task, status: 'pending', completed_at: undefined, completed_by: undefined }
+          ? { ...task, status: 'pending', completed_at: undefined, completed_by: undefined, is_completed_for_position: false }
           : task
       )
     )
 
     try {
+      console.log('📡 Sending undo request for taskId:', taskId)
       const result = await authenticatedPost('/api/checklist/complete', {
         taskId,
         action: 'undo'
       })
+
+      console.log('📡 Undo API response:', result)
 
       if (!result || !result.success) {
         throw new Error(result?.error || 'Failed to undo task')
@@ -1484,8 +1519,22 @@ export default function RoleChecklistPage() {
 
       // Broadcast event so homepage cards refresh their counts
       try {
+        console.log('🔔 Broadcasting tasks-changed event (undo):', { date: currentDate, role })
         window.dispatchEvent(new CustomEvent('tasks-changed', { detail: { date: currentDate, role } }))
-      } catch { }
+        // Also broadcast a general task update event for other components
+        console.log('🔔 Broadcasting task-status-changed event (undo):', { taskId, date: currentDate, role, action: 'undo' })
+        window.dispatchEvent(new CustomEvent('task-status-changed', { 
+          detail: { 
+            taskId: taskId, 
+            date: currentDate, 
+            role, 
+            action: 'undo',
+            timestamp: Date.now()
+          } 
+        }))
+      } catch (error) {
+        console.error('Error broadcasting events:', error)
+      }
     } catch (error) {
       console.error('Error undoing task:', error)
       // Revert optimistic update on error
@@ -1851,7 +1900,7 @@ export default function RoleChecklistPage() {
         )
       case "missed":
         return (
-          <Badge className="bg-gray-800 text-white border-gray-600">
+          <Badge className="bg-gray-400 text-white border-gray-400">
             ❌ Missed
           </Badge>
         )
@@ -2239,41 +2288,87 @@ export default function RoleChecklistPage() {
                                 </Button>
                               ) : (
                                 <>
-                                  {(task.is_completed_for_position || task.status === "completed") ? (
-                                    <Button
-                                      type="button"
-                                      size="sm"
-                                      variant="outline"
-                                      onClick={() => handleTaskUndo(task.id)}
-                                      disabled={processingTasks.has(task.id)}
-                                      className="border-green-300 bg-green-100 text-green-800 hover:bg-green-200 hover:border-green-400 font-medium disabled:opacity-50"
-                                    >
-                                      {processingTasks.has(task.id) ? (
-                                        <span className="flex items-center">
-                                          <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-green-800 mr-1"></div>
-                                          Processing...
-                                        </span>
-                                      ) : (
-                                        <span>✓ Done</span>
-                                      )}
-                                    </Button>
-                                  ) : (
+                                  {task.is_completed_for_position ? (
                                     (() => {
-                                      const taskStatus = calculateDynamicTaskStatus(task, currentDate)
-                                      const isLocked = taskStatus === 'missed' || (task.can_complete === false)
+                                      const isNotToday = !isViewingToday && !isAdmin
+                                      const isDisabled = processingTasks.has(task.id)
+                                      
+                                      const getUndoButtonStyle = () => {
+                                        if (isNotToday) {
+                                          return "border-green-300 bg-green-100 text-green-700 opacity-60"
+                                        }
+                                        return "border-green-300 bg-green-100 text-green-800 hover:bg-green-200 hover:border-green-400"
+                                      }
                                       
                                       return (
                                         <Button
                                           type="button"
                                           size="sm"
-                                          onClick={() => handleTaskComplete(task.id)}
-                                          disabled={processingTasks.has(task.id) || isLocked}
-                                          className={`font-medium disabled:opacity-50 ${
-                                            isLocked 
-                                              ? "bg-gray-400 text-gray-600 border-gray-400 cursor-not-allowed" 
-                                              : "bg-blue-600 text-white hover:bg-blue-700 border-blue-600 hover:border-blue-700"
-                                          }`}
-                                          title={isLocked ? "Task is locked and cannot be completed" : "Mark task as done"}
+                                          variant="outline"
+                                          onClick={() => {
+                                            if (isNotToday) {
+                                              toastWarning("Cannot Undo Task", "You can only undo tasks for today. Please go to today's page.")
+                                              return
+                                            }
+                                            handleTaskUndo(task.id)
+                                          }}
+                                          disabled={isDisabled}
+                                          className={`font-medium ${getUndoButtonStyle()}`}
+                                          title={isNotToday ? "You can only undo tasks for today. Please go to today's page." : "Undo task completion"}
+                                        >
+                                          {processingTasks.has(task.id) ? (
+                                            <span className="flex items-center">
+                                              <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-green-800 mr-1"></div>
+                                              Processing...
+                                            </span>
+                                          ) : (
+                                            <span>✓ Done</span>
+                                          )}
+                                        </Button>
+                                      )
+                                    })()
+                                  ) : (
+                                    (() => {
+                                      const taskStatus = calculateDynamicTaskStatus(task, currentDate)
+                                      const isLocked = taskStatus === 'missed' || (task.can_complete === false)
+                                      const isNotToday = !isViewingToday && !isAdmin
+                                      const isDisabled = processingTasks.has(task.id) || isLocked
+                                      
+                                      const getButtonTitle = () => {
+                                        if (isLocked) return "Task is locked and cannot be completed"
+                                        if (isNotToday) return "You can only complete tasks for today. Please go to today's page."
+                                        return "Mark task as done"
+                                      }
+                                      
+                                      const getButtonText = () => {
+                                        if (isLocked) return "Locked"
+                                        return "Done ?"
+                                      }
+                                      
+                                      const getButtonStyle = () => {
+                                        if (isLocked) {
+                                          return "bg-gray-400 text-gray-600 border-gray-400 cursor-not-allowed"
+                                        }
+                                        if (isNotToday) {
+                                          return "bg-green-200 text-green-700 border-green-300 hover:bg-green-300 opacity-60"
+                                        }
+                                        return "bg-blue-600 text-white hover:bg-blue-700 border-blue-600 hover:border-blue-700"
+                                      }
+                                      
+                                      return (
+                                        <Button
+                                          type="button"
+                                          size="sm"
+                                          onClick={() => {
+                                            if (isNotToday) {
+                                              toastWarning("Cannot Complete Task", "You can only complete tasks for today. Please go to today's page.")
+                                              return
+                                            }
+                                            handleTaskComplete(task.id)
+                                          }}
+                                          disabled={isDisabled}
+                                          className={`font-medium ${getButtonStyle()}`}
+                                          title={getButtonTitle()}
                                         >
                                           {processingTasks.has(task.id) ? (
                                             <span className="flex items-center">
@@ -2281,7 +2376,7 @@ export default function RoleChecklistPage() {
                                               Processing...
                                             </span>
                                           ) : (
-                                            <span>{isLocked ? "Locked" : "Done ?"}</span>
+                                            <span>{getButtonText()}</span>
                                           )}
                                         </Button>
                                       )
@@ -2410,41 +2505,87 @@ export default function RoleChecklistPage() {
                               </Button>
                             ) : (
                               <>
-                                {(task.is_completed_for_position || task.status === "completed") ? (
-                                  <Button
-                                    type="button"
-                                    size="sm"
-                                    variant="outline"
-                                    onClick={() => handleTaskUndo(task.id)}
-                                    disabled={processingTasks.has(task.id)}
-                                    className="flex-1 border-green-300 bg-green-100 text-green-800 hover:bg-green-200 hover:border-green-400 font-medium disabled:opacity-50"
-                                  >
-                                    {processingTasks.has(task.id) ? (
-                                      <span className="flex items-center justify-center">
-                                        <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-green-800 mr-1"></div>
-                                        Processing...
-                                      </span>
-                                    ) : (
-                                      <span>✓ Done</span>
-                                    )}
-                                  </Button>
-                                ) : (
+                                {task.is_completed_for_position ? (
                                   (() => {
-                                    const taskStatus = calculateDynamicTaskStatus(task, currentDate)
-                                    const isLocked = taskStatus === 'missed' || (task.can_complete === false)
+                                    const isNotToday = !isViewingToday && !isAdmin
+                                    const isDisabled = processingTasks.has(task.id)
+                                    
+                                    const getUndoButtonStyle = () => {
+                                      if (isNotToday) {
+                                        return "border-green-300 bg-green-100 text-green-700 opacity-60"
+                                      }
+                                      return "border-green-300 bg-green-100 text-green-800 hover:bg-green-200 hover:border-green-400"
+                                    }
                                     
                                     return (
                                       <Button
                                         type="button"
                                         size="sm"
-                                        onClick={() => handleTaskComplete(task.id)}
-                                        disabled={processingTasks.has(task.id) || isLocked}
-                                        className={`font-medium disabled:opacity-50 ${
-                                          isLocked 
-                                            ? "bg-gray-400 text-gray-600 border-gray-400 cursor-not-allowed" 
-                                            : "bg-blue-600 text-white hover:bg-blue-700 border-blue-600 hover:border-blue-700"
-                                        }`}
-                                        title={isLocked ? "Task is locked and cannot be completed" : "Mark task as done"}
+                                        variant="outline"
+                                        onClick={() => {
+                                          if (isNotToday) {
+                                            toastWarning("Cannot Undo Task", "You can only undo tasks for today. Please go to today's page.")
+                                            return
+                                          }
+                                          handleTaskUndo(task.id)
+                                        }}
+                                        disabled={isDisabled}
+                                        className={`flex-1 font-medium ${getUndoButtonStyle()}`}
+                                        title={isNotToday ? "You can only undo tasks for today. Please go to today's page." : "Undo task completion"}
+                                      >
+                                        {processingTasks.has(task.id) ? (
+                                          <span className="flex items-center justify-center">
+                                            <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-green-800 mr-1"></div>
+                                            Processing...
+                                          </span>
+                                        ) : (
+                                          <span>✓ Done</span>
+                                        )}
+                                      </Button>
+                                    )
+                                  })()
+                                ) : (
+                                  (() => {
+                                    const taskStatus = calculateDynamicTaskStatus(task, currentDate)
+                                    const isLocked = taskStatus === 'missed' || (task.can_complete === false)
+                                    const isNotToday = !isViewingToday && !isAdmin
+                                    const isDisabled = processingTasks.has(task.id) || isLocked
+                                    
+                                    const getButtonTitle = () => {
+                                      if (isLocked) return "Task is locked and cannot be completed"
+                                      if (isNotToday) return "You can only complete tasks for today. Please go to today's page."
+                                      return "Mark task as done"
+                                    }
+                                    
+                                    const getButtonText = () => {
+                                      if (isLocked) return "Locked"
+                                      return "Done ?"
+                                    }
+                                    
+                                    const getButtonStyle = () => {
+                                      if (isLocked) {
+                                        return "bg-gray-400 text-gray-600 border-gray-400 cursor-not-allowed"
+                                      }
+                                      if (isNotToday) {
+                                        return "bg-green-200 text-green-700 border-green-300 hover:bg-green-300 opacity-60"
+                                      }
+                                      return "bg-blue-600 text-white hover:bg-blue-700 border-blue-600 hover:border-blue-700"
+                                    }
+                                    
+                                    return (
+                                      <Button
+                                        type="button"
+                                        size="sm"
+                                        onClick={() => {
+                                          if (isNotToday) {
+                                            toastWarning("Cannot Complete Task", "You can only complete tasks for today. Please go to today's page.")
+                                            return
+                                          }
+                                          handleTaskComplete(task.id)
+                                        }}
+                                        disabled={isDisabled}
+                                        className={`font-medium ${getButtonStyle()}`}
+                                        title={getButtonTitle()}
                                       >
                                         {processingTasks.has(task.id) ? (
                                           <span className="flex items-center justify-center">
@@ -2452,7 +2593,7 @@ export default function RoleChecklistPage() {
                                             Processing...
                                           </span>
                                         ) : (
-                                          <span>{isLocked ? "Locked" : "Done ?"}</span>
+                                          <span>{getButtonText()}</span>
                                         )}
                                       </Button>
                                     )
