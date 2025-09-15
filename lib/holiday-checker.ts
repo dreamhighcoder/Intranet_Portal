@@ -120,6 +120,35 @@ export class HolidayChecker implements HolidayChecker {
   }
 
   /**
+   * Get all holidays as a Set of date strings (YYYY-MM-DD format)
+   * Used for setting holidays in the task status calculator
+   */
+  async getHolidaysAsSet(): Promise<Set<string>> {
+    await this.initializeHolidays()
+    const holidaySet = new Set<string>()
+    
+    // Get holidays from the database
+    try {
+      const { data: holidays, error } = await supabase
+        .from('public_holidays')
+        .select('date')
+        .order('date')
+      
+      if (!error && holidays) {
+        holidays.forEach(holiday => {
+          if (holiday.date) {
+            holidaySet.add(holiday.date)
+          }
+        })
+      }
+    } catch (error) {
+      console.warn('Error getting holidays for task status calculator:', error)
+    }
+    
+    return holidaySet
+  }
+
+  /**
    * Get the next business day
    */
   async nextBusinessDay(date: Date): Promise<Date> {

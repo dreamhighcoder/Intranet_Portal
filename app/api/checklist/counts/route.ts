@@ -6,7 +6,7 @@ import { ChecklistQuerySchema } from '@/lib/validation-schemas'
 import { toKebabCase, getSearchOptions } from '@/lib/responsibility-mapper'
 import { getAustralianNow, getAustralianToday, createAustralianDateTime, parseAustralianDate, formatAustralianDate, toAustralianTime } from '@/lib/timezone-utils'
 import { getSystemSettings } from '@/lib/system-settings'
-import { calculateTaskStatusForCounts } from '@/lib/task-status-calculator'
+import { calculateTaskStatusForCounts, setHolidays } from '@/lib/task-status-calculator'
 
 // Use service role key to bypass RLS for server-side reads (match checklist API)
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
@@ -21,21 +21,21 @@ export async function GET(request: NextRequest) {
 
     // Debug incoming params to help diagnose 400s in client
     console.log('Checklist counts request params:', { role, date })
-    
+
     // Validate query parameters using Zod schema
     const validationResult = ChecklistQuerySchema.safeParse({ role, date })
-    
+
     if (!validationResult.success) {
       console.warn('Checklist counts validation failed:', validationResult.error.errors)
-      return NextResponse.json({ 
+      return NextResponse.json({
         success: false,
         error: 'Invalid query parameters',
         details: validationResult.error.errors
       }, { status: 400 })
     }
-    
+
     const { role: validatedRole, date: validatedDate } = validationResult.data
-    
+
     // Align with Checklist API: fetch active tasks filtered by role using service client
     const searchRoles = getSearchOptions(validatedRole)
 
@@ -79,6 +79,10 @@ export async function GET(request: NextRequest) {
     // Filter tasks by recurrence on the requested date using the same engine as checklist
     const holidayChecker = await createHolidayChecker()
     const recurrenceEngine = new NewRecurrenceEngine(holidayChecker)
+    
+    // Set holidays in the task status calculator for frequency-based carry-over logic
+    const holidaySet = await holidayChecker.getHolidaysAsSet()
+    setHolidays(holidaySet)
 
     // First, get all task instances for today to find tasks that might have been completed
     // even if they don't normally appear today according to recurrence rules
@@ -119,12 +123,12 @@ export async function GET(request: NextRequest) {
         if (startDate) startCandidates.push(parseAustralianDate(startDate))
         if (startCandidates.length > 0) visibilityStart = new Date(Math.max(...startCandidates.map(d => d.getTime())))
         if (endDate) visibilityEnd = parseAustralianDate(endDate)
-      } catch {}
+      } catch { }
 
       const viewDate = parseAustralianDate(validatedDate)
       if (visibilityStart && viewDate < visibilityStart) return false
       if (visibilityEnd && viewDate > visibilityEnd) return false
-      
+
       try {
         const mt: NewMasterTask = {
           id: task.id,
@@ -135,9 +139,9 @@ export async function GET(request: NextRequest) {
           // Normalize legacy monthly frequency aliases to engine enums (match checklist API)
           frequencies: ((task.frequencies || []) as any).map((f: string) =>
             f === 'start_every_month' || f === 'start_of_month' ? 'start_of_every_month'
-            : f === 'every_month' ? 'once_monthly'
-            : f === 'end_every_month' ? 'end_of_every_month'
-            : f
+              : f === 'every_month' ? 'once_monthly'
+                : f === 'end_every_month' ? 'end_of_every_month'
+                  : f
           ) as any,
           timing: task.timing || 'anytime_during_day',
           active: task.publish_status === 'active',
@@ -235,20 +239,20 @@ export async function GET(request: NextRequest) {
     const requestedPositionId = request.nextUrl.searchParams.get('positionId')
 
 
-    
+
     filteredTasks.forEach(task => {
       const instance = instanceMap.get(task.id)
       const comps = instance ? (completionsByInstance.get(instance.id) || []) : []
-      
 
-      
+
+
       // Prefer matching by position_id when provided; fallback to normalized position_name
       const isCompletedForRole = comps.some(c => {
         const matchById = requestedPositionId && c.position_id && String(c.position_id) === String(requestedPositionId)
         const matchByName = toKebabCase(c.position_name || '') === normalizedRole
-        
 
-        
+
+
         return matchById || matchByName
       })
 
@@ -262,9 +266,9 @@ export async function GET(request: NextRequest) {
         // normalize monthly aliases (same as checklist)
         frequencies: ((task.frequencies || []) as any).map((f: string) =>
           f === 'start_every_month' || f === 'start_of_month' ? 'start_of_every_month'
-          : f === 'every_month' ? 'once_monthly'
-          : f === 'end_every_month' ? 'end_of_every_month'
-          : f
+            : f === 'every_month' ? 'once_monthly'
+              : f === 'end_every_month' ? 'end_of_every_month'
+                : f
         ) as any,
         timing: task.timing || 'anytime_during_day',
         active: task.publish_status === 'active',
@@ -286,6 +290,7 @@ export async function GET(request: NextRequest) {
           publish_delay: (task as any).publish_delay || undefined,
           start_date: (task as any).start_date || undefined,
           end_date: (task as any).end_date || undefined,
+          frequencies: task.frequencies || undefined, // Pass frequencies for carry-over period calculation
         },
         detailed_status: statusInfo.status,
         is_completed_for_position: isCompletedForRole,
@@ -320,7 +325,7 @@ export async function GET(request: NextRequest) {
 
       // New tasks: align with checklist page "is_new" logic (12 hours after activation, not completed)
       try {
-        const toYMD = (d: Date) => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`
+        const toYMD = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
         const viewDate = parseAustralianDate(validatedDate)
         const yesterday = new Date(viewDate)
         yesterday.setDate(viewDate.getDate() - 1)
@@ -362,7 +367,7 @@ export async function GET(request: NextRequest) {
             anchors.push(startDateParsed)
           }
           if (anchors.length > 0) activationDateTime = new Date(Math.max(...anchors.map(d => d.getTime())))
-        } catch {}
+        } catch { }
 
         const yesterdayDate = parseAustralianDate(toYMD(yesterday))
         const appearsYesterday = appearsYesterdayRaw && (!activationDateTime || yesterdayDate >= parseAustralianDate(formatAustralianDate(activationDateTime)))
@@ -382,15 +387,15 @@ export async function GET(request: NextRequest) {
         // Count as new only if it's the first appearance day AND within the badge display window AND not completed
         // Exclude "Every Day" frequency tasks from being counted as new
         const hasEveryDayFrequency = (task.frequencies || []).includes('every_day')
-        
+
         if (isFirstAppearanceDay && activationDateTime && !isCompletedForRole && !hasEveryDayFrequency) {
           const currentAUTime = getAustralianNow()
-          
+
           // Calculate badge end time as the earliest of:
           // 1. 12 hours after activation (default)
           // 2. Due time (if it falls within 12 hours)
           let badgeEndTime = new Date(activationDateTime.getTime() + 12 * 60 * 60 * 1000) // 12 hours default
-          
+
           // For any task with due_time, check if it falls within 12 hours
           if (task.due_time) {
             try {
@@ -403,17 +408,17 @@ export async function GET(request: NextRequest) {
               // If due_time parsing fails, keep the default 12-hour window
             }
           }
-          
+
           // Count as new if current time is within the calculated window
           if (currentAUTime >= activationDateTime && currentAUTime <= badgeEndTime) {
             counts.newSinceNine++
           }
         }
-      } catch {}
+      } catch { }
     })
-    
 
-    
+
+
     // Metadata (optional)
     const { count: totalMasterTasks } = await supabaseAdmin
       .from('master_tasks')
@@ -434,7 +439,7 @@ export async function GET(request: NextRequest) {
         is_holiday: isHoliday
       }
     })
-    
+
   } catch (error) {
     console.error('Checklist counts API error:', error)
 

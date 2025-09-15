@@ -7,6 +7,7 @@ import {
   ChevronRightIcon,
 } from "lucide-react"
 import { DayButton, DayPicker, getDefaultClassNames } from "react-day-picker"
+import { enAU } from "date-fns/locale"
 
 import { cn } from "@/lib/utils"
 import { Button, buttonVariants } from "@/components/ui/button"
@@ -40,6 +41,7 @@ function Calendar({
           date.toLocaleString("default", { month: "short" }),
         ...formatters,
       }}
+      locale={enAU}
       classNames={{
         root: cn("w-fit", defaultClassNames.root),
         months: cn(

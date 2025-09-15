@@ -2,9 +2,10 @@ import { createClient } from '@supabase/supabase-js'
 import { NewRecurrenceEngine, NewFrequencyType, type MasterTask as NewMasterTask } from '@/lib/new-recurrence-engine'
 import { HolidayChecker } from '@/lib/holiday-checker'
 import { getSearchOptions, toKebabCase } from '@/lib/responsibility-mapper'
-import { 
-  getAustralianNow, 
-  getAustralianDateRange, 
+import { calculateTaskStatus, setHolidays, type TaskStatusInput } from '@/lib/task-status-calculator'
+import {
+  getAustralianNow,
+  getAustralianDateRange,
   formatAustralianDate,
   parseAustralianDate,
   toAustralianTime
@@ -74,7 +75,7 @@ function convertStringFrequenciesToEnum(frequencies: string[]): NewFrequencyType
     'end_of_month_nov': NewFrequencyType.END_OF_MONTH_NOV,
     'end_of_month_dec': NewFrequencyType.END_OF_MONTH_DEC
   }
-  
+
   return frequencies.map(freq => frequencyMap[freq]).filter(Boolean)
 }
 
@@ -91,11 +92,15 @@ export interface TaskOccurrence {
 }
 
 export async function generateTaskOccurrences(startDate: string, endDate: string, positionId?: string | null, category?: string | null): Promise<TaskOccurrence[]> {
-  // Get holidays for the recurrence engine
+  // Get holidays for the recurrence engine and task status calculator
   const { data: holidays } = await supabaseAdmin
     .from('public_holidays')
     .select('date, name')
     .order('date')
+
+  // Set up holidays for task status calculator
+  const holidaySet = new Set((holidays || []).map(h => h.date))
+  setHolidays(holidaySet)
 
   // Create the recurrence engine
   const holidayChecker = new HolidayChecker(holidays || [])
@@ -129,7 +134,7 @@ export async function generateTaskOccurrences(startDate: string, endDate: string
       .select('name')
       .eq('id', positionId)
       .maybeSingle()
-    
+
     if (position) {
       // Convert position name to kebab-case and use getSearchOptions (same as Checklist API)
       const normalizedRole = toKebabCase(position.name)
@@ -174,27 +179,25 @@ export async function generateTaskOccurrences(startDate: string, endDate: string
 
 
 
-  // Get ALL task instances in date range first
+  // Get task instances in date range, filtered by relevant master_task_ids at DB level for performance
   const { data: allInstancesInRange, error: instancesError } = await supabaseAdmin
     .from('task_instances')
     .select('id, master_task_id, status, completed_by, completed_at, created_at, instance_date, due_date')
     .gte('instance_date', lookbackStartStr)
     .lte('instance_date', endDate)
+    .in('master_task_id', masterTaskIds)
 
   if (instancesError) {
     console.error('Error querying task instances:', instancesError)
   } else if (allInstancesInRange) {
-    // Filter instances to only include those whose master tasks match our position filter
-    existingInstances = allInstancesInRange.filter(instance => 
-      masterTaskIds.includes(instance.master_task_id)
-    )
+    existingInstances = allInstancesInRange
   }
 
   // Build position-specific completion lookup
   const instanceIds = existingInstances.map(i => i.id)
   const positionCompletionByInstance = new Map<string, { completed_at: string }>()
   const positionSpecificCompletions = new Map<string, Map<string, { completed_at: string, is_completed: boolean }>>()
-  
+
   if (instanceIds.length > 0) {
     const { data: posCompletions, error: posCompError } = await supabaseAdmin
       .from('task_position_completions')
@@ -209,7 +212,7 @@ export async function generateTaskOccurrences(startDate: string, endDate: string
         const positionName = pc.position_name as string
         const completedAt = pc.completed_at as string
         const isCompleted = pc.is_completed as boolean
-        
+
         // Store position-specific completion data
         if (!positionSpecificCompletions.has(instanceId)) {
           positionSpecificCompletions.set(instanceId, new Map())
@@ -218,7 +221,7 @@ export async function generateTaskOccurrences(startDate: string, endDate: string
           completed_at: completedAt,
           is_completed: isCompleted
         })
-        
+
         // Also maintain the general completion lookup for backward compatibility
         if (isCompleted) {
           const key = instanceId
@@ -256,7 +259,7 @@ export async function generateTaskOccurrences(startDate: string, endDate: string
       }
     }
   })
-  
+
 
 
   // Generate task occurrences for each date
@@ -281,7 +284,7 @@ export async function generateTaskOccurrences(startDate: string, endDate: string
         if (startDate) startCandidates.push(parseAustralianDate(startDate))
         if (startCandidates.length > 0) visibilityStart = new Date(Math.max(...startCandidates.map(d => d.getTime())))
         if (endDate) visibilityEnd = parseAustralianDate(endDate)
-      } catch {}
+      } catch { }
 
       const viewDate = parseAustralianDate(dateStr)
       if (visibilityStart && viewDate < visibilityStart) {
@@ -299,9 +302,9 @@ export async function generateTaskOccurrences(startDate: string, endDate: string
         // Normalize legacy monthly frequency aliases to engine enums (same as Checklist API)
         frequencies: convertStringFrequenciesToEnum(((task.frequencies || []) as any).map((f: string) =>
           f === 'start_every_month' || f === 'start_of_month' ? 'start_of_every_month'
-          : f === 'every_month' ? 'once_monthly'
-          : f === 'end_every_month' ? 'end_of_every_month'
-          : f
+            : f === 'every_month' ? 'once_monthly'
+              : f === 'end_every_month' ? 'end_of_every_month'
+                : f
         )),
         timing: (task as any).timing || 'anytime_during_day', // Use timing field like Checklist API
         active: task.publish_status === 'active',
@@ -328,11 +331,11 @@ export async function generateTaskOccurrences(startDate: string, endDate: string
       // Determine completion status
       // Only mark as completed if there's an actual task instance for this specific date
       // This matches the checklist behavior and avoids false carryover completions
-      const isCompleted = existingInstance?.status === 'done' || 
-                         (existingInstance && positionCompletionByInstance.has(existingInstance.id))
-      
+      const isCompleted = existingInstance?.status === 'done' ||
+        (existingInstance && positionCompletionByInstance.has(existingInstance.id))
 
-      
+
+
       const masterTask: NewMasterTask = {
         id: task.id,
         title: task.title || '',
@@ -342,9 +345,9 @@ export async function generateTaskOccurrences(startDate: string, endDate: string
         // Normalize legacy monthly frequency aliases to engine enums (same as Checklist API)
         frequencies: convertStringFrequenciesToEnum(((task.frequencies || []) as any).map((f: string) =>
           f === 'start_every_month' || f === 'start_of_month' ? 'start_of_every_month'
-          : f === 'every_month' ? 'once_monthly'
-          : f === 'end_every_month' ? 'end_of_every_month'
-          : f
+            : f === 'every_month' ? 'once_monthly'
+              : f === 'end_every_month' ? 'end_of_every_month'
+                : f
         )),
         timing: (task as any).timing || 'anytime_during_day', // Use timing field like Checklist API
         // Pass through the specific due_time so status uses correct threshold
@@ -353,10 +356,32 @@ export async function generateTaskOccurrences(startDate: string, endDate: string
         publish_delay: task.publish_delay || undefined,
         due_date: task.due_date || undefined
       }
-      
-      // Compute base dynamic status without treating any-position completion as done
+
+      // Get base status result from recurrence engine for due/lock dates
       const baseStatusResult = recurrenceEngine.calculateTaskStatus(masterTask, dateStr, now, false)
-      const baseDynamicStatus = baseStatusResult.status
+
+      // Use the shared task status calculator for consistent status calculation
+      // Create TaskStatusInput for the shared calculator
+      const taskStatusInput: TaskStatusInput = {
+        date: dateStr,
+        due_date: baseStatusResult.dueDate,
+        master_task: {
+          due_time: task.due_time || undefined,
+          created_at: task.created_at || undefined,
+          publish_delay: task.publish_delay || undefined,
+          start_date: (task as any).start_date || undefined,
+          end_date: (task as any).end_date || undefined,
+          frequencies: task.frequencies || undefined,
+        },
+        detailed_status: undefined,
+        is_completed_for_position: false,
+        status: undefined,
+        lock_date: baseStatusResult.lockDate || undefined,
+        lock_time: baseStatusResult.lockTime || undefined,
+      }
+
+      // Calculate status using the shared calculator
+      const baseDynamicStatus = calculateTaskStatus(taskStatusInput, dateStr)
 
       // Prefer position-specific completion timestamp when present
       const effectiveCompletedAt = existingInstance?.completed_at || (existingInstance ? positionCompletionByInstance.get(existingInstance.id)?.completed_at : undefined)
@@ -367,24 +392,45 @@ export async function generateTaskOccurrences(startDate: string, endDate: string
         for (const responsibility of task.responsibility) {
           // Convert responsibility to position name format for lookup
           const positionName = convertResponsibilityToPositionName(responsibility)
-          
+
           // Check if this specific position completed the task
           let positionSpecificCompleted = false
           let positionSpecificCompletedAt = null
-          
+
           if (existingInstance && positionSpecificCompletions.has(existingInstance.id)) {
             const positionCompletions = positionSpecificCompletions.get(existingInstance.id)!
             const positionCompletion = positionCompletions.get(positionName)
-            
+
             if (positionCompletion && positionCompletion.is_completed) {
               positionSpecificCompleted = true
               positionSpecificCompletedAt = positionCompletion.completed_at
             }
           }
-          
-          // Calculate status for this specific position
-          const positionStatus = positionSpecificCompleted ? 'completed' : baseDynamicStatus
-          
+
+          // Calculate status for this specific position using shared calculator
+          let positionStatus = baseDynamicStatus
+          if (positionSpecificCompleted) {
+            // Create TaskStatusInput for position-specific completion
+            const positionTaskStatusInput: TaskStatusInput = {
+              date: dateStr,
+              due_date: baseStatusResult.dueDate,
+              master_task: {
+                due_time: task.due_time || undefined,
+                created_at: task.created_at || undefined,
+                publish_delay: task.publish_delay || undefined,
+                start_date: (task as any).start_date || undefined,
+                end_date: (task as any).end_date || undefined,
+                frequencies: task.frequencies || undefined,
+              },
+              detailed_status: undefined,
+              is_completed_for_position: true,
+              status: undefined,
+              lock_date: baseStatusResult.lockDate || undefined,
+              lock_time: baseStatusResult.lockTime || undefined,
+            }
+            positionStatus = calculateTaskStatus(positionTaskStatusInput, dateStr)
+          }
+
           taskOccurrences.push({
             masterTaskId: task.id,
             title: task.title,
@@ -420,12 +466,12 @@ export async function generateTaskOccurrences(startDate: string, endDate: string
                 finalCompletedAt = posComp.completed_at
               }
             }
-          } catch {}
+          } catch { }
         } else if (isCompleted) {
           // No position selected: only set completed if the instance is marked done (all-position completion semantics are handled per-responsibility above)
           finalStatus = 'completed'
         }
-        
+
         taskOccurrences.push({
           masterTaskId: task.id,
           title: task.title,

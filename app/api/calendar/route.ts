@@ -151,38 +151,10 @@ export async function GET(request: NextRequest) {
     let currentDueTodayTasks = 0
 
     if (positionId && positionId !== 'all') {
-      // For specific position, get current counts from checklist API
-      try {
-        const { data: position } = await supabaseAdmin
-          .from('positions')
-          .select('name')
-          .eq('id', positionId)
-          .single()
-
-        if (position) {
-          const origin = (() => {
-            try { return new URL(request.url).origin } catch { return '' }
-          })()
-
-          const roleParam = position.name
-          const urlStr = origin ? `${origin}/api/checklist/counts?role=${encodeURIComponent(roleParam)}&date=${todayStr}`
-            : `/api/checklist/counts?role=${encodeURIComponent(roleParam)}&date=${todayStr}`
-          const res = await fetch(urlStr)
-          if (res.ok) {
-            const json = await res.json().catch(() => null)
-            if (json && json.success && json.data) {
-              currentDueTodayTasks = json.data.dueToday || 0
-              currentOverdueTasks = json.data.overdue || 0
-            }
-          }
-        }
-      } catch (error) {
-        console.warn('Error getting current counts for position:', error)
-        // Fallback: count from today's occurrences
-        const todayOccurrences = taskOccurrences.filter(t => t.date === todayStr)
-        currentOverdueTasks = todayOccurrences.filter(t => t.status === 'overdue').length
-        currentDueTodayTasks = todayOccurrences.filter(t => t.status === 'due_today').length
-      }
+      // Fast path for specific position: compute from today's occurrences locally
+      const todayOccurrences = taskOccurrences.filter(t => t.date === todayStr)
+      currentOverdueTasks = todayOccurrences.filter(t => t.status === 'overdue').length
+      currentDueTodayTasks = todayOccurrences.filter(t => t.status === 'due_today').length
     } else {
       // For "All positions", sum counts across all non-admin positions
       try {

@@ -90,11 +90,12 @@ export default function CalendarPage() {
   const [datePickerOpen, setDatePickerOpen] = useState(false)
   const [loadingButton, setLoadingButton] = useState<string | null>(null)
 
-  // Ensure non-admins are locked to their own position
+  // Ensure non-admins are locked to their own position (use position.id, not user.id)
   useEffect(() => {
     if (!authLoading && user && !isAdmin) {
-      if (user.id && selectedPosition !== user.id) {
-        setSelectedPosition(user.id)
+      const userPositionId = user?.position?.id
+      if (userPositionId && selectedPosition !== userPositionId) {
+        setSelectedPosition(userPositionId)
       }
     }
   }, [authLoading, user, isAdmin])

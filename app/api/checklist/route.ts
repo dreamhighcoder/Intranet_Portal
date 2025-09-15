@@ -14,6 +14,7 @@ import {
   formatAustralianDate,
   toAustralianTime,
 } from '@/lib/timezone-utils'
+import { calculateTaskStatus, type TaskStatusInput, setHolidays } from '@/lib/task-status-calculator'
 
 // Use service role key to bypass RLS for server-side reads
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
@@ -288,6 +289,13 @@ export async function GET(request: NextRequest) {
 
     // Transform to virtual checklist instances expected by UI
     const now = getAustralianNow()
+
+    // Ensure holidays are set for shared calculator once per request
+    try {
+      const holidaySet = await holidayChecker.getHolidaysAsSet()
+      setHolidays(holidaySet)
+    } catch {}
+
     const checklistData = filteredTasks.map(task => {
       const existingInstance = instanceMap.get(task.id)
 
@@ -357,10 +365,30 @@ export async function GET(request: NextRequest) {
 
       
       const statusResult = recurrenceEngine.calculateTaskStatus(masterTaskForStatus, validatedDate, now, isCompleted)
-      
+
+      // Use shared calculator to unify status semantics across app
+      const statusInput: TaskStatusInput = {
+        date: validatedDate,
+        due_date: statusResult.dueDate || undefined,
+        master_task: {
+          // Use 09:30 default to match engine fallback when due_time is not set
+          due_time: (task as any).due_time || '09:30',
+          created_at: task.created_at || undefined,
+          publish_delay: task.publish_delay || undefined,
+          start_date: (task as any).start_date || undefined,
+          end_date: (task as any).end_date || undefined,
+          frequencies: (task.frequencies || []) as any,
+        },
+        is_completed_for_position: isCompleted,
+        lock_date: statusResult.lockDate || undefined,
+        lock_time: statusResult.lockTime || undefined,
+      }
+
+      const unifiedStatus = calculateTaskStatus(statusInput, validatedDate)
+
       // Map status to ChecklistInstanceStatus
       let status: ChecklistInstanceStatus = 'pending'
-      switch (statusResult.status) {
+      switch (unifiedStatus) {
         case 'completed':
           status = 'completed'
           break
@@ -500,7 +528,7 @@ export async function GET(request: NextRequest) {
         is_completed_for_position: isCompletedForCurrentPosition,
         is_new,
         // Add status calculation details
-        detailed_status: statusResult.status,
+        detailed_status: unifiedStatus,
         due_date: statusResult.dueDate,
         due_time: statusResult.dueTime,
         lock_date: statusResult.lockDate,
@@ -511,7 +539,8 @@ export async function GET(request: NextRequest) {
           title: task.title,
           description: task.description,
           timing: task.timing || 'anytime_during_day',
-          due_time: task.due_time,
+          // Provide default 09:30 if missing to align UI with engine and API calc
+          due_time: task.due_time || '09:30',
           responsibility: task.responsibility || [],
           categories: task.categories || ['general'],
           frequencies: task.frequencies || [], // Using frequencies from database
