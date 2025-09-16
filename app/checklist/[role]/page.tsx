@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useCallback } from 'react'
 import { useParams, useRouter, useSearchParams } from 'next/navigation'
 import { usePositionAuth } from '@/lib/position-auth-context'
 import { Navigation } from '@/components/navigation'
@@ -209,9 +209,33 @@ const getResponsibilityAbbreviation = (responsibility: string) => {
 
 // Apply carry-over logic to preserve position completion badges during carry-over period
 const getTaskStatusWithCarryOver = (task: ChecklistTask, currentDate: string, isViewingToday: boolean = false): string => {
-  // If task is not completed for this position, use the calculated status from API
+  // If task is not completed for this position, calculate the status
   if (!task.is_completed_for_position) {
-    return task.detailed_status || 'not_due_yet'
+    // If we have a cached detailed_status, use it (from API)
+    if (task.detailed_status) {
+      return task.detailed_status
+    }
+
+    // Otherwise, calculate the status (for clean tasks created by admin logic)
+    const taskInput = {
+      date: task.date,
+      due_date: task.due_date || undefined,
+      master_task: {
+        due_time: task.master_task?.due_time || undefined,
+        created_at: task.master_task?.created_at || undefined,
+        publish_delay: task.master_task?.publish_delay || undefined,
+        start_date: task.master_task?.start_date || undefined,
+        end_date: task.master_task?.end_date || undefined,
+        frequencies: task.master_task?.frequencies || undefined,
+      },
+      detailed_status: undefined,
+      is_completed_for_position: false,
+      status: undefined,
+      lock_date: undefined,
+      lock_time: undefined,
+    }
+
+    return calculateTaskStatus(taskInput, currentDate)
   }
 
   // Task is completed for this position - check if we're still within carry-over period
@@ -264,7 +288,8 @@ const getTaskStatusWithCarryOver = (task: ChecklistTask, currentDate: string, is
       isCompleted: task.is_completed_for_position,
       frequencies: task.master_task?.frequencies,
       calculatedStatus,
-      willShowCompleted: calculatedStatus === 'completed'
+      willShowCompleted: calculatedStatus === 'completed',
+      carryOverEnded: calculatedStatus === 'missed'
     })
   }
 
@@ -274,11 +299,14 @@ const getTaskStatusWithCarryOver = (task: ChecklistTask, currentDate: string, is
     return 'completed'
   }
 
+  // If the calculator returns 'missed', it means the carry-over period has ended
+  // and we should treat this as a new task instance
+
   // Carry-over period has ended - calculate status for new task instance
   // Calculate what the status would be if this was a new task for the current viewing date
   const newTaskInput = {
     date: currentDate, // Use current viewing date as the new task date
-    due_date: task.due_date || undefined,
+    due_date: task.due_date || currentDate, // For recurring tasks, due date is the current date
     master_task: {
       due_time: task.master_task?.due_time || undefined,
       created_at: task.master_task?.created_at || undefined,
@@ -313,10 +341,10 @@ const getTaskStatusWithCarryOver = (task: ChecklistTask, currentDate: string, is
     currentDate,
     originalTaskDate: task.date,
     completionDate: completionDateStr,
-    carryOverEnded: true,
+    carryOverEnded: calculatedStatus === 'missed',
     isViewingToday,
     frequencies: task.master_task?.frequencies,
-    calculatedStatus: newTaskStatus,
+    newTaskCalculatedStatus: newTaskStatus,
     finalStatus
   })
 
@@ -1773,6 +1801,74 @@ export default function RoleChecklistPage() {
     }
   }
 
+  // Helper function to get the effective status for filtering and summary
+  const getEffectiveTaskStatus = useCallback((task: ChecklistTask) => {
+    // For admin viewing all responsibilities, we need to check if any position has completed the task
+    if (isAdmin && selectedResponsibility === 'all') {
+      const completions = task.position_completions || []
+
+      // Check if any position has a valid completion within carry-over period
+      const hasValidCompletion = completions.some(completion => {
+        if (!completion.is_completed) return false
+
+        const mockTask = {
+          ...task,
+          is_completed_for_position: completion.is_completed,
+          completed_at: completion.completed_at,
+          position_completions: [completion]
+        }
+        const status = getTaskStatusWithCarryOver(mockTask, currentDate, isViewingToday)
+        return status === 'completed'
+      })
+
+      if (hasValidCompletion) {
+        return 'completed'
+      } else {
+        // No valid completions - preserve original task dates for accurate status calculation
+        const cleanTask = {
+          ...task,
+          is_completed_for_position: false,
+          completed_at: undefined,
+          position_completions: []
+          // Keep original task.date and task.due_date to maintain proper status calculation context
+        }
+        return getTaskStatusWithCarryOver(cleanTask, currentDate, isViewingToday)
+      }
+    }
+
+    // For admin with specific responsibility filter
+    if (isAdmin && selectedResponsibility !== 'all') {
+      const completions = task.position_completions || []
+      const relevantCompletion = completions.find(c =>
+        formatResponsibility(c.position_name) === selectedResponsibility
+      )
+
+      if (relevantCompletion && relevantCompletion.is_completed) {
+        const mockTask = {
+          ...task,
+          is_completed_for_position: relevantCompletion.is_completed,
+          completed_at: relevantCompletion.completed_at,
+          position_completions: [relevantCompletion]
+        }
+        const status = getTaskStatusWithCarryOver(mockTask, currentDate, isViewingToday)
+        return status
+      } else {
+        // No completion for this position - preserve original task dates for accurate status calculation
+        const cleanTask = {
+          ...task,
+          is_completed_for_position: false,
+          completed_at: undefined,
+          position_completions: []
+          // Keep original task.date and task.due_date to maintain proper status calculation context
+        }
+        return getTaskStatusWithCarryOver(cleanTask, currentDate, isViewingToday)
+      }
+    }
+
+    // For regular users, use the standard status calculation
+    return getTaskStatusWithCarryOver(task, currentDate, isViewingToday)
+  }, [isAdmin, selectedResponsibility, currentDate, isViewingToday])
+
   // Apply filters and sorting to tasks
   const filteredAndSortedTasks = useMemo(() => {
     const filtered = tasks.filter((task) => {
@@ -1801,13 +1897,30 @@ export default function RoleChecklistPage() {
         }
       }
 
-      // Visibility + Status: hide tasks before appearance window
-      const dynamicStatus = getTaskStatusWithCarryOver(task, currentDate, isViewingToday)
-      if (dynamicStatus === 'not_visible') return false
+      // Get effective status for this task considering the current filter context
+      const effectiveStatus = getEffectiveTaskStatus(task)
+
+      // Visibility check: hide tasks before appearance window
+      if (effectiveStatus === 'not_visible') return false
 
       // Status filter - after visibility check
       if (selectedStatus !== "all") {
-        return dynamicStatus === selectedStatus
+        // Normalize both the task status and the selected filter to canonical values
+        const normalize = (s: string) => {
+          if (s === 'done') return 'completed'
+          if (s === 'pending' || s === 'not_due') return 'not_due_yet'
+          if (s === 'completed') return 'completed'
+          if (s === 'not_due_yet') return 'not_due_yet'
+          if (s === 'due_today') return 'due_today'
+          if (s === 'overdue') return 'overdue'
+          if (s === 'missed') return 'missed'
+          return s
+        }
+
+        const filterStatus = normalize(effectiveStatus)
+        const wantedStatus = normalize(selectedStatus)
+
+        return filterStatus === wantedStatus
       }
       return true
     })
@@ -1871,7 +1984,7 @@ export default function RoleChecklistPage() {
 
       return 0
     })
-  }, [tasks, searchTerm, selectedResponsibility, selectedCategory, selectedStatus, selectedTiming, currentDate, isAdmin, positions])
+  }, [tasks, searchTerm, selectedResponsibility, selectedCategory, selectedStatus, selectedTiming, currentDate, isAdmin, positions, isViewingToday, getEffectiveTaskStatus])
 
   // Pagination calculations
   const totalPages = Math.ceil(filteredAndSortedTasks.length / tasksPerPage)
@@ -1879,26 +1992,119 @@ export default function RoleChecklistPage() {
   const endIndex = startIndex + tasksPerPage
   const paginatedTasks = filteredAndSortedTasks.slice(startIndex, endIndex)
 
-  // Recalculate summary counts whenever the visible tasks or date change
+  // Calculate summary counts based on "All Responsibilities" view (ignoring current filters)
   useEffect(() => {
     const counts = {
-      total: filteredAndSortedTasks.length,
+      total: 0,
       done: 0,
       not_due_yet: 0,
       due_today: 0,
       overdue: 0,
       missed: 0,
     }
-    filteredAndSortedTasks.forEach(task => {
-      const status = getTaskStatusWithCarryOver(task, currentDate, isViewingToday)
+
+    // Filter tasks using "All Responsibilities" logic for summary counts
+    const allResponsibilitiesTasks = tasks.filter((task) => {
+      // Create a mock getEffectiveTaskStatus function that always uses "all" responsibilities
+      const getEffectiveTaskStatusForAll = (task: ChecklistTask) => {
+        if (isAdmin) {
+          // For admin viewing all responsibilities, check if any position has completed the task
+          const completions = task.position_completions || []
+
+          // Check if any position has a valid completion within carry-over period
+          const hasValidCompletion = completions.some(completion => {
+            if (!completion.is_completed) return false
+
+            const mockTask = {
+              ...task,
+              is_completed_for_position: completion.is_completed,
+              completed_at: completion.completed_at,
+              position_completions: [completion]
+            }
+            const status = getTaskStatusWithCarryOver(mockTask, currentDate, isViewingToday)
+            return status === 'completed'
+          })
+
+          if (hasValidCompletion) {
+            return 'completed'
+          } else {
+            // No valid completions - preserve original task dates for accurate status calculation
+            const cleanTask = {
+              ...task,
+              is_completed_for_position: false,
+              completed_at: undefined,
+              position_completions: []
+              // Keep original task.date and task.due_date to maintain proper status calculation context
+            }
+            return getTaskStatusWithCarryOver(cleanTask, currentDate, isViewingToday)
+          }
+        }
+
+        // For regular users, use the standard status calculation
+        return getTaskStatusWithCarryOver(task, currentDate, isViewingToday)
+      }
+
+      const effectiveStatus = getEffectiveTaskStatusForAll(task)
+
+      // Visibility check: hide tasks before appearance window
+      if (effectiveStatus === 'not_visible') return false
+
+      return true
+    })
+
+    counts.total = allResponsibilitiesTasks.length
+
+    allResponsibilitiesTasks.forEach(task => {
+      // Use the same logic as above for status calculation
+      const getEffectiveTaskStatusForAll = (task: ChecklistTask) => {
+        if (isAdmin) {
+          const completions = task.position_completions || []
+
+          const hasValidCompletion = completions.some(completion => {
+            if (!completion.is_completed) return false
+
+            const mockTask = {
+              ...task,
+              is_completed_for_position: completion.is_completed,
+              completed_at: completion.completed_at,
+              position_completions: [completion]
+            }
+            const status = getTaskStatusWithCarryOver(mockTask, currentDate, isViewingToday)
+            return status === 'completed'
+          })
+
+          if (hasValidCompletion) {
+            return 'completed'
+          } else {
+            // No valid completions - preserve original task dates for accurate status calculation
+            const cleanTask = {
+              ...task,
+              is_completed_for_position: false,
+              completed_at: undefined,
+              position_completions: []
+              // Keep original task.date and task.due_date to maintain proper status calculation context
+            }
+            return getTaskStatusWithCarryOver(cleanTask, currentDate, isViewingToday)
+          }
+        }
+
+        return getTaskStatusWithCarryOver(task, currentDate, isViewingToday)
+      }
+
+      let status = getEffectiveTaskStatusForAll(task)
+      // Normalize for counts
+      if (status === 'done') status = 'completed'
+      if (status === 'pending' || status === 'not_due') status = 'not_due_yet'
+
       if (status === 'completed') counts.done += 1
       else if (status === 'not_due_yet') counts.not_due_yet += 1
       else if (status === 'due_today') counts.due_today += 1
       else if (status === 'overdue') counts.overdue += 1
       else if (status === 'missed') counts.missed += 1
     })
+
     setTaskCounts(counts)
-  }, [filteredAndSortedTasks, currentDate])
+  }, [tasks, currentDate, isAdmin, isViewingToday])
 
   // Reset to first page when filters change
   useEffect(() => {
@@ -1980,13 +2186,95 @@ export default function RoleChecklistPage() {
       isViewingToday
     })
 
+    // Special handling for PAST dates (before today) and "Every Day" tasks
+    const today = getAustralianToday()
+    const isViewingPastDate = currentDate < today
+    if (isViewingPastDate && task.master_task?.frequencies?.includes('every_day')) {
+      // For admin view with "All Responsibilities" filter
+      if (isAdmin && selectedResponsibility === 'all') {
+        const completions = task.position_completions || []
+        const validCompletions = completions.filter(completion => {
+          if (!completion.is_completed) return false
+          const mockTask = {
+            ...task,
+            is_completed_for_position: completion.is_completed,
+            completed_at: completion.completed_at,
+            position_completions: [completion]
+          }
+          const status = getTaskStatusWithCarryOver(mockTask, currentDate, false)
+          return status === 'completed'
+        })
+
+        if (validCompletions.length > 0) {
+          const maxVisible = 2
+          const visibleCompletions = validCompletions.slice(0, maxVisible)
+          const hiddenCount = validCompletions.length - maxVisible
+          return (
+            <div className="flex flex-wrap gap-1">
+              {visibleCompletions.map((completion, index) => (
+                <Badge key={index} className="bg-green-100 text-green-800 border-green-200 text-xs">
+                  ✓ {formatResponsibility(completion.position_name)}
+                </Badge>
+              ))}
+              {hiddenCount > 0 && (
+                <Badge variant="outline" className="text-xs bg-gray-50 text-gray-600">
+                  +{hiddenCount}
+                </Badge>
+              )}
+            </div>
+          )
+        } else {
+          return (
+            <Badge className="bg-gray-100 text-gray-800 border-gray-200">
+              ❌ Missed
+            </Badge>
+          )
+        }
+      }
+
+      // For admin with specific responsibility filter or regular user
+      const completions = task.position_completions || []
+      let relevantCompletion = null
+      if (isAdmin && selectedResponsibility !== 'all') {
+        relevantCompletion = completions.find(c =>
+          formatResponsibility(c.position_name) === selectedResponsibility
+        )
+      } else {
+        relevantCompletion = completions.find(c => c.is_completed)
+      }
+
+      if (relevantCompletion && relevantCompletion.is_completed) {
+        const mockTask = {
+          ...task,
+          is_completed_for_position: relevantCompletion.is_completed,
+          completed_at: relevantCompletion.completed_at,
+          position_completions: [relevantCompletion]
+        }
+        const status = getTaskStatusWithCarryOver(mockTask, currentDate, false)
+        if (status === 'completed') {
+          return (
+            <Badge className="bg-green-100 text-green-800 border-green-200">
+              ✓ Done
+            </Badge>
+          )
+        }
+      }
+
+      return (
+        <Badge className="bg-gray-100 text-gray-800 border-gray-200">
+          ❌ Missed
+        </Badge>
+      )
+    }
+
+    // Regular logic for current/future dates or non-"Every Day" tasks
     // For admin view with "All Responsibilities" filter
     if (isAdmin && selectedResponsibility === 'all') {
       const completions = task.position_completions || []
       console.log('👥 Admin all view - completions:', completions)
 
       if (completions.length === 0) {
-        // No completions - treat as new task instance
+        // No completions - treat as new task instance, but preserve original task dates
         const cleanTask = {
           ...task,
           is_completed_for_position: false,
@@ -2043,8 +2331,7 @@ export default function RoleChecklistPage() {
           completed_by: undefined,
           position_completions: [],
           status: undefined, // Clear the status
-          detailed_status: undefined, // Clear the detailed status
-          date: currentDate // Use current date as the new task date
+          detailed_status: undefined // Clear the detailed status
         }
         const status = getTaskStatusWithCarryOver(cleanTask, currentDate, isViewingToday)
         console.log('❌ No valid completions, treating as new task, status:', status)
@@ -2139,7 +2426,7 @@ export default function RoleChecklistPage() {
           console.log('✅ Within carry-over period, showing Done badge')
           return getStatusBadgeByStatus(status)
         } else {
-          // Beyond carry-over period - treat as new task instance
+          // Beyond carry-over period - treat as new task instance, preserve original task dates
           console.log('❌ Beyond carry-over period, calculating new task status')
           const cleanTask = {
             ...task,
@@ -2148,15 +2435,14 @@ export default function RoleChecklistPage() {
             completed_by: undefined,
             position_completions: [],
             status: undefined,
-            detailed_status: undefined,
-            date: currentDate
+            detailed_status: undefined
           }
           const newTaskStatus = getTaskStatusWithCarryOver(cleanTask, currentDate, isViewingToday)
           console.log('🔄 New task status:', newTaskStatus)
           return getStatusBadgeByStatus(newTaskStatus)
         }
       } else {
-        // Task is not completed for this position - use normal status calculation
+        // Task is not completed for this position - use normal status calculation, preserve original task dates
         const cleanTask = {
           ...task,
           is_completed_for_position: false,
@@ -2164,8 +2450,7 @@ export default function RoleChecklistPage() {
           completed_by: undefined,
           position_completions: [],
           status: undefined,
-          detailed_status: undefined,
-          date: currentDate
+          detailed_status: undefined
         }
         const status = getTaskStatusWithCarryOver(cleanTask, currentDate, isViewingToday)
         return getStatusBadgeByStatus(status)
@@ -2233,7 +2518,7 @@ export default function RoleChecklistPage() {
 
   const allTasksCompleted = filteredAndSortedTasks.length > 0 && filteredAndSortedTasks.every((task) =>
     getTaskStatusWithCarryOver(task, currentDate, isViewingToday) === "completed"
-  )
+  );
 
   return (
     <div className="min-h-screen bg-[var(--color-background)]">
@@ -2265,7 +2550,10 @@ export default function RoleChecklistPage() {
                     }
 
                     filteredAndSortedTasks.forEach(task => {
-                      const status = getTaskStatusWithCarryOver(task, currentDate, isViewingToday)
+                      let status = getTaskStatusWithCarryOver(task, currentDate, isViewingToday)
+                      // Normalize to match summary buckets
+                      if (status === 'done') status = 'completed'
+                      if (status === 'pending' || status === 'not_due') status = 'not_due_yet'
                       statusCounts[status as keyof typeof statusCounts]++
                     })
 
@@ -2607,6 +2895,55 @@ export default function RoleChecklistPage() {
                               ) : (
                                 <>
                                   {(() => {
+                                    // Special handling for PAST dates (before today) and "Every Day" tasks
+                                    const today = getAustralianToday()
+                                    const isViewingPastDate = currentDate < today
+                                    if (isViewingPastDate && task.master_task?.frequencies?.includes('every_day')) {
+                                      const completions = task.position_completions || []
+                                      const relevantCompletion = completions.find(c => c.is_completed)
+                                      let wasCompletedOnThisDate = false
+
+                                      if (relevantCompletion && relevantCompletion.is_completed) {
+                                        const mockTask = {
+                                          ...task,
+                                          is_completed_for_position: relevantCompletion.is_completed,
+                                          completed_at: relevantCompletion.completed_at,
+                                          position_completions: [relevantCompletion]
+                                        }
+                                        const status = getTaskStatusWithCarryOver(mockTask, currentDate, false)
+                                        wasCompletedOnThisDate = status === 'completed'
+                                      }
+
+                                      if (wasCompletedOnThisDate) {
+                                        return (
+                                          <Button
+                                            type="button"
+                                            size="sm"
+                                            onClick={() => {
+                                              toastWarning("Historical Task", "This task was completed on this date. To complete today's task, please go to today's page.")
+                                            }}
+                                            className="font-medium bg-green-100 text-green-800 border-green-200 hover:bg-green-200"
+                                            title="Task was completed on this date"
+                                          >
+                                            ✓ Done
+                                          </Button>
+                                        )
+                                      } else {
+                                        return (
+                                          <Button
+                                            type="button"
+                                            size="sm"
+                                            disabled={true}
+                                            className="font-medium bg-gray-400 text-gray-600 border-gray-400 cursor-not-allowed"
+                                            title="Task was not completed on this date and is now locked"
+                                          >
+                                            Locked
+                                          </Button>
+                                        )
+                                      }
+                                    }
+
+                                    // Regular logic for current dates or non-"Every Day" tasks
                                     // Check if task is still within carry-over period
                                     const dynamicStatus = getTaskStatusWithCarryOver(task, currentDate, isViewingToday)
                                     return dynamicStatus === 'completed'
@@ -2793,19 +3130,19 @@ export default function RoleChecklistPage() {
                                 {renderFrequencyWithDetails(task)}
                               </div>
                             </div>
-                            <div className="flex grid grid-cols-2 gap-2">
+                            <div className="grid grid-cols-2 gap-2">
                               <div>
                                 <span className="text-gray-500">Due Time:</span>
                                 <div className="mt-1 font-medium">
                                   {task.master_task.due_time ? (
                                     <span>{task.master_task.due_time}</span>
                                   ) : (
-                                    <span className="text-gray-400">No due time</span>
+                                    <span className="text-gray-500">No due time</span>
                                   )}
                                 </div>
                               </div>
-                              <div className="items-center space-x-2">
-                                <span className="text-sm text-gray-500">Status:</span>
+                              <div>
+                                <span className="text-gray-500">Status:</span>
                                 <div className="mt-1">
                                   {getStatusBadge(task)}
                                 </div>
@@ -2813,14 +3150,13 @@ export default function RoleChecklistPage() {
                             </div>
                           </div>
 
-                          {/* Actions */}
-                          <div className="flex space-x-2 grid grid-cols-2 gap-2">
+                          <div className="flex justify-end gap-2 pt-2">
+                            {/* Admin sees only Details button */}
                             {isAdmin ? (
-                              // Admin: only show details
                               <Button
                                 type="button"
                                 size="sm"
-                                variant="outline"
+                                variant="ghost"
                                 onClick={() => handleViewDetails(task)}
                                 title="View Details"
                                 className="hover:bg-gray-100"
@@ -2830,111 +3166,65 @@ export default function RoleChecklistPage() {
                               </Button>
                             ) : (
                               <>
+                                {/* Non-admin action buttons */}
                                 {(() => {
-                                  // Check if task is still within carry-over period
-                                  const dynamicStatus = getTaskStatusWithCarryOver(task, currentDate, isViewingToday)
-                                  return dynamicStatus === 'completed'
-                                })() ? (
-                                  (() => {
-                                    const isNotToday = !isViewingToday && !isAdmin
-                                    const isDisabled = processingTasks.has(task.id)
+                                  const today = getAustralianToday()
+                                  // currentDate and today are YYYY-MM-DD strings; compare directly
+                                  const isNotToday = currentDate !== today
+                                  const isLocked = task.is_locked
+                                  const isDisabled = isLocked || isNotToday
+                                  const getButtonTitle = () => {
+                                    if (isLocked) return "Task is locked and cannot be completed"
+                                    if (isNotToday) return "You can only complete tasks for today. Please go to today's page."
+                                    return "Mark task as done"
+                                  }
 
-                                    const getUndoButtonStyle = () => {
-                                      if (isNotToday) {
-                                        return "border-green-300 bg-green-100 text-green-700 opacity-60"
-                                      }
-                                      return "border-green-300 bg-green-100 text-green-800 hover:bg-green-200 hover:border-green-400"
+                                  const getButtonText = () => {
+                                    if (isLocked) return "Locked"
+                                    return "Done ?"
+                                  }
+
+                                  const getButtonStyle = () => {
+                                    if (isLocked) {
+                                      return "bg-gray-400 text-gray-600 border-gray-400 cursor-not-allowed"
                                     }
-
-                                    return (
-                                      <Button
-                                        type="button"
-                                        size="sm"
-                                        variant="outline"
-                                        onClick={() => {
-                                          if (isNotToday) {
-                                            toastWarning("Cannot Undo Task", "You can only undo tasks for today. Please go to today's page.")
-                                            return
-                                          }
-                                          handleTaskUndo(task.id)
-                                        }}
-                                        disabled={isDisabled}
-                                        className={`flex-1 font-medium ${getUndoButtonStyle()}`}
-                                        title={isNotToday ? "You can only undo tasks for today. Please go to today's page." : "Undo task completion"}
-                                      >
-                                        {processingTasks.has(task.id) ? (
-                                          <span className="flex items-center justify-center">
-                                            <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-green-800 mr-1"></div>
-                                            Processing...
-                                          </span>
-                                        ) : (
-                                          <span>✓ Done</span>
-                                        )}
-                                      </Button>
-                                    )
-                                  })()
-                                ) : (
-                                  (() => {
-                                    const taskStatus = getTaskStatusWithCarryOver(task, currentDate, isViewingToday)
-                                    // For completed tasks that have moved beyond carry-over period, 
-                                    // they should behave as new incomplete tasks and not be locked
-                                    const isNewTaskInstance = task.is_completed_for_position && taskStatus !== 'completed'
-                                    const isLocked = taskStatus === 'missed' || (task.can_complete === false && !isNewTaskInstance)
-                                    const isNotToday = !isViewingToday && !isAdmin
-                                    const isDisabled = processingTasks.has(task.id) || isLocked
-
-                                    const getButtonTitle = () => {
-                                      if (isLocked) return "Task is locked and cannot be completed"
-                                      if (isNotToday) return "You can only complete tasks for today. Please go to today's page."
-                                      return "Mark task as done"
+                                    if (isNotToday) {
+                                      return "bg-green-200 text-green-700 border-green-300 hover:bg-green-300 opacity-60"
                                     }
+                                    return "bg-blue-600 text-white hover:bg-blue-700 border-blue-600 hover:border-blue-700"
+                                  }
 
-                                    const getButtonText = () => {
-                                      if (isLocked) return "Locked"
-                                      return "Done ?"
-                                    }
+                                  return (
+                                    <Button
+                                      type="button"
+                                      size="sm"
+                                      onClick={() => {
+                                        if (isNotToday) {
+                                          toastWarning("Cannot Complete Task", "You can only complete tasks for today. Please go to today's page.")
+                                          return
+                                        }
+                                        handleTaskComplete(task.id)
+                                      }}
+                                      disabled={isDisabled}
+                                      className={`font-medium ${getButtonStyle()}`}
+                                      title={getButtonTitle()}
+                                    >
+                                      {processingTasks.has(task.id) ? (
+                                        <span className="flex items-center">
+                                          <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-white mr-1"></div>
+                                          Processing...
+                                        </span>
+                                      ) : (
+                                        <span>{getButtonText()}</span>
+                                      )}
+                                    </Button>
+                                  )
+                                })()}
 
-                                    const getButtonStyle = () => {
-                                      if (isLocked) {
-                                        return "bg-gray-400 text-gray-600 border-gray-400 cursor-not-allowed"
-                                      }
-                                      if (isNotToday) {
-                                        return "bg-green-200 text-green-700 border-green-300 hover:bg-green-300 opacity-60"
-                                      }
-                                      return "bg-blue-600 text-white hover:bg-blue-700 border-blue-600 hover:border-blue-700"
-                                    }
-
-                                    return (
-                                      <Button
-                                        type="button"
-                                        size="sm"
-                                        onClick={() => {
-                                          if (isNotToday) {
-                                            toastWarning("Cannot Complete Task", "You can only complete tasks for today. Please go to today's page.")
-                                            return
-                                          }
-                                          handleTaskComplete(task.id)
-                                        }}
-                                        disabled={isDisabled}
-                                        className={`font-medium ${getButtonStyle()}`}
-                                        title={getButtonTitle()}
-                                      >
-                                        {processingTasks.has(task.id) ? (
-                                          <span className="flex items-center justify-center">
-                                            <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-white mr-1"></div>
-                                            Processing...
-                                          </span>
-                                        ) : (
-                                          <span>{getButtonText()}</span>
-                                        )}
-                                      </Button>
-                                    )
-                                  })()
-                                )}
                                 <Button
                                   type="button"
                                   size="sm"
-                                  variant="outline"
+                                  variant="ghost"
                                   onClick={() => handleViewDetails(task)}
                                   title="View Details"
                                   className="hover:bg-gray-100"
@@ -2950,7 +3240,6 @@ export default function RoleChecklistPage() {
                     </Card>
                   ))}
                 </div>
-
                 {/* Pagination */}
                 {filteredAndSortedTasks.length > 0 && (
                   <Pagination
@@ -3007,16 +3296,20 @@ export default function RoleChecklistPage() {
             </div>
           </div>
         </div>
-      </main>
 
-      {/* Task Detail Modal */}
-      <TaskDetailModal
-        isOpen={isDetailModalOpen}
-        onClose={handleCloseDetailModal}
-        task={selectedTask}
-        currentDate={currentDate}
-        onTaskUpdate={() => setRefreshKey(prev => prev + 1)}
-      />
+
+        {/* Task Detail Modal */}
+        {selectedTask && (
+          <TaskDetailModal
+            task={selectedTask}
+            isOpen={!!selectedTask}
+            onClose={() => setSelectedTask(null)}
+            onTaskUpdate={() => setRefreshKey((prev) => prev + 1)}
+            currentDate={currentDate}
+            isAdmin={isAdmin}
+          />
+        )}
+      </main>
     </div>
   )
 }

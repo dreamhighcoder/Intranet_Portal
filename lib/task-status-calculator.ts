@@ -274,9 +274,8 @@ export function calculateTaskStatus(task: TaskStatusInput, currentDate?: string)
             carryOverPeriod.lockTime
           )
           
-          // Only check current time if we're viewing today and it's the lock date
-          const isViewingToday = todayStr === getAustralianToday()
-          if (isViewingToday && now > lockDateTime) {
+          // Always check current time against lock time - carryover period ends regardless of viewing context
+          if (now > lockDateTime) {
             return 'missed' // Task was completed but carry-over period has ended
           }
         }
