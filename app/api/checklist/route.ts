@@ -318,7 +318,7 @@ export async function GET(request: NextRequest) {
             // Non-admin: completed ONLY if this position has a completion record
             isCompletedForCurrentPosition = taskCompletions.some(
               (completion) => {
-                const normalizedCompletionRole = completion.position_name.toLowerCase().replace(/[^a-z0-9]+/g, '-')
+                const normalizedCompletionRole = toKebabCase(completion.position_name)
                 const matches = normalizedCompletionRole === normalizedRole
                 
 
