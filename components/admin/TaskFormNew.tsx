@@ -59,7 +59,7 @@ interface TaskFormProps {
 export default function TaskFormNew({ task, onSubmit, onCancel }: TaskFormProps) {
   const [showConfirmModal, setShowConfirmModal] = useState(false)
   const [responsibilityOptions, setResponsibilityOptions] = useState<{ value: string; label: string }[]>([])
-  const [isTimingAutoUpdate, setIsTimingAutoUpdate] = useState(false) // Flag to prevent infinite loops
+  const [updateSource, setUpdateSource] = useState<'timing' | 'due_time' | null>(null) // Track which field initiated the update
 
   const isEditing = !!task
 
@@ -94,20 +94,22 @@ export default function TaskFormNew({ task, onSubmit, onCancel }: TaskFormProps)
     const [hours, minutes] = timeString.split(':').map(Number)
     const totalMinutes = hours * 60 + minutes
 
-    // Define time boundaries in minutes
+    // Define time boundaries in minutes based on user requirements
     const openingTime = 9 * 60 + 30  // 09:30 = 570 minutes
     const anytimeDuringDayTime = 16 * 60 + 30  // 16:30 = 990 minutes
-    const beforeOrderCutOffTime = 16 * 60 + 55  // 16:55 = 1015 minutes
     const closingTime = 17 * 60  // 17:00 = 1020 minutes
 
-    // Determine timing based on the specified rules
-    if (totalMinutes <= openingTime) {
+    // Determine timing based on the specified rules:
+    // - If time before 9:30 AM → "Opening"
+    // - If time between 9:30 AM and 4:30 PM → "Anytime During Day"  
+    // - If time between 4:30 PM and 5:00 PM → "Closing"
+    // Note: "Before Order Cut Off" is not used in reverse mapping per user requirements
+    if (totalMinutes < openingTime) {
       return 'opening'
-    } else if (totalMinutes <= anytimeDuringDayTime) {
+    } else if (totalMinutes < anytimeDuringDayTime) {
       return 'anytime_during_day'
-    } else if (totalMinutes <= beforeOrderCutOffTime) {
-      return 'before_order_cut_off'
     } else {
+      // 4:30 PM and later maps to "Closing"
       return 'closing'
     }
   }
@@ -126,29 +128,8 @@ export default function TaskFormNew({ task, onSubmit, onCancel }: TaskFormProps)
     return () => { mounted = false }
   }, [])
 
-  // Auto-fill due_time based on timing selection
-  useEffect(() => {
-    if (timing && DEFAULT_DUE_TIMES[timing as keyof typeof DEFAULT_DUE_TIMES] && !isTimingAutoUpdate) {
-      setValue('due_time', DEFAULT_DUE_TIMES[timing as keyof typeof DEFAULT_DUE_TIMES])
-    }
-  }, [timing, setValue, isTimingAutoUpdate])
-
-  // Auto-update timing based on manual due_time changes
-  useEffect(() => {
-    if (dueTime && !isTimingAutoUpdate) {
-      const newTiming = getTimingFromDueTime(dueTime)
-      const currentTiming = form.getValues('timing')
-
-      // Only update timing if it's different and the due time doesn't match the default for current timing
-      const currentDefaultTime = DEFAULT_DUE_TIMES[currentTiming as keyof typeof DEFAULT_DUE_TIMES]
-      if (newTiming !== currentTiming && dueTime !== currentDefaultTime) {
-        setIsTimingAutoUpdate(true)
-        setValue('timing', newTiming as any)
-        // Reset the flag after a short delay to allow the timing update to complete
-        setTimeout(() => setIsTimingAutoUpdate(false), 100)
-      }
-    }
-  }, [dueTime, setValue, form, getTimingFromDueTime])
+  // Note: Timing and due_time synchronization is now handled directly in custom handlers
+  // to prevent infinite loops that were occurring with useEffect hooks
 
   const handleSubmit = (data: TaskFormData) => {
     // Create a base task data object with required fields
@@ -243,6 +224,36 @@ export default function TaskFormNew({ task, onSubmit, onCancel }: TaskFormProps)
     setShowConfirmModal(true)
   }
 
+  // Custom handlers to control updates
+  const handleTimingChange = (value: string) => {
+    setUpdateSource('timing')
+    form.setValue('timing', value as any)
+    // Auto-fill due_time based on timing selection
+    if (DEFAULT_DUE_TIMES[value as keyof typeof DEFAULT_DUE_TIMES]) {
+      form.setValue('due_time', DEFAULT_DUE_TIMES[value as keyof typeof DEFAULT_DUE_TIMES])
+    }
+    setTimeout(() => setUpdateSource(null), 50)
+  }
+
+  const handleDueTimeChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const timeValue = event.target.value
+    setUpdateSource('due_time')
+    form.setValue('due_time', timeValue)
+
+    // Auto-update timing based on due_time
+    if (timeValue) {
+      const newTiming = getTimingFromDueTime(timeValue)
+      const currentTiming = form.getValues('timing')
+      const currentDefaultTime = DEFAULT_DUE_TIMES[currentTiming as keyof typeof DEFAULT_DUE_TIMES]
+
+      // Only update timing if it's different and the due time doesn't match the default for current timing
+      if (newTiming !== currentTiming && timeValue !== currentDefaultTime) {
+        form.setValue('timing', newTiming as any)
+      }
+    }
+    setTimeout(() => setUpdateSource(null), 50)
+  }
+
   const addArrayItem = (field: keyof TaskFormData, value: string) => {
     const current = form.getValues(field) as string[]
     if (current && !current.includes(value)) {
@@ -313,7 +324,7 @@ export default function TaskFormNew({ task, onSubmit, onCancel }: TaskFormProps)
                   <Label htmlFor="timing">Timing *</Label>
                   <Select
                     value={form.watch('timing')}
-                    onValueChange={(value) => form.setValue('timing', value as any)}
+                    onValueChange={handleTimingChange}
                   >
                     <SelectTrigger className="w-full">
                       <SelectValue />
@@ -359,7 +370,8 @@ export default function TaskFormNew({ task, onSubmit, onCancel }: TaskFormProps)
                   <Input
                     id="due_time"
                     type="time"
-                    {...form.register('due_time')}
+                    value={form.watch('due_time') || ''}
+                    onChange={handleDueTimeChange}
                     className="pl-10"
                   />
                 </div>
