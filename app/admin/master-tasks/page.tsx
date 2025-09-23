@@ -1163,22 +1163,22 @@ export default function AdminMasterTasksPage() {
           const numberedTasks = updatedTasks.filter(t => typeof t.custom_order === 'number' && t.custom_order < RESET_VALUE)
           // Get all tasks without custom_order or with reset values (including the new task)
           const unnumberedTasks = updatedTasks.filter(t => typeof t.custom_order !== 'number' || t.custom_order >= RESET_VALUE)
-          
+
           // Sort unnumbered tasks by default comparator
           const sortedUnnumbered = [...unnumberedTasks].sort(compareBase)
-          
+
           // Build new order map
           const newOrderMap: Record<string, number> = {}
           let index = 0
-          
+
           // First, add numbered tasks in their custom order
           numberedTasks
             .sort((a, b) => (a.custom_order as number) - (b.custom_order as number))
             .forEach(t => { newOrderMap[t.id] = index++ })
-          
+
           // Then add unnumbered tasks in default sort order
           sortedUnnumbered.forEach(t => { newOrderMap[t.id] = index++ })
-          
+
           setCustomOrderMap(newOrderMap)
         }
 
@@ -1921,7 +1921,7 @@ export default function AdminMasterTasksPage() {
       console.log('Is admin:', isAdmin)
 
       // Check for tasks that have meaningful custom_order values (not reset values)
-      const tasksWithCustomOrder = tasks.filter(task => 
+      const tasksWithCustomOrder = tasks.filter(task =>
         typeof task.custom_order === 'number' && task.custom_order < RESET_VALUE
       )
       console.log('Tasks with custom order:', tasksWithCustomOrder.length)
@@ -2255,21 +2255,6 @@ export default function AdminMasterTasksPage() {
                   </Select>
                 </div>
 
-                {/* Status Filter */}
-                <div className="flex justify-start w-full">
-                  <Select value={filterStatus} onValueChange={setFilterStatus}>
-                    <SelectTrigger className="w-full">
-                      <SelectValue placeholder="All Statuses" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All Statuses</SelectItem>
-                      <SelectItem value="active">Active</SelectItem>
-                      <SelectItem value="draft">Draft</SelectItem>
-                      <SelectItem value="inactive">Inactive</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
                 {/* Category Filter */}
                 <div className="flex justify-start w-full">
                   <Select value={filterCategory} onValueChange={setFilterCategory}>
@@ -2286,6 +2271,22 @@ export default function AdminMasterTasksPage() {
                     </SelectContent>
                   </Select>
                 </div>
+
+                {/* Status Filter */}
+                <div className="flex justify-start w-full">
+                  <Select value={filterStatus} onValueChange={setFilterStatus}>
+                    <SelectTrigger className="w-full">
+                      <SelectValue placeholder="All Statuses" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Statuses</SelectItem>
+                      <SelectItem value="active">Active</SelectItem>
+                      <SelectItem value="draft">Draft</SelectItem>
+                      <SelectItem value="inactive">Inactive</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
 
                 {/* Export and Import Buttons */}
                 <div className="grid grid-cols-2 gap-2">

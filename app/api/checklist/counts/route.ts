@@ -318,8 +318,13 @@ export async function GET(request: NextRequest) {
           counts.missed++
           break
         case 'not_due_yet':
+          // Include not_due_yet tasks in total count to match checklist page behavior
+          // This ensures "Tasks to do" count includes "Not Due Yet" tasks for frequencies like "Once Off" and "Once Weekly"
+          counts.total++
+          break
         default:
-          // Don't count not_due_yet tasks in total
+          // Fallback - include in total
+          counts.total++
           break
       }
 

@@ -89,17 +89,17 @@ export default function TaskFormNew({ task, onSubmit, onCancel }: TaskFormProps)
   // Function to determine timing based on due time
   const getTimingFromDueTime = (timeString: string): string => {
     if (!timeString) return 'opening'
-    
+
     // Convert time string to minutes for comparison
     const [hours, minutes] = timeString.split(':').map(Number)
     const totalMinutes = hours * 60 + minutes
-    
+
     // Define time boundaries in minutes
     const openingTime = 9 * 60 + 30  // 09:30 = 570 minutes
     const anytimeDuringDayTime = 16 * 60 + 30  // 16:30 = 990 minutes
     const beforeOrderCutOffTime = 16 * 60 + 55  // 16:55 = 1015 minutes
     const closingTime = 17 * 60  // 17:00 = 1020 minutes
-    
+
     // Determine timing based on the specified rules
     if (totalMinutes <= openingTime) {
       return 'opening'
@@ -115,14 +115,14 @@ export default function TaskFormNew({ task, onSubmit, onCancel }: TaskFormProps)
   // Load dynamic responsibilities from Positions + shared
   useEffect(() => {
     let mounted = true
-    ;(async () => {
-      try {
-        const opts = await getResponsibilityOptions()
-        if (mounted) setResponsibilityOptions(opts)
-      } catch {
-        if (mounted) setResponsibilityOptions([])
-      }
-    })()
+      ; (async () => {
+        try {
+          const opts = await getResponsibilityOptions()
+          if (mounted) setResponsibilityOptions(opts)
+        } catch {
+          if (mounted) setResponsibilityOptions([])
+        }
+      })()
     return () => { mounted = false }
   }, [])
 
@@ -138,7 +138,7 @@ export default function TaskFormNew({ task, onSubmit, onCancel }: TaskFormProps)
     if (dueTime && !isTimingAutoUpdate) {
       const newTiming = getTimingFromDueTime(dueTime)
       const currentTiming = form.getValues('timing')
-      
+
       // Only update timing if it's different and the due time doesn't match the default for current timing
       const currentDefaultTime = DEFAULT_DUE_TIMES[currentTiming as keyof typeof DEFAULT_DUE_TIMES]
       if (newTiming !== currentTiming && dueTime !== currentDefaultTime) {
@@ -188,7 +188,7 @@ export default function TaskFormNew({ task, onSubmit, onCancel }: TaskFormProps)
   const handleCreateClick = async () => {
     // Get current form values
     const formData = form.getValues()
-    
+
     // Check required fields: Description, Responsibilities, Categories, and Frequency
     const requiredFields = [
       { field: 'description', label: 'Description', value: formData.description },
@@ -196,14 +196,14 @@ export default function TaskFormNew({ task, onSubmit, onCancel }: TaskFormProps)
       { field: 'categories', label: 'Categories', value: formData.categories },
       { field: 'frequencies', label: 'Frequency', value: formData.frequencies }
     ]
-    
+
     const missingFields = requiredFields.filter(({ value }) => {
       if (Array.isArray(value)) {
         return !value || value.length === 0
       }
       return !value || value.trim() === ''
     })
-    
+
     if (missingFields.length > 0) {
       // Set errors for missing fields
       missingFields.forEach(({ field, label }) => {
@@ -212,13 +212,13 @@ export default function TaskFormNew({ task, onSubmit, onCancel }: TaskFormProps)
           message: `${label} is required`
         })
       })
-      
+
       // Show toast warning
       const missingFieldNames = missingFields.map(f => f.label).join(', ')
       import('@/hooks/use-toast').then(({ toastError }) => {
         toastError("Validation Error", `Please fill in the following required fields: ${missingFieldNames}`)
       })
-      
+
       // Scroll to the first error
       const firstError = missingFields[0].field
       const errorElement = document.getElementById(firstError)
@@ -400,8 +400,8 @@ export default function TaskFormNew({ task, onSubmit, onCancel }: TaskFormProps)
                       Add Responsibility
                     </Button>
                   </PopoverTrigger>
-                  <PopoverContent 
-                    className="w-80 p-2" 
+                  <PopoverContent
+                    className="w-80 p-2"
                     align="start"
                     onWheel={(e) => {
                       // Allow wheel scrolling within the popover
@@ -483,8 +483,8 @@ export default function TaskFormNew({ task, onSubmit, onCancel }: TaskFormProps)
                       Add Category
                     </Button>
                   </PopoverTrigger>
-                  <PopoverContent 
-                    className="w-80 p-2" 
+                  <PopoverContent
+                    className="w-80 p-2"
                     align="start"
                     onWheel={(e) => {
                       // Allow wheel scrolling within the popover
@@ -579,8 +579,8 @@ export default function TaskFormNew({ task, onSubmit, onCancel }: TaskFormProps)
                         Add Frequency
                       </Button>
                     </PopoverTrigger>
-                    <PopoverContent 
-                      className="w-80 p-2 max-h-80 overflow-y-auto" 
+                    <PopoverContent
+                      className="w-80 p-2 max-h-80 overflow-y-auto"
                       align="start"
                       onWheel={(e) => {
                         // Allow wheel scrolling within the popover
@@ -650,24 +650,24 @@ export default function TaskFormNew({ task, onSubmit, onCancel }: TaskFormProps)
                   </p>
                 </div>
               </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {/* Show due date field only for once_off frequency */}
-              {frequencies?.includes('once_off') && (
-                <div className="space-y-3">
-                  <Label htmlFor="due_date_once_off">Due Date of Once Off Task *</Label>
-                  <div className="relative">
-                    <Calendar className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                    <Input
-                      id="due_date_once_off"
-                      type="date"
-                      {...form.register('due_date')}
-                      className="pl-10"
-                    />
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {/* Show due date field only for once_off frequency */}
+                {frequencies?.includes('once_off') && (
+                  <div className="space-y-3">
+                    <Label htmlFor="due_date_once_off">Due Date of Once Off Task *</Label>
+                    <div className="relative">
+                      <Calendar className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                      <Input
+                        id="due_date_once_off"
+                        type="date"
+                        {...form.register('due_date')}
+                        className="pl-10"
+                      />
+                    </div>
                   </div>
-                </div>
-              )}
-              {/* </div> */}
-</div>
+                )}
+                {/* </div> */}
+              </div>
               {/* Empty div for layout when no due date */}
               {!frequencies?.includes('once_off') && (
                 <div></div>

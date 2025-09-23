@@ -20,7 +20,7 @@ import { authenticatedGet, authenticatedPost, positionsApi, publicHolidaysApi } 
 import TaskDetailModal from '@/components/checklist/TaskDetailModal'
 import { getAustralianNow, getAustralianToday, formatAustralianDate, parseAustralianDate, createAustralianDateTime, australianNowUtcISOString, toAustralianTime } from '@/lib/timezone-utils'
 import { calculateTaskStatus, setHolidays } from '@/lib/task-status-calculator'
-
+import { TASK_FREQUENCIES } from '@/lib/constants'
 // Shared UI holiday set for PH-aware business day checks
 let UI_HOLIDAY_SET = new Set<string>()
 
@@ -1242,7 +1242,8 @@ export default function RoleChecklistPage() {
   const [selectedCategory, setSelectedCategory] = useState("all")
   const [selectedStatus, setSelectedStatus] = useState("all")
   const [selectedResponsibility, setSelectedResponsibility] = useState("all")
-  const [selectedTiming, setSelectedTiming] = useState("opening") // Default to "opening"
+  const [selectedTiming, setSelectedTiming] = useState("all") // Default to "all"
+  const [selectedFrequency, setSelectedFrequency] = useState("all")
   const [searchTerm, setSearchTerm] = useState("")
   const [refreshKey, setRefreshKey] = useState(0)
   const [tasks, setTasks] = useState<ChecklistTask[]>([])
@@ -1829,7 +1830,8 @@ export default function RoleChecklistPage() {
           ...task,
           is_completed_for_position: false,
           completed_at: undefined,
-          position_completions: []
+          position_completions: [],
+          detailed_status: undefined // Clear cached status to force recalculation
           // Keep original task.date and task.due_date to maintain proper status calculation context
         }
         return getTaskStatusWithCarryOver(cleanTask, currentDate, isViewingToday)
@@ -1858,7 +1860,8 @@ export default function RoleChecklistPage() {
           ...task,
           is_completed_for_position: false,
           completed_at: undefined,
-          position_completions: []
+          position_completions: [],
+          detailed_status: undefined // Clear cached status to force recalculation
           // Keep original task.date and task.due_date to maintain proper status calculation context
         }
         return getTaskStatusWithCarryOver(cleanTask, currentDate, isViewingToday)
@@ -1893,6 +1896,13 @@ export default function RoleChecklistPage() {
       if (selectedTiming !== "all") {
         const bucket = getTimingBucket(task)
         if (bucket !== selectedTiming) {
+          return false
+        }
+      }
+
+      // Frequency filter
+      if (selectedFrequency !== "all") {
+        if (!task.master_task.frequencies.includes(selectedFrequency)) {
           return false
         }
       }
@@ -1984,7 +1994,7 @@ export default function RoleChecklistPage() {
 
       return 0
     })
-  }, [tasks, searchTerm, selectedResponsibility, selectedCategory, selectedStatus, selectedTiming, currentDate, isAdmin, positions, isViewingToday, getEffectiveTaskStatus])
+  }, [tasks, searchTerm, selectedResponsibility, selectedCategory, selectedStatus, selectedTiming, selectedFrequency, currentDate, isAdmin, positions, isViewingToday, getEffectiveTaskStatus])
 
   // Pagination calculations
   const totalPages = Math.ceil(filteredAndSortedTasks.length / tasksPerPage)
@@ -2033,7 +2043,8 @@ export default function RoleChecklistPage() {
               ...task,
               is_completed_for_position: false,
               completed_at: undefined,
-              position_completions: []
+              position_completions: [],
+              detailed_status: undefined // Clear cached status to force recalculation
               // Keep original task.date and task.due_date to maintain proper status calculation context
             }
             return getTaskStatusWithCarryOver(cleanTask, currentDate, isViewingToday)
@@ -2081,7 +2092,8 @@ export default function RoleChecklistPage() {
               ...task,
               is_completed_for_position: false,
               completed_at: undefined,
-              position_completions: []
+              position_completions: [],
+              detailed_status: undefined // Clear cached status to force recalculation
               // Keep original task.date and task.due_date to maintain proper status calculation context
             }
             return getTaskStatusWithCarryOver(cleanTask, currentDate, isViewingToday)
@@ -2109,7 +2121,7 @@ export default function RoleChecklistPage() {
   // Reset to first page when filters change
   useEffect(() => {
     setCurrentPage(1)
-  }, [searchTerm, selectedResponsibility, selectedCategory, selectedStatus, selectedTiming, currentDate])
+  }, [searchTerm, selectedResponsibility, selectedCategory, selectedStatus, selectedTiming, selectedFrequency, currentDate])
 
   // Get unique categories for filter (use full catalog when empty)
   const uniqueCategories = useMemo(() => {
@@ -2225,7 +2237,7 @@ export default function RoleChecklistPage() {
           )
         } else {
           return (
-            <Badge className="bg-gray-100 text-gray-800 border-gray-200">
+            <Badge className="bg-gray-400 text-white border-gray-400">
               ❌ Missed
             </Badge>
           )
@@ -2261,7 +2273,7 @@ export default function RoleChecklistPage() {
       }
 
       return (
-        <Badge className="bg-gray-100 text-gray-800 border-gray-200">
+        <Badge className="bg-gray-400 text-white border-gray-400">
           ❌ Missed
         </Badge>
       )
@@ -2523,7 +2535,6 @@ export default function RoleChecklistPage() {
   return (
     <div className="min-h-screen bg-[var(--color-background)]">
       <Navigation />
-
       <main className="max-w-content-lg mx-auto px-4 sm:px-6 lg:px-18 py-6 sm:py-8">
         {/* Header */}
         <div className="mb-6 lg:mb-8">
@@ -2654,6 +2665,21 @@ export default function RoleChecklistPage() {
                 </Select>
               </div>
 
+              {/* Frequency Filter */}
+              <div className="flex justify-start w-full">
+                <Select value={selectedFrequency} onValueChange={setSelectedFrequency}>
+                  <SelectTrigger className="w-full">
+                    <SelectValue placeholder="All Frequencies" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Frequencies</SelectItem>
+                    {TASK_FREQUENCIES.map(frequency => (
+                      <SelectItem key={frequency.value} value={frequency.value}>{frequency.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
               {/* Status Filter */}
               <div className="flex justify-start w-full">
                 <Select value={selectedStatus} onValueChange={setSelectedStatus}>
@@ -2708,6 +2734,18 @@ export default function RoleChecklistPage() {
                 {/* Timing Toggle Buttons */}
                 <div className="flex flex-col sm:flex-row space-x-1 bg-gray-100 px-2 py-1 rounded-lg gap-1">
                   <button
+                    onClick={() => setSelectedTiming("all")}
+                    className={`px-3 py-1 rounded-lg text-sm font-medium transition-colors ${selectedTiming === "all"
+                      ? "bg-white text-[var(--color-primary)] shadow-sm"
+                      : "bg-gray-50 border border-white text-gray-600 hover:text-gray-900"
+                      }`}
+                  >
+                    View All
+                  </button>
+                </div>
+
+                <div className="flex flex-col sm:flex-row space-x-1 bg-gray-100 px-2 py-1 rounded-lg gap-1">
+                  <button
                     onClick={() => setSelectedTiming("opening")}
                     className={`px-3 py-1 rounded-lg text-sm font-medium transition-colors ${selectedTiming === "opening"
                       ? "bg-white text-[var(--color-primary)] shadow-sm"
@@ -2742,17 +2780,6 @@ export default function RoleChecklistPage() {
                       }`}
                   >
                     Closing
-                  </button>
-                </div>
-                <div className="flex flex-col sm:flex-row space-x-1 bg-gray-100 px-2 py-1 rounded-lg gap-1">
-                  <button
-                    onClick={() => setSelectedTiming("all")}
-                    className={`px-3 py-1 rounded-lg text-sm font-medium transition-colors ${selectedTiming === "all"
-                      ? "bg-white text-[var(--color-primary)] shadow-sm"
-                      : "bg-gray-50 border border-white text-gray-600 hover:text-gray-900"
-                      }`}
-                  >
-                    View All
                   </button>
                 </div>
 
@@ -2904,14 +2931,18 @@ export default function RoleChecklistPage() {
                                       let wasCompletedOnThisDate = false
 
                                       if (relevantCompletion && relevantCompletion.is_completed) {
-                                        const mockTask = {
-                                          ...task,
-                                          is_completed_for_position: relevantCompletion.is_completed,
-                                          completed_at: relevantCompletion.completed_at,
-                                          position_completions: [relevantCompletion]
+                                        // For "Every Day" tasks on past dates, check if the completion happened on the viewing date
+                                        // by comparing the completion date with the viewing date, ignoring carry-over periods
+                                        const completedAt = relevantCompletion.completed_at
+                                        if (completedAt) {
+                                          // Convert UTC timestamp to Australian date
+                                          const completedAtDate = new Date(completedAt)
+                                          const completedAtAustralian = toAustralianTime(completedAtDate)
+                                          const completionDateStr = formatAustralianDate(completedAtAustralian)
+                                          
+                                          // Check if the task was completed on the viewing date
+                                          wasCompletedOnThisDate = completionDateStr === currentDate
                                         }
-                                        const status = getTaskStatusWithCarryOver(mockTask, currentDate, false)
-                                        wasCompletedOnThisDate = status === 'completed'
                                       }
 
                                       if (wasCompletedOnThisDate) {
@@ -3120,10 +3151,9 @@ export default function RoleChecklistPage() {
                                 {renderBadgesWithTruncation(task.master_task.categories, 3, 'category')}
                               </div>
                             </div>
-
                           </div>
 
-                          <div className="space-y-3 text-sm grid sm:grid-cols-2 gap-2">
+                                  <div className="space-y-3 text-sm grid sm:grid-cols-2 gap-2">
                             <div>
                               <span className="text-gray-500">Frequencies:</span>
                               <div className="mt-1">
