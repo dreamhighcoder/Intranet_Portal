@@ -73,7 +73,7 @@ export function Navigation() {
   const navItems = isAdmin
     ? [
       { href: "/admin", label: "Dashboard" },
-      { href: "/admin/master-tasks", label: "Maste Tasks" },
+      { href: "/admin/master-tasks", label: "Master Tasks" },
       { href: `/checklist/${toKebabCase(user?.position?.displayName || user?.position?.name || 'admin')}`, label: "Checklists" },
       { href: "/calendar", label: "Calendar" },
       { href: "/admin/reports", label: "Reports" },

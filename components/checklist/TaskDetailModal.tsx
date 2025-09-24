@@ -11,6 +11,7 @@ import { Clock, User, Calendar, CheckCircle, XCircle, AlertTriangle, Tag, FileTe
 import { toDisplayFormat } from '@/lib/responsibility-mapper'
 import { getAustralianNow, getAustralianToday, parseAustralianDate, createAustralianDateTime, toAustralianTime, formatAustralianDate, formatAustralianDateDisplay } from '@/lib/timezone-utils'
 import { calculateTaskStatus, setHolidays } from '@/lib/task-status-calculator'
+import { publicHolidaysApi } from '@/lib/api-client'
 
 // Category display names, colors, and emojis
 const CATEGORY_CONFIG = {
@@ -100,8 +101,8 @@ export default function TaskDetailModal({
     const years = [year - 1, year, year + 1]
     Promise.all(
       years.map(y =>
-        fetch(`/api/public-holidays?year=${y}`)
-          .then(r => (r.ok ? r.json() : []))
+        publicHolidaysApi.getAll({ year: y.toString() })
+          .then(holidays => holidays || [])
           .catch(() => [])
       )
     ).then(all => {
@@ -260,220 +261,343 @@ export default function TaskDetailModal({
     const instanceDate = parseAustralianDate(task.date || currentDate)
     const cutoffs: any[] = []
 
+    // Helper function to check if a date is a business day (not Sunday or holiday)
+    const isBusinessDay = (d: Date): boolean => {
+      const day = d.getDay()
+      if (day === 0) return false // Sunday is not a business day
+      const dateStr = formatAustralianDate(d)
+      return !localHolidaySet.has(dateStr)
+    }
+
+    // Helper function to find the previous business day
+    const findPreviousBusinessDay = (d: Date): Date => {
+      const result = new Date(d)
+      while (!isBusinessDay(result)) {
+        result.setDate(result.getDate() - 1)
+      }
+      return result
+    }
+
+    // Helper function to find the next business day
+    const findNextBusinessDay = (d: Date): Date => {
+      const result = new Date(d)
+      while (!isBusinessDay(result)) {
+        result.setDate(result.getDate() + 1)
+      }
+      return result
+    }
+
+    // Helper function to add workdays (5 full workdays for start of month tasks)
+    // This counts the start date as the first workday
+    const addWorkdays = (startDate: Date, workdays: number): Date => {
+      const result = new Date(startDate)
+      let daysAdded = 0
+      
+      // If start date is a business day, count it as the first workday
+      if (isBusinessDay(result)) {
+        daysAdded = 1
+      }
+      
+      // Add remaining workdays
+      while (daysAdded < workdays) {
+        result.setDate(result.getDate() + 1)
+        if (isBusinessDay(result)) {
+          daysAdded++
+        }
+      }
+      
+      // Result should already be a business day, but ensure it
+      return findNextBusinessDay(result)
+    }
+
+    // Helper function to get week Saturday
+    const getWeekSaturday = (d: Date): Date => {
+      const result = new Date(d)
+      const day = result.getDay()
+      const diff = 6 - (day === 0 ? 7 : day)
+      result.setDate(result.getDate() + diff)
+      return result
+    }
+
+    // Helper function to get last Saturday of month
+    const getLastSaturdayOfMonth = (d: Date): Date => {
+      const lastDay = new Date(d.getFullYear(), d.getMonth() + 1, 0)
+      const day = lastDay.getDay() // 0=Sun..6=Sat
+      // Calculate days to go back to reach Saturday
+      const diff = day === 6 ? 0 : (day === 0 ? 1 : (day + 1))
+      const lastSaturday = new Date(lastDay)
+      lastSaturday.setDate(lastDay.getDate() - diff)
+      return lastSaturday
+    }
+
+    // Helper function to get week Monday
+    const getWeekMonday = (d: Date): Date => {
+      const result = new Date(d)
+      const day = result.getDay()
+      const diff = day === 0 ? -6 : 1 - day
+      result.setDate(result.getDate() + diff)
+      return result
+    }
+
     frequencies.forEach((frequency: string) => {
       try {
-        // Calculate appearance date (when task appears)
-        const appearance = instanceDate
-
-        // Calculate due date and time based on frequency logic
-        let dueDate = instanceDate
-        let dueTime = task.master_task?.due_time || '17:00'
-
-        // Helper function to check if a date is a business day (not Sunday or holiday)
-        const isBusinessDay = (d: Date): boolean => {
-          const day = d.getDay()
-          if (day === 0) return false // Sunday is not a business day
-          const dateStr = formatAustralianDate(d)
-          return !localHolidaySet.has(dateStr)
+        // For multi-frequency tasks, calculate the appropriate date for each frequency
+        let frequencyDate = instanceDate
+        
+        // Extract month from frequency if it's a month-specific frequency
+        const monthMap: { [key: string]: number } = {
+          'jan': 0, 'feb': 1, 'mar': 2, 'apr': 3, 'may': 4, 'jun': 5,
+          'jul': 6, 'aug': 7, 'sep': 8, 'oct': 9, 'nov': 10, 'dec': 11
         }
-
-        // Helper function to find the previous business day
-        const findPreviousBusinessDay = (d: Date): Date => {
-          const result = new Date(d)
-          while (!isBusinessDay(result)) {
-            result.setDate(result.getDate() - 1)
+        
+        // Check if this frequency is for a specific month
+        // Handle multiple formats: "Start Of Month (Dec)", "Start Of Month Dec", "start_of_month_dec"
+        let monthMatch = frequency.match(/\(([A-Za-z]{3})\)/) // Format: "Start Of Month (Dec)"
+        if (!monthMatch) {
+          monthMatch = frequency.match(/\b([A-Za-z]{3})$/) // Format: "Start Of Month Dec"
+        }
+        if (!monthMatch) {
+          monthMatch = frequency.match(/_([a-z]{3})$/) // Format: "start_of_month_dec"
+        }
+        
+        console.log(`Processing frequency: ${frequency}, monthMatch:`, monthMatch)
+        if (monthMatch) {
+          const targetMonth = monthMap[monthMatch[1].toLowerCase()]
+          console.log(`Target month for ${frequency}: ${targetMonth} (${monthMatch[1].toLowerCase()})`)
+          if (targetMonth !== undefined) {
+            // Calculate the appropriate year for this frequency
+            const currentYear = instanceDate.getFullYear()
+            const currentMonth = instanceDate.getMonth()
+            
+            // If target month is before current month, use next year
+            // If target month is current month or after, use current year
+            const targetYear = targetMonth < currentMonth ? currentYear + 1 : currentYear
+            
+            // Create date for the 1st of the target month
+            frequencyDate = new Date(targetYear, targetMonth, 1)
+            console.log(`Calculated frequencyDate for ${frequency}: ${frequencyDate.toISOString().split('T')[0]}`)
           }
-          return result
+        }
+        
+        // Calculate appearance date (when task appears)
+        let appearance = frequencyDate
+
+        // For "Start of Month" frequencies, appearance date logic:
+        // - For current month (when task is created): appearance = creation date
+        // - For future months: appearance = 1st of month (adjusted for weekends/holidays)
+        if ((frequency.startsWith('start_of_') && (frequency.includes('month') || frequency.includes('every_month'))) ||
+            (frequency.toLowerCase().includes('start of month'))) {
+          const today = new Date()
+          const currentMonth = today.getMonth()
+          const currentYear = today.getFullYear()
+          const taskMonth = frequencyDate.getMonth()
+          const taskYear = frequencyDate.getFullYear()
+          
+          // If this is the current month and year, use the creation date as appearance
+          if (taskMonth === currentMonth && taskYear === currentYear) {
+            appearance = instanceDate // Use creation date for current month
+          } else {
+            // For future months, use 1st of month (adjusted for weekends/holidays)
+            const firstOfMonth = new Date(frequencyDate.getFullYear(), frequencyDate.getMonth(), 1)
+            // If 1st is weekend, move to Monday
+            if (firstOfMonth.getDay() === 6) { // Saturday
+              appearance = new Date(firstOfMonth.getFullYear(), firstOfMonth.getMonth(), 3) // Monday
+            } else if (firstOfMonth.getDay() === 0) { // Sunday
+              appearance = new Date(firstOfMonth.getFullYear(), firstOfMonth.getMonth(), 2) // Monday
+            } else {
+              appearance = firstOfMonth
+            }
+            // Adjust for holidays
+            appearance = findNextBusinessDay(appearance)
+          }
         }
 
-        // Helper function to get week Saturday
-        const getWeekSaturday = (d: Date): Date => {
-          const result = new Date(d)
-          const day = result.getDay()
-          const diff = 6 - (day === 0 ? 7 : day)
-          result.setDate(result.getDate() + diff)
-          return result
-        }
-
-        // Helper function to get last Saturday of month
-        const getLastSaturdayOfMonth = (d: Date): Date => {
+        // Helper function to get last Monday of month
+        const getLastMondayOfMonth = (d: Date): Date => {
           const lastDay = new Date(d.getFullYear(), d.getMonth() + 1, 0)
           const day = lastDay.getDay() // 0=Sun..6=Sat
-          // Calculate days to go back to reach Saturday
-          const diff = day === 6 ? 0 : (day === 0 ? 1 : (day + 1))
-          const lastSaturday = new Date(lastDay)
-          lastSaturday.setDate(lastDay.getDate() - diff)
-          return lastSaturday
+          // Calculate days to go back to reach Monday
+          const diff = day === 1 ? 0 : (day === 0 ? 6 : (day - 1))
+          const lastMonday = new Date(lastDay)
+          lastMonday.setDate(lastDay.getDate() - diff)
+          return lastMonday
         }
 
-        // Calculate proper due date based on frequency
-        switch (frequency) {
-          case 'once_weekly':
-            // Due date: Saturday of the same week (or nearest earlier business day if Saturday is holiday)
-            const weekSat = getWeekSaturday(instanceDate)
-            dueDate = findPreviousBusinessDay(weekSat)
-            break
-          case 'once_monthly':
-          case 'start_of_every_month':
-          case 'start_every_month':
-          case 'start_of_month':
-          case 'start_certain_months':
-          case 'every_month':
-          case 'certain_months':
-          case 'start_of_month_jan':
-          case 'start_of_month_feb':
-          case 'start_of_month_mar':
-          case 'start_of_month_apr':
-          case 'start_of_month_may':
-          case 'start_of_month_jun':
-          case 'start_of_month_jul':
-          case 'start_of_month_aug':
-          case 'start_of_month_sep':
-          case 'start_of_month_oct':
-          case 'start_of_month_nov':
-          case 'start_of_month_dec':
-          case 'end_of_every_month':
-          case 'end_of_month':
-          case 'end_of_month_jan':
-          case 'end_of_month_feb':
-          case 'end_of_month_mar':
-          case 'end_of_month_apr':
-          case 'end_of_month_may':
-          case 'end_of_month_jun':
-          case 'end_of_month_jul':
-          case 'end_of_month_aug':
-          case 'end_of_month_sep':
-          case 'end_of_month_oct':
-          case 'end_of_month_nov':
-          case 'end_of_month_dec':
-            // Due date: Last Saturday of the month (or nearest earlier business day if Saturday is holiday)
-            const lastSat = getLastSaturdayOfMonth(instanceDate)
-            dueDate = findPreviousBusinessDay(lastSat)
-            break
-          default:
-            // For other frequencies, use the provided due_date if available
-            if (task.due_date) {
-              dueDate = parseAustralianDate(task.due_date)
+        // Helper function to count workdays between two dates (inclusive)
+        const countWorkdays = (startDate: Date, endDate: Date): number => {
+          let count = 0
+          const current = new Date(startDate)
+          // If start date is after end date, return 0
+          if (current > endDate) return 0
+          
+          while (current <= endDate) {
+            if (isBusinessDay(current)) {
+              count++
             }
-            break
+            current.setDate(current.getDate() + 1)
+          }
+          return count
+        }
+
+        // For "End of Month" frequencies, appearance date logic:
+        // - For current month (when task is created): appearance = creation date
+        // - For future months: appearance = last Monday of month (unless <5 workdays, then Monday prior)
+        if ((frequency.includes('end_of_') && frequency.includes('month')) ||
+            (frequency.toLowerCase().includes('end of month'))) {
+          const today = new Date()
+          const currentMonth = today.getMonth()
+          const currentYear = today.getFullYear()
+          const taskMonth = frequencyDate.getMonth()
+          const taskYear = frequencyDate.getFullYear()
+          
+          // If this is the current month and year, use the creation date as appearance
+          if (taskMonth === currentMonth && taskYear === currentYear) {
+            appearance = instanceDate // Use creation date for current month
+          } else {
+            // For future months, calculate proper appearance date
+            const lastMonday = getLastMondayOfMonth(frequencyDate)
+            const lastSaturday = getLastSaturdayOfMonth(frequencyDate)
+            const workdaysFromLastMonday = countWorkdays(lastMonday, lastSaturday)
+            
+            if (workdaysFromLastMonday >= 5) {
+              // Use last Monday if there are at least 5 workdays
+              appearance = findNextBusinessDay(lastMonday)
+            } else {
+              // Use Monday prior (7 days earlier)
+              const mondayPrior = new Date(lastMonday)
+              mondayPrior.setDate(lastMonday.getDate() - 7)
+              appearance = findNextBusinessDay(mondayPrior)
+            }
+          }
+        }
+
+        // Calculate due date and time based on frequency logic
+        let dueDate = frequencyDate
+        let dueTime = task.master_task?.due_time || '17:00'
+
+        // Calculate proper due date based on frequency
+        if (frequency === 'once_weekly') {
+          // Due date: Saturday of the same week (or nearest earlier business day if Saturday is holiday)
+          const weekSat = getWeekSaturday(frequencyDate)
+          dueDate = findPreviousBusinessDay(weekSat)
+        } else if (['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'].includes(frequency)) {
+          // Due date: That day's date (same as appearance date)
+          dueDate = frequencyDate
+        } else if (frequency === 'every_day') {
+          // Due date: That day's date (same as appearance date)
+          dueDate = frequencyDate
+        } else if ((frequency.startsWith('start_of_') && (frequency.includes('month') || frequency.includes('every_month'))) ||
+                   (frequency.toLowerCase().includes('start of month'))) {
+            // Due date: 5 full workdays from 1st of month (cannot fall on PH)
+            // Always calculate from 1st of month, not from appearance date
+            const firstOfMonth = new Date(frequencyDate.getFullYear(), frequencyDate.getMonth(), 1)
+            let monthStart = firstOfMonth
+            // If 1st is weekend, move to Monday
+            if (firstOfMonth.getDay() === 6) { // Saturday
+              monthStart = new Date(firstOfMonth.getFullYear(), firstOfMonth.getMonth(), 3) // Monday
+            } else if (firstOfMonth.getDay() === 0) { // Sunday
+              monthStart = new Date(firstOfMonth.getFullYear(), firstOfMonth.getMonth(), 2) // Monday
+            }
+          // Adjust for holidays and calculate 5 workdays from there
+          const adjustedMonthStart = findNextBusinessDay(monthStart)
+          dueDate = addWorkdays(adjustedMonthStart, 5)
+        } else if ((frequency.includes('end_of_') && frequency.includes('month')) ||
+                   (frequency.toLowerCase().includes('end of month')) ||
+                   frequency === 'once_monthly') {
+          // Due date: Last Saturday of the month (or nearest earlier business day if Saturday is holiday)
+          const lastSat = getLastSaturdayOfMonth(frequencyDate)
+          dueDate = findPreviousBusinessDay(lastSat)
+        } else {
+          // For other frequencies, use the provided due_date if available
+          if (task.due_date) {
+            dueDate = parseAustralianDate(task.due_date)
+          }
         }
 
         // Calculate lock date based on frequency
         let lockDate: Date | null = null
 
         // Use similar logic to the task status calculator
-        switch (frequency) {
-          case 'once_off':
-          case 'once_off_sticky':
-            lockDate = null // Never locks
-            break
-          case 'every_day':
-            lockDate = instanceDate
-            break
-          case 'once_weekly':
-          case 'monday':
-          case 'tuesday':
-          case 'wednesday':
-          case 'thursday':
-          case 'friday':
-          case 'saturday':
-            // Lock at end of week (Saturday or nearest earlier business day)
-            const weekSat = getWeekSaturday(instanceDate)
-            lockDate = findPreviousBusinessDay(weekSat)
-            break
-          case 'once_monthly':
-          case 'start_of_every_month':
-          case 'start_every_month':
-          case 'start_of_month':
-          case 'start_certain_months':
-          case 'every_month':
-          case 'certain_months':
-          case 'start_of_month_jan':
-          case 'start_of_month_feb':
-          case 'start_of_month_mar':
-          case 'start_of_month_apr':
-          case 'start_of_month_may':
-          case 'start_of_month_jun':
-          case 'start_of_month_jul':
-          case 'start_of_month_aug':
-          case 'start_of_month_sep':
-          case 'start_of_month_oct':
-          case 'start_of_month_nov':
-          case 'start_of_month_dec':
-          case 'end_of_every_month':
-          case 'end_of_month':
-          case 'end_of_month_jan':
-          case 'end_of_month_feb':
-          case 'end_of_month_mar':
-          case 'end_of_month_apr':
-          case 'end_of_month_may':
-          case 'end_of_month_jun':
-          case 'end_of_month_jul':
-          case 'end_of_month_aug':
-          case 'end_of_month_sep':
-          case 'end_of_month_oct':
-          case 'end_of_month_nov':
-          case 'end_of_month_dec':
-            // Lock at end of month (last Saturday or nearest earlier business day)
-            const lastSat = getLastSaturdayOfMonth(instanceDate)
-            lockDate = findPreviousBusinessDay(lastSat)
-            break
-          default:
-            // Unknown frequency, use conservative approach
-            lockDate = instanceDate
-            break
+        if (['once_off', 'once_off_sticky'].includes(frequency)) {
+          lockDate = null // Never locks
+        } else if (frequency === 'every_day') {
+          lockDate = frequencyDate
+        } else if (['once_weekly', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'].includes(frequency)) {
+          // Lock at end of week (Saturday or nearest earlier business day)
+          const weekSat = getWeekSaturday(frequencyDate)
+          lockDate = findPreviousBusinessDay(weekSat)
+        } else if ((frequency.startsWith('start_of_') && (frequency.includes('month') || frequency.includes('every_month'))) ||
+                   (frequency.includes('end_of_') && frequency.includes('month')) ||
+                   (frequency.toLowerCase().includes('start of month')) ||
+                   (frequency.toLowerCase().includes('end of month')) ||
+                   frequency === 'once_monthly') {
+          // Lock at end of month (last Saturday or nearest earlier business day)
+          const lastSat = getLastSaturdayOfMonth(frequencyDate)
+          lockDate = findPreviousBusinessDay(lastSat)
+        } else {
+          // Unknown frequency, use conservative approach
+          lockDate = frequencyDate
         }
 
         // Calculate carry window based on frequency logic
         let carryStart: Date | null = null
         let carryEnd: Date | null = lockDate
 
-        // Helper function to get week Monday
-        const getWeekMonday = (d: Date): Date => {
-          const result = new Date(d)
-          const day = result.getDay()
-          const diff = day === 0 ? -6 : 1 - day
-          result.setDate(result.getDate() + diff)
-          return result
-        }
-
-        // Helper function to find the next business day
-        const findNextBusinessDay = (d: Date): Date => {
-          const result = new Date(d)
-          while (!isBusinessDay(result)) {
-            result.setDate(result.getDate() + 1)
-          }
-          return result
-        }
-
         // Calculate carry window start based on frequency
-        switch (frequency) {
-          case 'once_weekly':
-            // Carry window: From Monday (first working day of the week) to Saturday (lock date)
-            const weekMon = getWeekMonday(instanceDate)
-            carryStart = findNextBusinessDay(weekMon)
-            break
-          case 'once_monthly':
-            // Carry window: From 1st of month (first working day) to last Saturday (lock date)
-            const firstOfMonth = new Date(instanceDate.getFullYear(), instanceDate.getMonth(), 1)
-            // If 1st is weekend, move to Monday
-            const mondayAfterWeekend = firstOfMonth.getDay() === 6
-              ? new Date(firstOfMonth.getFullYear(), firstOfMonth.getMonth(), 3)
-              : firstOfMonth.getDay() === 0
-                ? new Date(firstOfMonth.getFullYear(), firstOfMonth.getMonth(), 2)
-                : firstOfMonth
-            carryStart = findNextBusinessDay(mondayAfterWeekend)
-            break
-          default:
-            // For other frequencies, use the appearance date (instance date)
-            carryStart = appearance
-            break
+        if (frequency === 'once_weekly') {
+          // Carry window: From Monday (first working day of the week) to Saturday (lock date)
+          const weekMon = getWeekMonday(frequencyDate)
+          carryStart = findNextBusinessDay(weekMon)
+        } else if ((frequency.startsWith('start_of_') && (frequency.includes('month') || frequency.includes('every_month'))) ||
+                   (frequency.toLowerCase().includes('start of month')) ||
+                   frequency === 'once_monthly') {
+          // Carry window: Always from 1st of month (first working day) to last Saturday (lock date)
+          // Regardless of when the task was created
+          const firstOfMonthCarry = new Date(frequencyDate.getFullYear(), frequencyDate.getMonth(), 1)
+          let monthStartCarry = firstOfMonthCarry
+          // If 1st is weekend, move to Monday
+          if (firstOfMonthCarry.getDay() === 6) { // Saturday
+            monthStartCarry = new Date(firstOfMonthCarry.getFullYear(), firstOfMonthCarry.getMonth(), 3) // Monday
+          } else if (firstOfMonthCarry.getDay() === 0) { // Sunday
+            monthStartCarry = new Date(firstOfMonthCarry.getFullYear(), firstOfMonthCarry.getMonth(), 2) // Monday
+          }
+          // Adjust for holidays
+          carryStart = findNextBusinessDay(monthStartCarry)
+        } else if ((frequency.includes('end_of_') && frequency.includes('month')) ||
+                   (frequency.toLowerCase().includes('end of month'))) {
+          // Carry window: ALWAYS from calculated Monday (last Monday or Monday prior)
+          // This is independent of appearance date logic - carry window follows business rule
+          const lastMonday = getLastMondayOfMonth(frequencyDate)
+          const lastSaturday = getLastSaturdayOfMonth(frequencyDate)
+          const workdaysFromLastMonday = countWorkdays(lastMonday, lastSaturday)
+          
+          if (workdaysFromLastMonday >= 5) {
+            // Use last Monday if there are at least 5 workdays
+            carryStart = findNextBusinessDay(lastMonday)
+          } else {
+            // Use Monday prior (7 days earlier)
+            const mondayPrior = new Date(lastMonday)
+            mondayPrior.setDate(lastMonday.getDate() - 7)
+            carryStart = findNextBusinessDay(mondayPrior)
+          }
+        } else {
+          // For other frequencies, use the appearance date (instance date)
+          carryStart = appearance
         }
 
         // Ensure carryStart is never null
         if (!carryStart) {
           carryStart = appearance
         }
+
+        console.log(`Final calculated values for ${frequency}:`, {
+          frequency,
+          appearance: appearance.toISOString().split('T')[0],
+          dueDate: dueDate.toISOString().split('T')[0],
+          lockDate: lockDate?.toISOString().split('T')[0],
+          carryStart: carryStart?.toISOString().split('T')[0],
+          carryEnd: carryEnd?.toISOString().split('T')[0]
+        })
 
         cutoffs.push({
           frequency,

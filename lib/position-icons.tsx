@@ -51,7 +51,7 @@ const PositionPngIcon: React.FC<PositionPngIconProps> = ({ src, alt, className =
         style={{
           objectFit: 'contain',
           // Apply aggressive white filter with multiple effects for thicker appearance
-          filter: 'brightness(0) invert(1) contrast(3) saturate(2)',
+          // filter: 'brightness(0) invert(1) contrast(3) saturate(2)',
         }}
         priority={false}
         loading="lazy"
