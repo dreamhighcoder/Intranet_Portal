@@ -181,7 +181,7 @@ export default function HomePage() {
   }
 
   return (
-    <div className="min-h-screen" style={{ backgroundColor: "var(--color-bg)", backgroundImage: 'url("/pharmacy-hero.jpg")', backgroundSize: "cover", backgroundPosition: "center", backgroundRepeat: "no-repeat" }}>
+    <div className="min-h-screen" style={{ backgroundColor: "var(--color-bg)", backgroundImage: 'url("/pharmacy-hero_1.jpg")', backgroundSize: "cover", backgroundPosition: "center", backgroundRepeat: "no-repeat" }}>
       <PublicNavigation onLoginClick={handleLoginClick} />
 
       <main className="max-w-content-lg mx-auto px-4 sm:px-6 lg:px-18 py-6 sm:py-8">
@@ -199,7 +199,7 @@ export default function HomePage() {
               className="absolute inset-y-0 right-0 w-1/3 sm:w-1/4 md:w-1/5 pointer-events-none h-full flex items-center justify-end"
             >
               <img
-                src="/pharmacist.jpg"
+                src="/pharmacist_1.jpg"
                 alt=""
                 className="h-full w-auto"
                 style={{

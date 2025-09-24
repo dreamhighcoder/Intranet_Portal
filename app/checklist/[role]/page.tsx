@@ -238,7 +238,7 @@ const getTaskStatusWithCarryOver = (task: ChecklistTask, currentDate: string, is
     return calculateTaskStatus(taskInput, currentDate)
   }
 
-  // Task is completed for this position - check if we're still within carry-over period
+  // Task is completed for this position - implement proper carry-over logic
   // We need to determine the completion date for carry-over calculations
   let completionDateStr = task.date // Default to task date
 
@@ -257,50 +257,83 @@ const getTaskStatusWithCarryOver = (task: ChecklistTask, currentDate: string, is
     completionDateStr = formatAustralianDate(completedAtAustralian)
   }
 
-  // Use the completion date as the task date for carry-over calculations
-  const taskInput = {
-    date: completionDateStr, // Use completion date instead of original task date
-    due_date: task.due_date || undefined,
-    master_task: {
-      due_time: task.master_task?.due_time || undefined,
-      created_at: task.master_task?.created_at || undefined,
-      publish_delay: task.master_task?.publish_delay || undefined,
-      start_date: task.master_task?.start_date || undefined,
-      end_date: task.master_task?.end_date || undefined,
-      frequencies: task.master_task?.frequencies || undefined,
-    },
-    detailed_status: task.detailed_status || undefined,
-    is_completed_for_position: task.is_completed_for_position,
-    status: task.status || undefined,
-    lock_date: task.lock_date || undefined,
-    lock_time: task.lock_time || undefined,
+  // Implement proper carry-over logic based on frequency rules
+  const frequencies = task.master_task?.frequencies || []
+  const currentDateObj = parseAustralianDate(currentDate)
+  const completionDateObj = parseAustralianDate(completionDateStr)
+  const taskInstanceDateObj = parseAustralianDate(task.date)
+
+  // Helper function to get last Saturday of month
+  const getLastSaturdayOfMonth = (date: Date): Date => {
+    const year = date.getFullYear()
+    const month = date.getMonth()
+    const lastDay = new Date(year, month + 1, 0) // Last day of month
+    const lastSaturday = new Date(lastDay)
+    
+    // Find the last Saturday
+    while (lastSaturday.getDay() !== 6) { // 6 = Saturday
+      lastSaturday.setDate(lastSaturday.getDate() - 1)
+    }
+    
+    return lastSaturday
   }
 
-  const calculatedStatus = calculateTaskStatus(taskInput, currentDate)
+  // Check if we're within the carry-over period based on frequency
+  let isWithinCarryOverPeriod = false
 
-  // Debug logging for daily tasks
-  if (task.master_task?.frequencies?.includes('every_day')) {
-    console.log(`🔍 Daily task carry-over check:`, {
+  if (frequencies.includes('every_day')) {
+    // Every Day: No carry-over. Each day has its own instance.
+    // Show "✓ Done" only on the completion date
+    isWithinCarryOverPeriod = currentDate === completionDateStr
+  } else if (frequencies.includes('once_monthly') || 
+             frequencies.some(f => f.includes('month'))) {
+    // Monthly tasks: Carry-over until last Saturday of the month when completed
+    const lastSaturday = getLastSaturdayOfMonth(completionDateObj)
+    const lastSaturdayEndOfDay = new Date(lastSaturday)
+    lastSaturdayEndOfDay.setHours(23, 59, 59, 999)
+    
+    // Show "✓ Done" from completion date until last Saturday of the month at 23:59
+    const currentDateTime = new Date(currentDateObj)
+    currentDateTime.setHours(23, 59, 59, 999) // End of current viewing day
+    
+    isWithinCarryOverPeriod = currentDateTime <= lastSaturdayEndOfDay && currentDateObj >= completionDateObj
+  } else if (frequencies.some(f => f.includes('weekly') || 
+                                  ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'].includes(f))) {
+    // Weekly tasks: Carry-over until Saturday of the week when completed
+    const completionWeekSaturday = new Date(completionDateObj)
+    const daysUntilSaturday = (6 - completionDateObj.getDay() + 7) % 7
+    completionWeekSaturday.setDate(completionDateObj.getDate() + daysUntilSaturday)
+    completionWeekSaturday.setHours(23, 59, 59, 999)
+    
+    const currentDateTime = new Date(currentDateObj)
+    currentDateTime.setHours(23, 59, 59, 999)
+    
+    isWithinCarryOverPeriod = currentDateTime <= completionWeekSaturday && currentDateObj >= completionDateObj
+  } else {
+    // For other frequencies (once_off, etc.), show completed status indefinitely until manually changed
+    isWithinCarryOverPeriod = currentDateObj >= completionDateObj
+  }
+
+  // Debug logging
+  if (frequencies.includes('every_day') || frequencies.includes('once_monthly') || 
+      frequencies.some(f => f.includes('weekly') || ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'].includes(f))) {
+    const taskType = frequencies.includes('every_day') ? 'Daily' : 
+                     frequencies.includes('once_monthly') ? 'Monthly' : 'Weekly'
+    console.log(`🔍 ${taskType} task carry-over check:`, {
       taskTitle: task.master_task?.title,
       currentDate,
-      originalTaskDate: task.date,
+      taskInstanceDate: task.date,
       completionDate: completionDateStr,
       isCompleted: task.is_completed_for_position,
-      frequencies: task.master_task?.frequencies,
-      calculatedStatus,
-      willShowCompleted: calculatedStatus === 'completed',
-      carryOverEnded: calculatedStatus === 'missed'
+      frequencies,
+      isWithinCarryOverPeriod,
+      willShowCompleted: isWithinCarryOverPeriod
     })
   }
 
-  // If the shared calculator says the task is still 'completed', 
-  // we're within the carry-over period and should show the completion badge
-  if (calculatedStatus === 'completed') {
+  if (isWithinCarryOverPeriod) {
     return 'completed'
   }
-
-  // If the calculator returns 'missed', it means the carry-over period has ended
-  // and we should treat this as a new task instance
 
   // Carry-over period has ended - calculate status for new task instance
   // Calculate what the status would be if this was a new task for the current viewing date
@@ -341,7 +374,7 @@ const getTaskStatusWithCarryOver = (task: ChecklistTask, currentDate: string, is
     currentDate,
     originalTaskDate: task.date,
     completionDate: completionDateStr,
-    carryOverEnded: calculatedStatus === 'missed',
+    carryOverEnded: !isWithinCarryOverPeriod,
     isViewingToday,
     frequencies: task.master_task?.frequencies,
     newTaskCalculatedStatus: newTaskStatus,
@@ -2981,9 +3014,8 @@ export default function RoleChecklistPage() {
                                     // Regular logic for current dates or non-"Every Day" tasks
                                     // Check if task is still within carry-over period
                                     const dynamicStatus = getTaskStatusWithCarryOver(task, currentDate, isViewingToday)
-                                    return dynamicStatus === 'completed'
-                                  })() ? (
-                                    (() => {
+                                    if (dynamicStatus === 'completed') {
+                                      // Show "✓ Done" button for completed tasks
                                       const isNotToday = !isViewingToday && !isAdmin
                                       const isDisabled = processingTasks.has(task.id)
 
@@ -3020,14 +3052,10 @@ export default function RoleChecklistPage() {
                                           )}
                                         </Button>
                                       )
-                                    })()
-                                  ) : (
-                                    (() => {
-                                      const taskStatus = getTaskStatusWithCarryOver(task, currentDate, isViewingToday)
-                                      // For completed tasks that have moved beyond carry-over period, 
-                                      // they should behave as new incomplete tasks and not be locked
-                                      const isNewTaskInstance = task.is_completed_for_position && taskStatus !== 'completed'
-                                      const isLocked = taskStatus === 'missed' || (task.can_complete === false && !isNewTaskInstance)
+                                    } else {
+                                      // Show "Done ?" or "Locked" button for incomplete tasks
+                                      const isNewTaskInstance = task.is_completed_for_position && dynamicStatus !== 'completed'
+                                      const isLocked = dynamicStatus === 'missed' || (task.can_complete === false && !isNewTaskInstance)
                                       const isNotToday = !isViewingToday && !isAdmin
                                       const isDisabled = processingTasks.has(task.id) || isLocked
 
@@ -3077,8 +3105,8 @@ export default function RoleChecklistPage() {
                                           )}
                                         </Button>
                                       )
-                                    })()
-                                  )}
+                                    }
+                                  })()}
                                   <Button
                                     type="button"
                                     size="sm"
@@ -3088,7 +3116,6 @@ export default function RoleChecklistPage() {
                                     className="hover:bg-gray-100"
                                   >
                                     <Eye className="h-4 w-4" />
-                                    <span className="ml-1"></span>
                                   </Button>
                                 </>
                               )}
@@ -3350,3 +3377,4 @@ export default function RoleChecklistPage() {
     </div>
   )
 }
+         

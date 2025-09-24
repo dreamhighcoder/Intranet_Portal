@@ -1176,7 +1176,7 @@ export default function TaskDetailModal({
                       <Calendar className="h-4 w-4 text-purple-600" />
                       <span className="font-medium text-purple-800">Task Date</span>
                     </div>
-                    <p className="text-purple-700 font-semibold">
+                    <p className="text-purple-700 text-sm">
                       {(() => {
                         const date = new Date(task.date)
                         const year = date.getFullYear()
@@ -1191,7 +1191,7 @@ export default function TaskDetailModal({
                       <Clock className="h-4 w-4 text-purple-600" />
                       <span className="font-medium text-purple-800">Timing</span>
                     </div>
-                    <p className="text-purple-700 font-semibold">
+                    <p className="text-purple-700 text-sm">
                       {task.master_task?.timing?.replace(/_/g, ' ').replace(/\b\w/g, (l: string) => l.toUpperCase()) || 'Not specified'}
                     </p>
                   </div>
@@ -1200,7 +1200,7 @@ export default function TaskDetailModal({
                       <Clock className="h-4 w-4 text-purple-600" />
                       <span className="font-medium text-purple-800">Due Time</span>
                     </div>
-                    <p className="text-purple-700 font-semibold">
+                    <p className="text-purple-700 text-sm">
                       {task.master_task?.due_time || 'No specific time'}
                     </p>
                   </div>
