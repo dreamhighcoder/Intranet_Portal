@@ -24,7 +24,7 @@ export function Navigation() {
     // Initialize and update every 30s for low overhead
     const update = () => {
       const nowUtc = new Date()
-      const display = formatInTimeZone(nowUtc, AUSTRALIAN_TIMEZONE, "d MMM yyyy, HH:mm 'AEST'")
+      const display = formatInTimeZone(nowUtc, AUSTRALIAN_TIMEZONE, "dd-MM-yyyy, HH:mm 'AEST'")
       setAuNow(display)
     }
     update()
@@ -49,13 +49,13 @@ export function Navigation() {
             <div className="flex items-center space-x-8">
               <div className="flex items-center space-x-3">
                 <Image
-                  src="/logo.png"
+                  src="/logo_1.png"
                   alt="Pharmacy Logo"
-                  width={40}
-                  height={40}
+                  width={160}
+                  height={160}
                   priority
                 />
-                <span className="font-semibold text-xl">Richmond Pharmacy</span>
+                {/* <span className="font-semibold text-xl">Richmond Pharmacy</span> */}
               </div>
             </div>
             <div className="hidden md:flex items-center space-x-4">
@@ -72,15 +72,16 @@ export function Navigation() {
   // Navigation items based on role
   const navItems = isAdmin
     ? [
-        { href: "/admin", label: "Dashboard" },
-        { href: `/checklist/${toKebabCase(user?.position?.displayName || user?.position?.name || 'admin')}`, label: "Checklist" },
-        { href: "/calendar", label: "Calendar" },
-        { href: "/admin/reports", label: "Reports" },
-      ]
+      { href: "/admin", label: "Dashboard" },
+      { href: "/admin/master-tasks", label: "Maste Tasks" },
+      { href: `/checklist/${toKebabCase(user?.position?.displayName || user?.position?.name || 'admin')}`, label: "Checklists" },
+      { href: "/calendar", label: "Calendar" },
+      { href: "/admin/reports", label: "Reports" },
+    ]
     : [
-        { href: `/checklist/${toKebabCase(user?.position?.displayName || user?.position?.name || 'user')}`, label: "Checklist" },
-        { href: "/calendar", label: "Calendar" },
-      ]
+      { href: `/checklist/${toKebabCase(user?.position?.displayName || user?.position?.name || 'user')}`, label: "Checklist" },
+      { href: "/calendar", label: "Calendar" },
+    ]
 
   const handleLogout = async () => {
     signOut()
@@ -106,33 +107,32 @@ export function Navigation() {
             {/* Logo and Title - No link since we're in authenticated state */}
             <div className="flex items-center space-x-3">
               <Image
-                src="/logo.png"
+                src="/logo_1.png"
                 alt="Pharmacy Logo"
-                width={40}
-                height={40}
+                width={160}
+                height={160}
                 priority
               />
-              <span className="font-semibold text-xl">Richmond Pharmacy</span>
+              {/* <span className="font-semibold text-xl">Richmond Pharmacy</span> */}
             </div>
 
             {/* Desktop Navigation */}
-            <div className="hidden md:flex space-x-4">
+            <div className="hidden md:flex space-x-1 lg:space-x-4 w-full lg:w-auto">
               {navItems.map((item) => (
                 <Link
                   key={item.href}
                   href={item.href}
-                  className={`px-3 py-2 rounded-md text-sm font-medium transition-all duration-200 ${
-                    pathname === item.href ? "shadow-sm" : "hover:bg-white/10"
-                  }`}
+                  className={`px-3 py-2 rounded-md text-sm font-medium transition-all duration-200 ${pathname === item.href ? "shadow-sm" : "hover:bg-white/10"
+                    }`}
                   style={
                     pathname === item.href
                       ? {
-                          backgroundColor: "var(--color-secondary)",
-                          color: "var(--color-text)",
-                        }
+                        backgroundColor: "var(--color-secondary)",
+                        color: "var(--color-text)",
+                      }
                       : {
-                          color: "white",
-                        }
+                        color: "white",
+                      }
                   }
                 >
                   {item.label}
@@ -143,11 +143,11 @@ export function Navigation() {
 
           {/* Desktop User Menu */}
           <div className="hidden md:flex items-center space-x-6">
-            <div className="hidden lg:inline text-xs leading-tight text-white/90">
-              <div className="font-medium">Australia/Sydney</div>
+            {/* <div className="hidden xl:inline text-xs leading-tight text-white/90">
+              <div className="font-medium">Australia/Hobart</div>
               <div className="tabular-nums">{auNow || '—'}</div>
-            </div>
-            <div className="flex items-center space-x-2 text-sm" style={{ color: "white" }}>
+            </div> */}
+            <div className="hidden xl:flex just space-x-2 text-sm" style={{ color: "white" }}>
               <User className="w-4 h-4" />
               <span>
                 Welcome, {user.position.displayName === "Administrator" ? "Administrator" : user.position.displayName}
@@ -164,7 +164,7 @@ export function Navigation() {
               }}
             >
               <LogOut className="w-4 h-4" />
-              <span className="hidden lg:inline">Logout</span>
+              <span className="hidden xl:inline">Logout</span>
             </Button>
           </div>
 
@@ -191,18 +191,17 @@ export function Navigation() {
                   key={item.href}
                   href={item.href}
                   onClick={() => setIsMobileMenuOpen(false)}
-                  className={`block px-3 py-2 rounded-md text-sm font-medium transition-colors ${
-                    pathname === item.href ? "" : "hover:bg-white/10"
-                  }`}
+                  className={`block px-3 py-2 rounded-md text-sm font-medium transition-colors ${pathname === item.href ? "" : "hover:bg-white/10"
+                    }`}
                   style={
                     pathname === item.href
                       ? {
-                          backgroundColor: "var(--color-secondary)",
-                          color: "var(--color-text)",
-                        }
+                        backgroundColor: "var(--color-secondary)",
+                        color: "var(--color-text)",
+                      }
                       : {
-                          color: "white",
-                        }
+                        color: "white",
+                      }
                   }
                 >
                   {item.label}
@@ -212,10 +211,10 @@ export function Navigation() {
                 <div className="px-3 py-2 text-sm" style={{ color: "white" }}>
                   Welcome, {user.position.displayName === "Administrator" ? "Administrator" : user.position.displayName}
                 </div>
-                <div className="px-3 py-2 text-xs text-white/90">
-                  <div className="font-medium">Australia/Sydney</div>
+                {/* <div className="px-3 py-2 text-xs text-white/90">
+                  <div className="font-medium">Australia/Hobart</div>
                   <div className="tabular-nums">{auNow || '—'}</div>
-                </div>
+                </div> */}
                 <Button
                   variant="ghost"
                   size="sm"

@@ -193,7 +193,13 @@ function CalendarDayButton({
       ref={ref}
       variant="ghost"
       size="icon"
-      data-day={day.date.toLocaleDateString()}
+      data-day={(function() {
+        const dte = day.date
+        const y = dte.getFullYear()
+        const m = String(dte.getMonth() + 1).padStart(2, '0')
+        const dd = String(dte.getDate()).padStart(2, '0')
+        return `${dd}-${m}-${y}`
+      })()}
       data-selected-single={
         modifiers.selected &&
         !modifiers.range_start &&

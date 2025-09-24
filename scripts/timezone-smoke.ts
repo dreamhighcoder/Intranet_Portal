@@ -1,5 +1,5 @@
 // scripts/timezone-smoke.ts
-// Quick smoke test to record Australia/Sydney time on app startup
+// Quick smoke test to record Australia/Hobart time on app startup
 
 import fs from 'node:fs'
 import path from 'node:path'

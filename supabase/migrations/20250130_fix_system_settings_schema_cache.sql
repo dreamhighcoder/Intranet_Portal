@@ -7,7 +7,7 @@ CREATE TABLE IF NOT EXISTS system_settings (
     id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
     
     -- Timezone and regional settings
-    timezone TEXT NOT NULL DEFAULT 'Australia/Sydney',
+    timezone TEXT NOT NULL DEFAULT 'Australia/Hobart',
     
     -- Task timing settings
     new_since_hour TIME NOT NULL DEFAULT '00:00:00',
@@ -57,7 +57,7 @@ BEGIN
     
     -- Check and add timezone column
     IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'system_settings' AND column_name = 'timezone') THEN
-        ALTER TABLE system_settings ADD COLUMN timezone TEXT NOT NULL DEFAULT 'Australia/Sydney';
+        ALTER TABLE system_settings ADD COLUMN timezone TEXT NOT NULL DEFAULT 'Australia/Hobart';
         RAISE NOTICE 'Added timezone column';
     END IF;
     
@@ -137,7 +137,7 @@ INSERT INTO system_settings (
     updated_at
 ) 
 SELECT 
-    'Australia/Sydney',
+    'Australia/Hobart',
     '00:00:00',
     '23:59:00',
     999999,

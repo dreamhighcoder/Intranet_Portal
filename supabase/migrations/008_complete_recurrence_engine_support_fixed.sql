@@ -220,7 +220,7 @@ CREATE TABLE IF NOT EXISTS system_settings (
 INSERT INTO system_settings (key, value, description) 
 VALUES 
   ('recurrence_engine_version', '"2.0"', 'Version of the recurrence engine in use'),
-  ('default_business_timezone', '"Australia/Sydney"', 'Default timezone for business operations'),
+  ('default_business_timezone', '"Australia/Hobart"', 'Default timezone for business operations'),
   ('workday_start_time', '"09:00"', 'Default start time for workdays'),
   ('workday_end_time', '"17:00"', 'Default end time for workdays'),
   ('status_update_enabled', 'true', 'Whether automatic status updates are enabled'),

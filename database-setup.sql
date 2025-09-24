@@ -7,7 +7,7 @@
 -- 1. Create system_settings table if it doesn't exist
 CREATE TABLE IF NOT EXISTS system_settings (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  timezone TEXT NOT NULL DEFAULT 'Australia/Sydney',
+  timezone TEXT NOT NULL DEFAULT 'Australia/Hobart',
   new_since_hour TIME NOT NULL DEFAULT '00:00:00',
   missed_cutoff_time TIME NOT NULL DEFAULT '23:59:00',
   auto_logout_enabled BOOLEAN NOT NULL DEFAULT true,
@@ -36,7 +36,7 @@ DO $$
 BEGIN
   -- Check and add timezone column
   IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'system_settings' AND column_name = 'timezone') THEN
-    ALTER TABLE system_settings ADD COLUMN timezone TEXT NOT NULL DEFAULT 'Australia/Sydney';
+    ALTER TABLE system_settings ADD COLUMN timezone TEXT NOT NULL DEFAULT 'Australia/Hobart';
   END IF;
   
   -- Check and add new_since_hour column
@@ -115,7 +115,7 @@ INSERT INTO system_settings (
   updated_at
 )
 SELECT 
-  'Australia/Sydney',
+  'Australia/Hobart',
   '09:00:00',
   '23:59:00',
   true,

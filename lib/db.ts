@@ -245,7 +245,7 @@ export async function updateTask(
       updateData.category = taskInput.categories[0] // Legacy single category
     }
     
-    // Set updated_at timestamp (persist UTC derived from Australia/Sydney now)
+    // Set updated_at timestamp (persist UTC derived from Australia/Hobart now)
     updateData.updated_at = australianNowUtcISOString()
 
     const { data, error } = await supabase

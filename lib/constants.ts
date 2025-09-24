@@ -161,7 +161,7 @@ export const PUBLISH_STATUSES = [
 
 // Default system settings
 export const DEFAULT_SETTINGS = {
-  timezone: "Australia/Sydney",
+  timezone: "Australia/Hobart",
   newSinceHour: "09:00",
   missedCutoffTime: "23:59",
 } as const

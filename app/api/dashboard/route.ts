@@ -336,7 +336,7 @@ export async function GET(request: NextRequest) {
           const completionTimes = completedInstances
             .map(instance => {
               try {
-                // Task becomes available at start of instance_date (00:00) in Australia/Sydney
+                // Task becomes available at start of instance_date (00:00) in Australia/Hobart
                 const availableAus = createAustralianDateTime(instance.instance_date as string, '00:00')
                 const availableUtc = fromAustralianTime(availableAus)
                 // completed_at stored in UTC

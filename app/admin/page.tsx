@@ -163,7 +163,7 @@ export default function AdminDashboard() {
                 </p>
                 {diagnostics && (
                   <div className="text-xs sm:text-sm text-white/80">
-                    Database: {diagnostics.masterTasks} master tasks • {diagnostics.taskInstances} task instances • {diagnostics.positions} positions
+                    Database: {diagnostics.masterTasks} master tasks • {diagnostics.positions} positions
                   </div>
                 )}
               </div>

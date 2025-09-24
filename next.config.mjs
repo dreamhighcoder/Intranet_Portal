@@ -10,7 +10,7 @@ const nextConfig = {
     unoptimized: true,
   },
   env: {
-    TZ: 'Australia/Sydney',
+    TZ: 'Australia/Hobart',
   },
 }
 

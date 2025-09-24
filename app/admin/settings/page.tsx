@@ -92,7 +92,7 @@ export default function SettingsPage() {
 
   // Settings state
   const [settings, setSettings] = useState<SystemSettings>({
-    timezone: 'Australia/Sydney',
+    timezone: 'Australia/Hobart',
     new_since_hour: '00:00',
     missed_cutoff_time: '23:59',
     auto_logout_enabled: true,

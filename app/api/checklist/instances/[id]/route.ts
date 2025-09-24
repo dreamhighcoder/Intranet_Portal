@@ -53,7 +53,7 @@ export async function PUT(
 
     // Prepare update data
     const updateData: any = {
-      // Persist timestamps in UTC generated from Australia/Sydney "now"
+      // Persist timestamps in UTC generated from Australia/Hobart "now"
       updated_at: australianNowUtcISOString()
     }
 

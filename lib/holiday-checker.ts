@@ -35,7 +35,7 @@ export class HolidayChecker implements HolidayChecker {
       skipSundays: true, // Explicitly skip Sundays as per specification
       skipPublicHolidays: true,
       defaultRegion: 'National',
-      timezone: 'Australia/Sydney' // Use Australian timezone
+      timezone: 'Australia/Hobart' // Use Australian timezone
     })
     this.initialized = holidays ? true : false
   }

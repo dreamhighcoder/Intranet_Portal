@@ -22,13 +22,13 @@ export function PublicNavigation({ onLoginClick }: PublicNavigationProps) {
           {/* Logo and Title */}
           <div className="flex items-center space-x-3 min-w-0">
             <Image
-              src="/logo.png"
+              src="/logo_1.png"
               alt="Pharmacy Logo"
-              width={40}
-              height={40}
+              width={160}
+              height={160}
               priority
             />
-            <span className="font-semibold text-xl truncate">Richmond Pharmacy</span>
+            {/* <span className="font-semibold text-xl truncate">Richmond Pharmacy</span> */}
           </div>
 
           {/* Login Button */}

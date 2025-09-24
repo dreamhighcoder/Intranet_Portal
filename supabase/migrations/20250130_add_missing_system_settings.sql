@@ -5,7 +5,7 @@
 INSERT INTO system_settings (key, value, description, data_type, is_public) 
 SELECT * FROM (VALUES
     -- Ensure all required settings exist
-    ('timezone', 'Australia/Sydney', 'Default timezone for the pharmacy', 'string', true),
+    ('timezone', 'Australia/Hobart', 'Default timezone for the pharmacy', 'string', true),
     ('new_since_hour', '00:00', 'Hour to mark tasks as "new since" for the day', 'string', true),
     ('daily_task_cutoff', '23:59', 'Cutoff time for daily tasks (Every Day, Weekly)', 'string', false),
     ('auto_logout_enabled', 'true', 'Enable auto-logout after completing all tasks', 'boolean', true),

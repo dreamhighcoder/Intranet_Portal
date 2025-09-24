@@ -3,7 +3,7 @@ CREATE TABLE IF NOT EXISTS system_settings (
     id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
     
     -- Timezone and regional settings
-    timezone TEXT NOT NULL DEFAULT 'Australia/Sydney',
+    timezone TEXT NOT NULL DEFAULT 'Australia/Hobart',
     
     -- Task timing settings
     new_since_hour TIME NOT NULL DEFAULT '00:00:00',
@@ -28,7 +28,7 @@ CREATE TABLE IF NOT EXISTS system_settings (
     
     -- Constraints
     CONSTRAINT valid_timezone CHECK (timezone IN (
-        'Australia/Sydney', 'Australia/Melbourne', 'Australia/Brisbane',
+        'Australia/Hobart', 'Australia/Melbourne', 'Australia/Brisbane',
         'Australia/Adelaide', 'Australia/Perth', 'Australia/Darwin',
         'Australia/Hobart'
     )),
@@ -58,7 +58,7 @@ INSERT INTO system_settings (
     auto_logout_delay_minutes
 ) 
 SELECT 
-    'Australia/Sydney',
+    'Australia/Hobart',
     '00:00:00',
     '23:59:00',
     '17:00:00',

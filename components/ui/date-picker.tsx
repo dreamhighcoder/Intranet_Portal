@@ -48,7 +48,12 @@ export function DatePicker({
           disabled={disabled}
         >
           <CalendarIcon className="mr-2 h-4 w-4" />
-          {date ? format(date, "PPP") : <span>{placeholder}</span>}
+          {date ? (() => {
+            const y = date.getFullYear()
+            const m = String(date.getMonth() + 1).padStart(2, '0')
+            const d = String(date.getDate()).padStart(2, '0')
+            return `${d}-${m}-${y}`
+          })() : <span>{placeholder}</span>}
         </Button>
       </PopoverTrigger>
       <PopoverContent className="w-auto p-0">

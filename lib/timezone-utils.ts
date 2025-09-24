@@ -1,6 +1,6 @@
 /**
  * Timezone Utilities for Australian Pharmacy Intranet Portal
- * All logic is anchored to Australia/Sydney and DST is handled automatically.
+ * All logic is anchored to Australia/Hobart and DST is handled automatically.
  */
 
 import {
@@ -10,10 +10,10 @@ import {
 } from 'date-fns-tz'
 
 // Single source of truth
-export const AUSTRALIAN_TIMEZONE = 'Australia/Sydney'
+export const AUSTRALIAN_TIMEZONE = 'Australia/Hobart'
 
 /**
- * Get a Date representing "now" in Australia/Sydney (for display/calcs with formatInTimeZone)
+ * Get a Date representing "now" in Australia/Hobart (for display/calcs with formatInTimeZone)
  * Note: the underlying Date is a UTC instant; use formatInTimeZone to render with TZ.
  */
 export function getAustralianNow(): Date {
@@ -21,14 +21,14 @@ export function getAustralianNow(): Date {
 }
 
 /**
- * Get today's date string in Australia/Sydney as YYYY-MM-DD
+ * Get today's date string in Australia/Hobart as YYYY-MM-DD
  */
 export function getAustralianToday(): string {
   return formatInTimeZone(new Date(), AUSTRALIAN_TIMEZONE, 'yyyy-MM-dd')
 }
 
 /**
- * Convert a UTC Date (or any instant) to a Date projected in Australia/Sydney wall time
+ * Convert a UTC Date (or any instant) to a Date projected in Australia/Hobart wall time
  * Useful for UI rendering with local Australian components
  */
 export function toAustralianTime(date: Date): Date {
@@ -36,7 +36,7 @@ export function toAustralianTime(date: Date): Date {
 }
 
 /**
- * Interpret the given Date's wall time as Australia/Sydney and convert to a UTC instant
+ * Interpret the given Date's wall time as Australia/Hobart and convert to a UTC instant
  * Example: a Date whose components represent 2025-09-05 08:00 in Sydney -> corresponding UTC instant
  */
 export function fromAustralianTime(date: Date): Date {
@@ -52,7 +52,7 @@ export function fromAustralianTime(date: Date): Date {
 }
 
 /**
- * Parse a YYYY-MM-DD as an Australia/Sydney date at 00:00:00 (returned as a Date with AU wall time projection)
+ * Parse a YYYY-MM-DD as an Australia/Hobart date at 00:00:00 (returned as a Date with AU wall time projection)
  */
 export function parseAustralianDate(dateString: string): Date {
   // Compute the UTC instant for AU midnight, then project back to AU wall time for UI usage
@@ -61,10 +61,17 @@ export function parseAustralianDate(dateString: string): Date {
 }
 
 /**
- * Format a Date as YYYY-MM-DD in Australia/Sydney
+ * Format a Date as YYYY-MM-DD in Australia/Hobart
  */
 export function formatAustralianDate(date: Date): string {
   return formatInTimeZone(date, AUSTRALIAN_TIMEZONE, 'yyyy-MM-dd')
+}
+
+/**
+ * Format a Date as DD-MM-YYYY in Australia/Hobart for display
+ */
+export function formatAustralianDateDisplay(date: Date): string {
+  return formatInTimeZone(date, AUSTRALIAN_TIMEZONE, 'dd-MM-yyyy')
 }
 
 /**

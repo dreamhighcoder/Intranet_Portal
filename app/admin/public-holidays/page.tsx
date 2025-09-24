@@ -790,7 +790,7 @@ export default function AdminPublicHolidaysPage() {
                     <TableBody>
                       {paginatedHolidays.map((holiday) => {
                         const date = parseAustralianDate(holiday.date)
-                        const dayOfWeek = date.toLocaleDateString('en-AU', { weekday: 'short' })
+                        const dayOfWeek = date.toLocaleDateString('en-AU', { weekday: 'short', timeZone: 'Australia/Hobart' })
                         const australianNow = getAustralianNow()
                         const isUpcoming = date > australianNow
                         const isPast = date < australianNow
@@ -807,7 +807,7 @@ export default function AdminPublicHolidaysPage() {
                             </TableCell>
                             <TableCell>
                               <div className={`font-mono ${isUpcoming ? 'flex justify-center text-blue-600 font-medium' : 'flex justify-center'}`}>
-                                {date.toLocaleDateString('en-AU')}
+                                {(() => { const y = date.getFullYear(); const m = String(date.getMonth() + 1).padStart(2, '0'); const d = String(date.getDate()).padStart(2, '0'); return `${d}-${m}-${y}`; })()}
                               </div>
                             </TableCell>
                             <TableCell>
@@ -856,7 +856,7 @@ export default function AdminPublicHolidaysPage() {
                 <div className="lg:hidden space-y-4 p-4">
                   {paginatedHolidays.map((holiday) => {
                     const date = parseAustralianDate(holiday.date)
-                    const dayOfWeek = date.toLocaleDateString('en-AU', { weekday: 'long' })
+                    const dayOfWeek = date.toLocaleDateString('en-AU', { weekday: 'long', timeZone: 'Australia/Hobart' })
                     const australianNow = getAustralianNow()
                     const isUpcoming = date > australianNow
                     const isPast = date < australianNow
@@ -886,7 +886,7 @@ export default function AdminPublicHolidaysPage() {
                               <div>
                                 <span className="text-gray-500">Date:</span>
                                 <div className={`font-mono mt-1 ${isUpcoming ? 'text-blue-600 font-medium' : ''}`}>
-                                  {date.toLocaleDateString('en-AU')}
+                                  {(() => { const y = date.getFullYear(); const m = String(date.getMonth() + 1).padStart(2, '0'); const d = String(date.getDate()).padStart(2, '0'); return `${d}-${m}-${y}`; })()}
                                 </div>
                               </div>
                               <div>
@@ -1032,7 +1032,7 @@ export default function AdminPublicHolidaysPage() {
           onConfirm={confirmDeleteHoliday}
           title="Delete Public Holiday"
           description="Are you sure you want to delete this public holiday? This action cannot be undone and may affect task scheduling."
-          itemName={holidayToDelete ? `${holidayToDelete.name} (${parseAustralianDate(holidayToDelete.date).toLocaleDateString('en-AU')})` : ''}
+          itemName={holidayToDelete ? (() => { const date = parseAustralianDate(holidayToDelete.date); const y = date.getFullYear(); const m = String(date.getMonth() + 1).padStart(2, '0'); const d = String(date.getDate()).padStart(2, '0'); return `${holidayToDelete.name} (${d}-${m}-${y})`; })() : ''}
           isLoading={isDeleting}
         />
 

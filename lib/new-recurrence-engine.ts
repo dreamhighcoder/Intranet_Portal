@@ -161,7 +161,7 @@ export class NewRecurrenceEngine {
   private holidayChecker: HolidayChecker
   private businessTimezone: string
 
-  constructor(holidayChecker: HolidayChecker, businessTimezone: string = 'Australia/Sydney') {
+  constructor(holidayChecker: HolidayChecker, businessTimezone: string = 'Australia/Hobart') {
     this.holidayChecker = holidayChecker
     this.businessTimezone = businessTimezone
   }

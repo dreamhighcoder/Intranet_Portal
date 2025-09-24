@@ -748,7 +748,7 @@ export async function updateSpecificTaskStatus(
   try {
     const updateData: any = {
       status: newStatus,
-      // Persist timestamps in UTC, derived from Australia/Sydney "now"
+      // Persist timestamps in UTC, derived from Australia/Hobart "now"
       updated_at: australianNowUtcISOString()
     }
 

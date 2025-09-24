@@ -79,7 +79,7 @@ INSERT INTO public_holidays (date, name, region, source) VALUES
 -- Insert default system settings
 INSERT INTO system_settings (key, value, description, data_type, is_public) VALUES
   -- Business Rules
-  ('timezone', 'Australia/Sydney', 'Default timezone for the pharmacy', 'string', true),
+  ('timezone', 'Australia/Hobart', 'Default timezone for the pharmacy', 'string', true),
   ('new_since_hour', '00:00', 'Hour to mark tasks as "new since" for the day', 'string', true),
   ('business_days', '[1,2,3,4,5,6]', 'Business operating days (1=Mon, 2=Tue, etc, 6=Sat)', 'json', true),
   ('workday_start_time', '08:00', 'Standard workday start time', 'string', true),

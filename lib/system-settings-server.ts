@@ -2,7 +2,7 @@ import { supabaseServer } from '@/lib/supabase-server'
 import { SystemSettings } from './system-settings'
 
 const DEFAULT_SETTINGS: SystemSettings = {
-  timezone: 'Australia/Sydney',
+  timezone: 'Australia/Hobart',
   new_since_hour: '00:00',
   missed_cutoff_time: '23:59',
   auto_logout_enabled: true,

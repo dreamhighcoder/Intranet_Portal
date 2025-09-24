@@ -2543,12 +2543,13 @@ export default function RoleChecklistPage() {
               <div>
                 <h1 className="text-2xl lg:text-3xl font-bold mb-2">
                   {isAdmin ? "Daily Checklist Overview" : `${formatResponsibility(role)} Checklist`} —{" "}
-                  {parseAustralianDate(currentDate).toLocaleDateString("en-AU", {
-                    weekday: "long",
-                    year: "numeric",
-                    month: "long",
-                    day: "numeric",
-                  })}
+                  {(() => {
+                    const date = parseAustralianDate(currentDate)
+                    const year = date.getFullYear()
+                    const month = String(date.getMonth() + 1).padStart(2, '0')
+                    const day = String(date.getDate()).padStart(2, '0')
+                    return `${day}-${month}-${year}`
+                  })()}
                 </h1>
                 <p className="text-white/90 text-sm lg:text-base">
                   {(() => {
@@ -2703,7 +2704,7 @@ export default function RoleChecklistPage() {
         {/* Task List */}
         <Card className="card-surface mb-6 gap-4">
           <CardHeader>
-            <div className="flex flex-col lg:flex-row sm:items-center sm:justify-between space-y-2 sm:space-y-0 gap-4">
+            <div className="flex flex-col xl:flex-row items-center sm:justify-between space-y-2 sm:space-y-0 gap-4">
               <div className="flex flex-col sm:flex-row sm:items-center space-y-2 sm:space-y-0 gap-4">
                 <CardTitle className="text-lg lg:text-xl mb-1">
                   Tasks ({filteredAndSortedTasks.length === 0 ? '0' : `${startIndex + 1}-${Math.min(endIndex, filteredAndSortedTasks.length)}`} of {filteredAndSortedTasks.length})
@@ -2745,42 +2746,46 @@ export default function RoleChecklistPage() {
                 </div>
 
                 <div className="flex flex-col sm:flex-row space-x-1 bg-gray-100 px-2 py-1 rounded-lg gap-1">
-                  <button
-                    onClick={() => setSelectedTiming("opening")}
-                    className={`px-3 py-1 rounded-lg text-sm font-medium transition-colors ${selectedTiming === "opening"
-                      ? "bg-white text-[var(--color-primary)] shadow-sm"
-                      : "bg-gray-50 border border-white text-gray-600 hover:text-gray-900"
-                      }`}
-                  >
-                    Opening
-                  </button>
-                  <button
-                    onClick={() => setSelectedTiming("anytime_during_day")}
-                    className={`px-3 py-1 rounded-lg text-sm font-medium transition-colors ${selectedTiming === "anytime_during_day"
-                      ? "bg-white text-[var(--color-primary)] shadow-sm"
-                      : "bg-gray-50 border border-white text-gray-600 hover:text-gray-900"
-                      }`}
-                  >
-                    Anytime During Day
-                  </button>
-                  <button
-                    onClick={() => setSelectedTiming("before_order_cut_off")}
-                    className={`px-3 py-1 rounded-lg text-sm font-medium transition-colors ${selectedTiming === "before_order_cut_off"
-                      ? "bg-white text-[var(--color-primary)] shadow-sm"
-                      : "bg-gray-50 border border-white text-gray-600 hover:text-gray-900"
-                      }`}
-                  >
-                    Before Order Cut Off
-                  </button>
-                  <button
-                    onClick={() => setSelectedTiming("closing")}
-                    className={`px-3 py-1 rounded-lg text-sm font-medium transition-colors ${selectedTiming === "closing"
-                      ? "bg-white text-[var(--color-primary)] shadow-sm"
-                      : "bg-gray-50 border border-white text-gray-600 hover:text-gray-900"
-                      }`}
-                  >
-                    Closing
-                  </button>
+                  <div className="flex space-x-1 gap-1">
+                    <button
+                      onClick={() => setSelectedTiming("opening")}
+                      className={`px-3 py-1 rounded-lg text-sm font-medium transition-colors ${selectedTiming === "opening"
+                        ? "bg-white text-[var(--color-primary)] shadow-sm"
+                        : "bg-gray-50 border border-white text-gray-600 hover:text-gray-900"
+                        }`}
+                    >
+                      Opening
+                    </button>
+                    <button
+                      onClick={() => setSelectedTiming("anytime_during_day")}
+                      className={`px-3 py-1 rounded-lg text-sm font-medium transition-colors ${selectedTiming === "anytime_during_day"
+                        ? "bg-white text-[var(--color-primary)] shadow-sm"
+                        : "bg-gray-50 border border-white text-gray-600 hover:text-gray-900"
+                        }`}
+                    >
+                      Anytime During Day
+                    </button>
+                  </div>
+                  <div className="flex space-x-1 gap-1">
+                    <button
+                      onClick={() => setSelectedTiming("before_order_cut_off")}
+                      className={`px-3 py-1 rounded-lg text-sm font-medium transition-colors ${selectedTiming === "before_order_cut_off"
+                        ? "bg-white text-[var(--color-primary)] shadow-sm"
+                        : "bg-gray-50 border border-white text-gray-600 hover:text-gray-900"
+                        }`}
+                    >
+                      Before Order Cut Off
+                    </button>
+                    <button
+                      onClick={() => setSelectedTiming("closing")}
+                      className={`px-3 py-1 rounded-lg text-sm font-medium transition-colors ${selectedTiming === "closing"
+                        ? "bg-white text-[var(--color-primary)] shadow-sm"
+                        : "bg-gray-50 border border-white text-gray-600 hover:text-gray-900"
+                        }`}
+                    >
+                      Closing
+                    </button>
+                  </div>
                 </div>
 
               </div>
@@ -2799,31 +2804,31 @@ export default function RoleChecklistPage() {
                   <Table className="table-fixed w-full">
                     <TableHeader>
                       <TableRow>
-                        <TableHead className="w-[4%] py-3 bg-gray-50 text-center">New</TableHead>
-                        <TableHead className={isAdmin ? "w-[25%] py-3 bg-gray-50" : "w-[31%] py-3 bg-gray-50"}>
+                        <TableHead className="w-[3%] py-3 bg-gray-50 text-center">New</TableHead>
+                        <TableHead className={isAdmin ? "w-[36%] py-3 bg-gray-50" : "w-[40%] py-3 bg-gray-50"}>
                           Title & Description
                         </TableHead>
                         {isAdmin && (
-                          <TableHead className="w-[16%] py-3 bg-gray-50">
+                          <TableHead className="w-[14%] py-3 bg-gray-50">
                             Responsibility
                           </TableHead>
                         )}
                         {!isAdmin && (
-                          <TableHead className="w-[10%] py-3 bg-gray-50 text-center">
+                          <TableHead className="w-[5%] py-3 bg-gray-50 text-center">
                             Shared
                           </TableHead>
                         )}
-                        <TableHead className="w-[17%] py-3 bg-gray-50">
+                        <TableHead className="w-[15%] py-3 bg-gray-50">
                           Category
                         </TableHead>
-                        <TableHead className="w-[15%] py-3 bg-gray-50">
+                        <TableHead className="w-[11%] py-3 bg-gray-50">
                           Frequencies
                         </TableHead>
                         <TableHead className="w-[7%] py-3 bg-gray-50 text-left">
                           Due Time
                         </TableHead>
-                        <TableHead className="w-[10%] py-3 bg-gray-50">Status</TableHead>
-                        <TableHead className="w-[10%] py-3 bg-gray-50">Actions</TableHead>
+                        <TableHead className="w-[9%] py-3 bg-gray-50">Status</TableHead>
+                        <TableHead className={isAdmin ? "w-[5%] py-3 bg-gray-50" : "w-[10%] py-3 bg-gray-50"}>Actions</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -2917,7 +2922,6 @@ export default function RoleChecklistPage() {
                                   className="hover:bg-gray-100"
                                 >
                                   <Eye className="h-4 w-4" />
-                                  <span className="ml-1">Details</span>
                                 </Button>
                               ) : (
                                 <>
@@ -2939,7 +2943,7 @@ export default function RoleChecklistPage() {
                                           const completedAtDate = new Date(completedAt)
                                           const completedAtAustralian = toAustralianTime(completedAtDate)
                                           const completionDateStr = formatAustralianDate(completedAtAustralian)
-                                          
+
                                           // Check if the task was completed on the viewing date
                                           wasCompletedOnThisDate = completionDateStr === currentDate
                                         }
@@ -3102,19 +3106,107 @@ export default function RoleChecklistPage() {
                     <Card key={`${task.id}-${refreshKey}`} className="border border-gray-200">
                       <CardContent className="px-4">
                         <div className="space-y-3">
-                          {/* Publish badge */}
-                          <div className="flex justify-start">
-                            {task.is_new ? (
-                              <span title={getPublishTooltip(task)} className="relative inline-flex">
-                                <span className="absolute inline-flex h-5 w-5 rounded-full bg-blue-400 opacity-60 animate-ping"></span>
-                                <span className="relative inline-flex items-center justify-center w-5 h-5 rounded-full bg-blue-600 text-white text-[10px] font-bold shadow-lg shadow-blue-300 ring-2 ring-blue-300">N</span>
-                              </span>
-                            ) : (
-                              <span title={getPublishTooltip(task)} className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-gray-200 text-gray-700 text-[10px] font-bold border border-gray-300">
-                                {getTimingInitial(task)}
-                              </span>
-                            )}
+                          <div className="flex justify-between">
+                            {/* Publish badge */}
+                            <div className="flex justify-start">
+                              {task.is_new ? (
+                                <span title={getPublishTooltip(task)} className="relative inline-flex">
+                                  <span className="absolute inline-flex h-5 w-5 rounded-full bg-blue-400 opacity-60 animate-ping"></span>
+                                  <span className="relative inline-flex items-center justify-center w-5 h-5 rounded-full bg-blue-600 text-white text-[10px] font-bold shadow-lg shadow-blue-300 ring-2 ring-blue-300">N</span>
+                                </span>
+                              ) : (
+                                <span title={getPublishTooltip(task)} className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-gray-200 text-gray-700 text-[10px] font-bold border border-gray-300">
+                                  {getTimingInitial(task)}
+                                </span>
+                              )}
+                            </div>
+                            <div className="flex justify-end gap-2">
+                              {/* Admin sees only Details button */}
+                              {isAdmin ? (
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="ghost"
+                                  onClick={() => handleViewDetails(task)}
+                                  title="View Details"
+                                  className="hover:bg-gray-100"
+                                >
+                                  <Eye className="h-4 w-4" />
+                                  <span className="ml-1">Details</span>
+                                </Button>
+                              ) : (
+                                <>
+                                  {/* Non-admin action buttons */}
+                                  {(() => {
+                                    const today = getAustralianToday()
+                                    // currentDate and today are YYYY-MM-DD strings; compare directly
+                                    const isNotToday = currentDate !== today
+                                    const isLocked = task.is_locked
+                                    const isDisabled = isLocked || isNotToday
+                                    const getButtonTitle = () => {
+                                      if (isLocked) return "Task is locked and cannot be completed"
+                                      if (isNotToday) return "You can only complete tasks for today. Please go to today's page."
+                                      return "Mark task as done"
+                                    }
+
+                                    const getButtonText = () => {
+                                      if (isLocked) return "Locked"
+                                      return "Done ?"
+                                    }
+
+                                    const getButtonStyle = () => {
+                                      if (isLocked) {
+                                        return "bg-gray-400 text-gray-600 border-gray-400 cursor-not-allowed"
+                                      }
+                                      if (isNotToday) {
+                                        return "bg-green-200 text-green-700 border-green-300 hover:bg-green-300 opacity-60"
+                                      }
+                                      return "bg-blue-600 text-white hover:bg-blue-700 border-blue-600 hover:border-blue-700"
+                                    }
+
+                                    return (
+                                      <Button
+                                        type="button"
+                                        size="sm"
+                                        onClick={() => {
+                                          if (isNotToday) {
+                                            toastWarning("Cannot Complete Task", "You can only complete tasks for today. Please go to today's page.")
+                                            return
+                                          }
+                                          handleTaskComplete(task.id)
+                                        }}
+                                        disabled={isDisabled}
+                                        className={`font-medium ${getButtonStyle()}`}
+                                        title={getButtonTitle()}
+                                      >
+                                        {processingTasks.has(task.id) ? (
+                                          <span className="flex items-center">
+                                            <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-white mr-1"></div>
+                                            Processing...
+                                          </span>
+                                        ) : (
+                                          <span>{getButtonText()}</span>
+                                        )}
+                                      </Button>
+                                    )
+                                  })()}
+
+                                  <Button
+                                    type="button"
+                                    size="sm"
+                                    variant="ghost"
+                                    onClick={() => handleViewDetails(task)}
+                                    title="View Details"
+                                    className="hover:bg-gray-100"
+                                  >
+                                    <Eye className="h-4 w-4" />
+                                    <span className="ml-1">Details</span>
+                                  </Button>
+                                </>
+                              )}
+                            </div>
                           </div>
+
                           {/* Title and Description */}
                           <div>
                             {task.master_task.title && task.master_task.title.trim() && (
@@ -3139,7 +3231,7 @@ export default function RoleChecklistPage() {
                             )}
                             {!isAdmin && (
                               <div>
-                                <span className="text-gray-500">Shared Responsibilities:</span>
+                                <span className="text-gray-500">Shared Status:</span>
                                 <div className="flex flex-wrap gap-1 mt-1">
                                   {renderSharedResponsibilities(task.master_task.responsibility, currentRoleKebab, 3)}
                                 </div>
@@ -3153,7 +3245,7 @@ export default function RoleChecklistPage() {
                             </div>
                           </div>
 
-                                  <div className="space-y-3 text-sm grid sm:grid-cols-2 gap-2">
+                          <div className="space-y-3 text-sm grid sm:grid-cols-2 gap-2">
                             <div>
                               <span className="text-gray-500">Frequencies:</span>
                               <div className="mt-1">
@@ -3180,91 +3272,6 @@ export default function RoleChecklistPage() {
                             </div>
                           </div>
 
-                          <div className="flex justify-end gap-2 pt-2">
-                            {/* Admin sees only Details button */}
-                            {isAdmin ? (
-                              <Button
-                                type="button"
-                                size="sm"
-                                variant="ghost"
-                                onClick={() => handleViewDetails(task)}
-                                title="View Details"
-                                className="hover:bg-gray-100"
-                              >
-                                <Eye className="h-4 w-4" />
-                                <span className="ml-1">Details</span>
-                              </Button>
-                            ) : (
-                              <>
-                                {/* Non-admin action buttons */}
-                                {(() => {
-                                  const today = getAustralianToday()
-                                  // currentDate and today are YYYY-MM-DD strings; compare directly
-                                  const isNotToday = currentDate !== today
-                                  const isLocked = task.is_locked
-                                  const isDisabled = isLocked || isNotToday
-                                  const getButtonTitle = () => {
-                                    if (isLocked) return "Task is locked and cannot be completed"
-                                    if (isNotToday) return "You can only complete tasks for today. Please go to today's page."
-                                    return "Mark task as done"
-                                  }
-
-                                  const getButtonText = () => {
-                                    if (isLocked) return "Locked"
-                                    return "Done ?"
-                                  }
-
-                                  const getButtonStyle = () => {
-                                    if (isLocked) {
-                                      return "bg-gray-400 text-gray-600 border-gray-400 cursor-not-allowed"
-                                    }
-                                    if (isNotToday) {
-                                      return "bg-green-200 text-green-700 border-green-300 hover:bg-green-300 opacity-60"
-                                    }
-                                    return "bg-blue-600 text-white hover:bg-blue-700 border-blue-600 hover:border-blue-700"
-                                  }
-
-                                  return (
-                                    <Button
-                                      type="button"
-                                      size="sm"
-                                      onClick={() => {
-                                        if (isNotToday) {
-                                          toastWarning("Cannot Complete Task", "You can only complete tasks for today. Please go to today's page.")
-                                          return
-                                        }
-                                        handleTaskComplete(task.id)
-                                      }}
-                                      disabled={isDisabled}
-                                      className={`font-medium ${getButtonStyle()}`}
-                                      title={getButtonTitle()}
-                                    >
-                                      {processingTasks.has(task.id) ? (
-                                        <span className="flex items-center">
-                                          <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-white mr-1"></div>
-                                          Processing...
-                                        </span>
-                                      ) : (
-                                        <span>{getButtonText()}</span>
-                                      )}
-                                    </Button>
-                                  )
-                                })()}
-
-                                <Button
-                                  type="button"
-                                  size="sm"
-                                  variant="ghost"
-                                  onClick={() => handleViewDetails(task)}
-                                  title="View Details"
-                                  className="hover:bg-gray-100"
-                                >
-                                  <Eye className="h-4 w-4" />
-                                  <span className="ml-1">Details</span>
-                                </Button>
-                              </>
-                            )}
-                          </div>
                         </div>
                       </CardContent>
                     </Card>
@@ -3303,11 +3310,11 @@ export default function RoleChecklistPage() {
 
         {/* Summary Footer */}
         <div className="p-4 bg-white rounded-lg border border-[var(--color-border)]">
-          <div className="flex items-center justify-between text-sm">
+          <div className="sm:flex items-center justify-between text-sm">
             <span className="text-[var(--color-text-secondary)]">
               Summary for {parseAustralianDate(currentDate).toLocaleDateString("en-AU")}
             </span>
-            <div className="flex items-center space-x-4">
+            <div className="xs:col-flex items-center space-x-4">
               <span className="text-green-600">
                 {taskCounts.done} Done
               </span>

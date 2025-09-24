@@ -68,7 +68,7 @@ const formatStatus = (status: string) => {
   const formatted = status
     .replace(/_/g, ' ')
     .replace(/\b\w/g, l => l.toUpperCase())
-  
+
   // Add icons for specific statuses to match checklist page
   switch (status) {
     case 'missed':
@@ -350,7 +350,7 @@ export default function ReportsPage() {
     if (!reportData.completionRate && !reportData.missedTasks) {
       setLoading(true)
     }
-    
+
     try {
       // Use AU timezone-based formatting to avoid UTC skew in Netlify/prod
       const startDate = formatAustralianDate(dateRange.from)
@@ -662,7 +662,13 @@ export default function ReportsPage() {
                         {formatStatus(task.status)}
                       </Badge>
                     </TableCell>
-                    <TableCell className="py-3 text-sm">{new Date(task.due_date).toLocaleDateString()}</TableCell>
+                    <TableCell className="py-3 text-sm">{(() => {
+                      const date = new Date(task.due_date)
+                      const year = date.getFullYear()
+                      const month = String(date.getMonth() + 1).padStart(2, '0')
+                      const day = String(date.getDate()).padStart(2, '0')
+                      return `${day}-${month}-${year}`
+                    })()}</TableCell>
                   </TableRow>
                 ))}
               </TableBody>
@@ -715,7 +721,7 @@ export default function ReportsPage() {
                         <div>
                           <span className="text-gray-500 font-medium">Due Date:</span>
                           <div className="mt-1 text-sm font-medium">
-                            {new Date(task.due_date).toLocaleDateString()}
+                            {(() => { const date = new Date(task.due_date); const y = date.getFullYear(); const m = String(date.getMonth() + 1).padStart(2, '0'); const d = String(date.getDate()).padStart(2, '0'); return `${d}-${m}-${y}`; })()}
                           </div>
                         </div>
                       </div>
@@ -772,7 +778,7 @@ export default function ReportsPage() {
                   <PopoverTrigger asChild>
                     <Button variant="outline" className="w-full justify-start">
                       <CalendarIcon className="w-4 h-4 mr-2" />
-                      {dateRange.from.toLocaleDateString()}
+                      {(() => { const date = dateRange.from; const y = date.getFullYear(); const m = String(date.getMonth() + 1).padStart(2, '0'); const d = String(date.getDate()).padStart(2, '0'); return `${d}-${m}-${y}`; })()}
                     </Button>
                   </PopoverTrigger>
                   <PopoverContent className="w-auto p-0" align="start">
@@ -797,7 +803,7 @@ export default function ReportsPage() {
                   <PopoverTrigger asChild>
                     <Button variant="outline" className="w-full justify-start">
                       <CalendarIcon className="w-4 h-4 mr-2" />
-                      {dateRange.to.toLocaleDateString()}
+                      {(() => { const date = dateRange.to; const y = date.getFullYear(); const m = String(date.getMonth() + 1).padStart(2, '0'); const d = String(date.getDate()).padStart(2, '0'); return `${d}-${m}-${y}`; })()}
                     </Button>
                   </PopoverTrigger>
                   <PopoverContent className="w-auto p-0" align="start">
@@ -1017,7 +1023,12 @@ export default function ReportsPage() {
                           {renderTruncatedBadges(task.master_tasks.categories || [], 2, 'category')}
                         </div>
                       </TableCell>
-                      <TableCell className="py-3 text-sm">{new Date(task.due_date).toLocaleDateString()}</TableCell>
+                      <TableCell className="py-3 text-sm">{(() => {
+                        const date = new Date(task.due_date)
+                        const year = date.getFullYear()
+                        const month = String(date.getMonth() + 1).padStart(2, '0')
+                        return `${day}-${month}-${year}`
+                      })()}</TableCell>
                     </TableRow>
                   ))}
                 </TableBody>

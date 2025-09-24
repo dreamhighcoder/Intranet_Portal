@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { formatInTimeZone } from 'date-fns-tz'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -8,7 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Separator } from '@/components/ui/separator'
 import { Clock, User, Calendar, CheckCircle, XCircle, AlertTriangle, Tag, FileText, Settings, Hash } from 'lucide-react'
 import { toDisplayFormat } from '@/lib/responsibility-mapper'
-import { getAustralianNow, getAustralianToday, parseAustralianDate, createAustralianDateTime, toAustralianTime, formatAustralianDate } from '@/lib/timezone-utils'
+import { getAustralianNow, getAustralianToday, parseAustralianDate, createAustralianDateTime, toAustralianTime, formatAustralianDate, formatAustralianDateDisplay } from '@/lib/timezone-utils'
 import { calculateTaskStatus, setHolidays } from '@/lib/task-status-calculator'
 
 // Category display names, colors, and emojis
@@ -66,6 +67,7 @@ export default function TaskDetailModal({
   const [completionLog, setCompletionLog] = useState<CompletionLogEntry[]>([])
   const [loading, setLoading] = useState(false)
   const [holidaysLoaded, setHolidaysLoaded] = useState(false)
+  const [localHolidaySet, setLocalHolidaySet] = useState<Set<string>>(new Set())
 
   useEffect(() => {
     if (isOpen && task?.id) {
@@ -108,6 +110,7 @@ export default function TaskDetailModal({
         if (h?.date) s.add(String(h.date))
       })
       setHolidays(s) // Set holidays in the shared calculator
+      setLocalHolidaySet(s) // Set holidays in the local state for modal calculations
       setHolidaysLoaded(true) // Mark holidays as loaded
     })
   }, [isOpen, task?.date])
@@ -231,17 +234,19 @@ export default function TaskDetailModal({
   if (!task) return null
 
   // Helper functions for the timing & cutoffs section
+  
   const nowAU = getAustralianNow()
 
   const formatAUDate = (date: Date | string) => {
     if (!date) return '—'
     const dateObj = typeof date === 'string' ? new Date(date) : date
-    return formatAustralianDate(dateObj)
+    return formatAustralianDateDisplay(dateObj)
   }
 
   const formatYMD = (date: Date | string) => {
     if (!date) return ''
     const dateObj = typeof date === 'string' ? new Date(date) : date
+    // Keep ISO-like YYYY-MM-DD for building Date strings used in comparisons
     return formatAustralianDate(dateObj)
   }
 
@@ -260,27 +265,97 @@ export default function TaskDetailModal({
         // Calculate appearance date (when task appears)
         const appearance = instanceDate
 
-        // Calculate due date and time
+        // Calculate due date and time based on frequency logic
         let dueDate = instanceDate
         let dueTime = task.master_task?.due_time || '17:00'
 
-        // For specific weekday frequencies, the due date might be different
-        if (task.due_date) {
-          dueDate = parseAustralianDate(task.due_date)
+        // Helper function to check if a date is a business day (not Sunday or holiday)
+        const isBusinessDay = (d: Date): boolean => {
+          const day = d.getDay()
+          if (day === 0) return false // Sunday is not a business day
+          const dateStr = formatAustralianDate(d)
+          return !localHolidaySet.has(dateStr)
         }
 
-        // Calculate carry-over period using the task status calculator logic
-        const taskInput = {
-          date: task.date || currentDate,
-          due_date: task.due_date,
-          master_task: {
-            due_time: task.master_task?.due_time,
-            frequencies: [frequency], // Calculate for this specific frequency
-            created_at: task.master_task?.created_at,
-            publish_delay: task.master_task?.publish_delay,
-            start_date: task.master_task?.start_date,
-            end_date: task.master_task?.end_date,
+        // Helper function to find the previous business day
+        const findPreviousBusinessDay = (d: Date): Date => {
+          const result = new Date(d)
+          while (!isBusinessDay(result)) {
+            result.setDate(result.getDate() - 1)
           }
+          return result
+        }
+
+        // Helper function to get week Saturday
+        const getWeekSaturday = (d: Date): Date => {
+          const result = new Date(d)
+          const day = result.getDay()
+          const diff = 6 - (day === 0 ? 7 : day)
+          result.setDate(result.getDate() + diff)
+          return result
+        }
+
+        // Helper function to get last Saturday of month
+        const getLastSaturdayOfMonth = (d: Date): Date => {
+          const lastDay = new Date(d.getFullYear(), d.getMonth() + 1, 0)
+          const day = lastDay.getDay() // 0=Sun..6=Sat
+          // Calculate days to go back to reach Saturday
+          const diff = day === 6 ? 0 : (day === 0 ? 1 : (day + 1))
+          const lastSaturday = new Date(lastDay)
+          lastSaturday.setDate(lastDay.getDate() - diff)
+          return lastSaturday
+        }
+
+        // Calculate proper due date based on frequency
+        switch (frequency) {
+          case 'once_weekly':
+            // Due date: Saturday of the same week (or nearest earlier business day if Saturday is holiday)
+            const weekSat = getWeekSaturday(instanceDate)
+            dueDate = findPreviousBusinessDay(weekSat)
+            break
+          case 'once_monthly':
+          case 'start_of_every_month':
+          case 'start_every_month':
+          case 'start_of_month':
+          case 'start_certain_months':
+          case 'every_month':
+          case 'certain_months':
+          case 'start_of_month_jan':
+          case 'start_of_month_feb':
+          case 'start_of_month_mar':
+          case 'start_of_month_apr':
+          case 'start_of_month_may':
+          case 'start_of_month_jun':
+          case 'start_of_month_jul':
+          case 'start_of_month_aug':
+          case 'start_of_month_sep':
+          case 'start_of_month_oct':
+          case 'start_of_month_nov':
+          case 'start_of_month_dec':
+          case 'end_of_every_month':
+          case 'end_of_month':
+          case 'end_of_month_jan':
+          case 'end_of_month_feb':
+          case 'end_of_month_mar':
+          case 'end_of_month_apr':
+          case 'end_of_month_may':
+          case 'end_of_month_jun':
+          case 'end_of_month_jul':
+          case 'end_of_month_aug':
+          case 'end_of_month_sep':
+          case 'end_of_month_oct':
+          case 'end_of_month_nov':
+          case 'end_of_month_dec':
+            // Due date: Last Saturday of the month (or nearest earlier business day if Saturday is holiday)
+            const lastSat = getLastSaturdayOfMonth(instanceDate)
+            dueDate = findPreviousBusinessDay(lastSat)
+            break
+          default:
+            // For other frequencies, use the provided due_date if available
+            if (task.due_date) {
+              dueDate = parseAustralianDate(task.due_date)
+            }
+            break
         }
 
         // Calculate lock date based on frequency
@@ -302,54 +377,102 @@ export default function TaskDetailModal({
           case 'thursday':
           case 'friday':
           case 'saturday':
-            // Lock at end of week (Saturday)
-            const weekSat = new Date(instanceDate)
-            const day = weekSat.getDay()
-            const diff = 6 - (day === 0 ? 7 : day)
-            weekSat.setDate(weekSat.getDate() + diff)
-            lockDate = weekSat
+            // Lock at end of week (Saturday or nearest earlier business day)
+            const weekSat = getWeekSaturday(instanceDate)
+            lockDate = findPreviousBusinessDay(weekSat)
+            break
+          case 'once_monthly':
+          case 'start_of_every_month':
+          case 'start_every_month':
+          case 'start_of_month':
+          case 'start_certain_months':
+          case 'every_month':
+          case 'certain_months':
+          case 'start_of_month_jan':
+          case 'start_of_month_feb':
+          case 'start_of_month_mar':
+          case 'start_of_month_apr':
+          case 'start_of_month_may':
+          case 'start_of_month_jun':
+          case 'start_of_month_jul':
+          case 'start_of_month_aug':
+          case 'start_of_month_sep':
+          case 'start_of_month_oct':
+          case 'start_of_month_nov':
+          case 'start_of_month_dec':
+          case 'end_of_every_month':
+          case 'end_of_month':
+          case 'end_of_month_jan':
+          case 'end_of_month_feb':
+          case 'end_of_month_mar':
+          case 'end_of_month_apr':
+          case 'end_of_month_may':
+          case 'end_of_month_jun':
+          case 'end_of_month_jul':
+          case 'end_of_month_aug':
+          case 'end_of_month_sep':
+          case 'end_of_month_oct':
+          case 'end_of_month_nov':
+          case 'end_of_month_dec':
+            // Lock at end of month (last Saturday or nearest earlier business day)
+            const lastSat = getLastSaturdayOfMonth(instanceDate)
+            lockDate = findPreviousBusinessDay(lastSat)
             break
           default:
-            // Monthly and other frequencies - lock at end of month
-            const lastDay = new Date(instanceDate.getFullYear(), instanceDate.getMonth() + 1, 0)
-            const lastSaturday = new Date(lastDay)
-            const lastDay_day = lastDay.getDay()
-            const diff_last = lastDay_day === 0 ? 1 : (7 - lastDay_day + 6) % 7
-            lastSaturday.setDate(lastDay.getDate() - diff_last)
-            lockDate = lastSaturday
+            // Unknown frequency, use conservative approach
+            lockDate = instanceDate
             break
         }
 
-        // Calculate carry window
+        // Calculate carry window based on frequency logic
         let carryStart: Date | null = null
         let carryEnd: Date | null = lockDate
 
-        // Determine carry window start based on task completion status
-        if (task.is_completed_for_position) {
-          // Task is completed - find the actual completion date
-          if (task.completed_at) {
-            carryStart = toAustralianTime(new Date(task.completed_at))
-          } else if (task.position_completions && task.position_completions.length > 0) {
-            // Use position completion date if available
-            const positionCompletion = task.position_completions[0]
-            if (positionCompletion.completed_at) {
-              carryStart = toAustralianTime(new Date(positionCompletion.completed_at))
-            } else {
-              // Position completion exists but no timestamp - use due date
-              carryStart = dueDate
-            }
-          } else {
-            // Completed but no completion timestamp - use due date
-            carryStart = dueDate
+        // Helper function to get week Monday
+        const getWeekMonday = (d: Date): Date => {
+          const result = new Date(d)
+          const day = result.getDay()
+          const diff = day === 0 ? -6 : 1 - day
+          result.setDate(result.getDate() + diff)
+          return result
+        }
+
+        // Helper function to find the next business day
+        const findNextBusinessDay = (d: Date): Date => {
+          const result = new Date(d)
+          while (!isBusinessDay(result)) {
+            result.setDate(result.getDate() + 1)
           }
-        } else {
-          // Task is not completed - carry window would start from due date when completed
-          carryStart = dueDate
+          return result
+        }
+
+        // Calculate carry window start based on frequency
+        switch (frequency) {
+          case 'once_weekly':
+            // Carry window: From Monday (first working day of the week) to Saturday (lock date)
+            const weekMon = getWeekMonday(instanceDate)
+            carryStart = findNextBusinessDay(weekMon)
+            break
+          case 'once_monthly':
+            // Carry window: From 1st of month (first working day) to last Saturday (lock date)
+            const firstOfMonth = new Date(instanceDate.getFullYear(), instanceDate.getMonth(), 1)
+            // If 1st is weekend, move to Monday
+            const mondayAfterWeekend = firstOfMonth.getDay() === 6
+              ? new Date(firstOfMonth.getFullYear(), firstOfMonth.getMonth(), 3)
+              : firstOfMonth.getDay() === 0
+                ? new Date(firstOfMonth.getFullYear(), firstOfMonth.getMonth(), 2)
+                : firstOfMonth
+            carryStart = findNextBusinessDay(mondayAfterWeekend)
+            break
+          default:
+            // For other frequencies, use the appearance date (instance date)
+            carryStart = appearance
+            break
         }
 
         // Ensure carryStart is never null
         if (!carryStart) {
-          carryStart = dueDate
+          carryStart = appearance
         }
 
         cutoffs.push({
@@ -930,12 +1053,13 @@ export default function TaskDetailModal({
                       <span className="font-medium text-purple-800">Task Date</span>
                     </div>
                     <p className="text-purple-700 font-semibold">
-                      {new Date(task.date).toLocaleDateString('en-AU', {
-                        weekday: 'long',
-                        year: 'numeric',
-                        month: 'long',
-                        day: 'numeric'
-                      })}
+                      {(() => {
+                        const date = new Date(task.date)
+                        const year = date.getFullYear()
+                        const month = String(date.getMonth() + 1).padStart(2, '0')
+                        const day = String(date.getDate()).padStart(2, '0')
+                        return `${day}-${month}-${year}`
+                      })()}
                     </p>
                   </div>
                   <div className="bg-purple-50 px-4 py-3 rounded-lg border border-purple-200">
@@ -1041,7 +1165,6 @@ export default function TaskDetailModal({
                     <p className="text-amber-700 leading-relaxed">{task.notes}</p>
                   </div>
                 )}
-
               </CardContent>
             </Card>
 
@@ -1103,21 +1226,7 @@ export default function TaskDetailModal({
                               <div className="text-sm text-green-700 space-y-1">
                                 <p>
                                   <span className="font-medium">Completed at:</span>{' '}
-                                  {completion.completed_at ? new Date(completion.completed_at).toLocaleString('en-AU', {
-                                    weekday: 'short',
-                                    year: 'numeric',
-                                    month: 'short',
-                                    day: 'numeric',
-                                    hour: '2-digit',
-                                    minute: '2-digit'
-                                  }) : (task.completed_at ? new Date(task.completed_at).toLocaleString('en-AU', {
-                                    weekday: 'short',
-                                    year: 'numeric',
-                                    month: 'short',
-                                    day: 'numeric',
-                                    hour: '2-digit',
-                                    minute: '2-digit'
-                                  }) : 'Unknown')}
+                                  {completion.completed_at ? formatInTimeZone(new Date(completion.completed_at), 'Australia/Hobart', 'dd-MM-yyyy HH:mm:ss') : (task.completed_at ? formatInTimeZone(new Date(task.completed_at), 'Australia/Hobart', 'dd-MM-yyyy HH:mm:ss') : 'Unknown')}
                                 </p>
                               </div>
                             </div>
@@ -1142,7 +1251,7 @@ export default function TaskDetailModal({
                   <div className="mt-4 space-y-3">
                     <CardTitle className="text-lg flex items-center space-x-2">
                       <Clock className="h-5 w-5 text-indigo-600" />
-                      <span>Timing & Cutoffs (Australia/Sydney)s</span>
+                      <span>Timing & Cutoffs (Australia/Hobart)</span>
                     </CardTitle>
 
                     {!holidaysLoaded && (

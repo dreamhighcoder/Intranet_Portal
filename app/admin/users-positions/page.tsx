@@ -79,7 +79,7 @@ export default function UsersPositionsPage() {
     return positions.find((p: Position) => p.id === positionId)?.name || "Unknown"
   }
 
-  // Helper function to safely format dates with time
+  // Helper function to safely format dates with time - DD-MM-YYYY format
   const formatDateTime = (dateString: string | undefined | null) => {
     if (!dateString) return "Unknown"
     
@@ -94,7 +94,8 @@ export default function UsersPositionsPage() {
         day: '2-digit',
         hour: '2-digit',
         minute: '2-digit',
-        hour12: false
+        hour12: false,
+        timeZone: 'Australia/Hobart'
       })
     } catch (error) {
       console.error("Error formatting date:", dateString, error)
@@ -102,16 +103,19 @@ export default function UsersPositionsPage() {
     }
   }
 
-  // Helper function to safely format dates only (for backward compatibility)
+  // Helper function to safely format dates only - DD-MM-YYYY format
   const formatDate = (dateString: string | undefined | null) => {
     if (!dateString) return "Unknown"
-    
+
     try {
       const date = new Date(dateString)
       if (isNaN(date.getTime())) {
         return "Invalid Date"
       }
-      return date.toLocaleDateString("en-AU")
+      const year = date.getFullYear()
+      const month = String(date.getMonth() + 1).padStart(2, '0')
+      const day = String(date.getDate()).padStart(2, '0')
+      return `${day}-${month}-${year}`
     } catch (error) {
       console.error("Error formatting date:", dateString, error)
       return "Invalid Date"
@@ -462,13 +466,7 @@ export default function UsersPositionsPage() {
           <Card className="card-surface">
             <CardHeader>
               <div className="flex items-center justify-between">
-                <CardTitle>
-                  Positions {totalAdminCount > 0 && (
-                    <span className="text-sm font-normal text-gray-500 ml-2">
-                      ({adminUserCount} user admin{adminUserCount !== 1 ? 's' : ''}{adminPositionCount > 0 ? `, ${adminPositionCount} position admin${adminPositionCount !== 1 ? 's' : ''}` : ''})
-                    </span>
-                  )}
-                </CardTitle>
+                <CardTitle>Positions</CardTitle>
                 <Button 
                   className="bg-[var(--color-primary)] hover:bg-[var(--color-primary)]/90 text-white"
                   onClick={handleAddPosition}
@@ -666,13 +664,7 @@ export default function UsersPositionsPage() {
           <Card className="card-surface">
             <CardHeader>
               <div className="flex items-center justify-between">
-                <CardTitle>
-                  Users {totalAdminCount > 0 && (
-                    <span className="text-sm font-normal text-gray-500 ml-2">
-                      ({adminUserCount} user admin{adminUserCount !== 1 ? 's' : ''}{adminPositionCount > 0 ? `, ${adminPositionCount} position admin${adminPositionCount !== 1 ? 's' : ''}` : ''})
-                    </span>
-                  )}
-                </CardTitle>
+                <CardTitle>Users</CardTitle>
                 <Button 
                   className="bg-[var(--color-primary)] hover:bg-[var(--color-primary)]/90 text-white"
                   onClick={handleAddUser}

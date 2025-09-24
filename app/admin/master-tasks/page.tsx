@@ -670,26 +670,26 @@ const TaskDetailsModal = ({ task, positions }: { task: MasterTask, positions: Po
         {/* Basic Information */}
         <Card className="border-l-4 border-l-blue-500 gap-2">
           <CardHeader className="flex flex-col sm:flex-row justify-between">
-            <CardTitle className="flex items-center space-x-2">
+            <CardTitle className="text-lg flex items-center space-x-2">
               <CheckCircle2 className="h-5 w-5" />
               <span>Basic Information</span>
             </CardTitle>
             <Badge className={task.publish_status === 'active' ? 'bg-green-100 text-green-800 border border-green-200' :
               task.publish_status === 'draft' ? 'bg-yellow-100 text-yellow-800 border border-yellow-200' :
                 'bg-gray-100 text-gray-800 border border-gray-200'}>
-              {task.publish_status}
+              {task.publish_status.charAt(0).toUpperCase() + task.publish_status.slice(1)}
             </Badge>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
               <div className="items-center  p-4 bg-gray-50 rounded-md border border-gray-100 shadow-sm">
-                <label className="text-sm font-medium text-gray-600">Title</label>
-                <p className="text-sm mt-1 font-medium">{task.title}</p>
+                <label className="font-medium text-gray-600">Title</label>
+                <p className="text-sm mt-2 font-medium">{task.title}</p>
               </div>
               {task.description && (
                 <div className="relative lg:col-span-3 items-center p-4 bg-gray-50 rounded-md border border-gray-100 shadow-sm">
-                  <label className="text-sm font-medium text-gray-600">Description</label>
-                  <p className="text-sm mt-1 bg-gray-50 rounded-md">{task.description}</p>
+                  <label className="font-medium text-gray-600">Description</label>
+                  <p className="text-sm mt-2 bg-gray-50 rounded-md">{task.description}</p>
                 </div>
               )}
 
@@ -700,7 +700,7 @@ const TaskDetailsModal = ({ task, positions }: { task: MasterTask, positions: Po
         {/* Assignment & Responsibilities */}
         <Card className="border-l-4 border-l-indigo-500 gap-2">
           <CardHeader>
-            <CardTitle className="flex items-center space-x-2">
+            <CardTitle className="text-lg flex items-center space-x-2">
               <Users className="h-5 w-5" />
               <span>Responsibilities & Categories</span>
             </CardTitle>
@@ -708,8 +708,8 @@ const TaskDetailsModal = ({ task, positions }: { task: MasterTask, positions: Po
           <CardContent className="space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="items-center  p-4 bg-gray-50 rounded-md border border-gray-100 shadow-sm">
-                <label className="text-sm font-medium text-gray-600">Responsibilities</label>
-                <div className="mt-1">
+                <label className="font-medium text-gray-600">Responsibilities</label>
+                <div className="mt-2">
                   {task.responsibility && task.responsibility.length > 0 ? (
                     <div className="flex flex-wrap gap-1">
                       {task.responsibility.map((resp, index) => {
@@ -731,8 +731,8 @@ const TaskDetailsModal = ({ task, positions }: { task: MasterTask, positions: Po
                 </div>
               </div>
               <div className="items-center  p-4 bg-gray-50 rounded-md border border-gray-100 shadow-sm">
-                <label className="text-sm font-medium text-gray-600">Categories</label>
-                <div className="mt-1">
+                <label className="font-medium text-gray-600">Categories</label>
+                <div className="mt-2">
                   {task.categories && task.categories.length > 0 ? (
                     <div className="flex flex-wrap gap-1">
                       {task.categories.map((category, index) => {
@@ -760,7 +760,7 @@ const TaskDetailsModal = ({ task, positions }: { task: MasterTask, positions: Po
         {/* Scheduling */}
         <Card className="border-l-4 border-l-green-500 gap-2">
           <CardHeader>
-            <CardTitle className="flex items-center space-x-2">
+            <CardTitle className="text-lg flex items-center space-x-2">
               <Calendar className="h-5 w-5" />
               <span>Scheduling</span>
             </CardTitle>
@@ -768,8 +768,8 @@ const TaskDetailsModal = ({ task, positions }: { task: MasterTask, positions: Po
           <CardContent className="space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
               <div className="relative lg:col-span-2 items-center p-4 bg-gray-50 rounded-md border border-gray-100 shadow-sm">
-                <label className="text-sm font-medium text-gray-600">Frequencies</label>
-                <div className="flex flex-wrap gap-1 mt-1">
+                <label className="font-medium text-gray-600">Frequencies</label>
+                <div className="flex flex-wrap gap-1 mt-2">
                   {task.frequencies && task.frequencies.length > 0 ? (
                     task.frequencies.map((freq, index) => (
                       <Badge key={index} variant="outline" className={getFrequencyBadgeColor(freq)}>
@@ -783,8 +783,8 @@ const TaskDetailsModal = ({ task, positions }: { task: MasterTask, positions: Po
               </div>
 
               <div className="items-center  p-4 bg-gray-50 rounded-md border border-gray-100 shadow-sm">
-                <label className="text-sm font-medium text-gray-600">Timing</label>
-                <p className="text-sm mt-1">
+                <label className="font-medium text-gray-600">Timing</label>
+                <p className="text-sm mt-2">
                   {task.timing ? (
                     <Badge variant="outline" className={`
                       ${task.timing === 'opening' ? 'bg-blue-100 text-blue-800 border-blue-200' :
@@ -799,8 +799,8 @@ const TaskDetailsModal = ({ task, positions }: { task: MasterTask, positions: Po
                 </p>
               </div>
               <div className="items-center p-4 bg-gray-50 rounded-md border border-gray-100 shadow-sm">
-                <label className="text-sm font-medium text-gray-600">Due Time</label>
-                <p className="text-sm mt-1 flex items-center gap-1">
+                <label className="font-medium text-gray-600">Due Time</label>
+                <p className="text-sm mt-2 flex items-center gap-1">
                   <Clock className="h-3 w-3" />
                   {task.due_time || 'Not specified'}
                 </p>
@@ -823,25 +823,49 @@ const TaskDetailsModal = ({ task, positions }: { task: MasterTask, positions: Po
                 {task.due_date && (
                   <div className="flex items-center justify-between p-4 bg-gray-50 rounded-md border border-gray-100 shadow-sm">
                     <label className="text-sm font-medium text-gray-600">Due Date (Once-off)</label>
-                    <p className="text-sm mt-1">{new Date(task.due_date).toLocaleDateString()}</p>
+                    <p className="text-sm mt-1">{(() => {
+                      const date = new Date(task.due_date)
+                      const year = date.getFullYear()
+                      const month = String(date.getMonth() + 1).padStart(2, '0')
+                      const day = String(date.getDate()).padStart(2, '0')
+                      return `${day}-${month}-${year}`
+                    })()}</p>
                   </div>
                 )}
                 {task.start_date && (
                   <div className="flex items-center justify-between p-4 bg-gray-50 rounded-md border border-gray-100 shadow-sm">
                     <label className="text-sm font-medium text-gray-600">Start Date</label>
-                    <p className="text-sm mt-1">{new Date(task.start_date).toLocaleDateString()}</p>
+                    <p className="text-sm mt-1">{(() => {
+                      const date = new Date(task.start_date)
+                      const year = date.getFullYear()
+                      const month = String(date.getMonth() + 1).padStart(2, '0')
+                      const day = String(date.getDate()).padStart(2, '0')
+                      return `${day}-${month}-${year}`
+                    })()}</p>
                   </div>
                 )}
                 {task.publish_delay && (
                   <div className="flex items-center justify-between p-4 bg-gray-50 rounded-md border border-gray-100 shadow-sm">
                     <label className="text-sm font-medium text-gray-600">Publish Delay</label>
-                    <p className="text-sm mt-1">{new Date(task.publish_delay).toLocaleDateString()}</p>
+                    <p className="text-sm mt-1">{(() => {
+                      const date = new Date(task.publish_delay)
+                      const year = date.getFullYear()
+                      const month = String(date.getMonth() + 1).padStart(2, '0')
+                      const day = String(date.getDate()).padStart(2, '0')
+                      return `${day}-${month}-${year}`
+                    })()}</p>
                   </div>
                 )}
                 {task.end_date && (
                   <div className="flex items-center justify-between p-4 bg-gray-50 rounded-md border border-gray-100 shadow-sm">
                     <label className="text-sm font-medium text-gray-600">End Date</label>
-                    <p className="text-sm mt-1">{new Date(task.end_date).toLocaleDateString()}</p>
+                    <p className="text-sm mt-1">{(() => {
+                      const date = new Date(task.end_date)
+                      const year = date.getFullYear()
+                      const month = String(date.getMonth() + 1).padStart(2, '0')
+                      const day = String(date.getDate()).padStart(2, '0')
+                      return `${day}-${month}-${year}`
+                    })()}</p>
                   </div>
                 )}
 
@@ -853,18 +877,18 @@ const TaskDetailsModal = ({ task, positions }: { task: MasterTask, positions: Po
         {/* Metadata */}
         <Card className="border-l-4 border-l-yellow-500 gap-2">
           <CardHeader>
-            <CardTitle className="flex items-center space-x-2">
+            <CardTitle className="text-lg flex items-center space-x-2">
               <Info className="h-5 w-5" />
               <span>Task Information</span>
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs text-gray-500">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm text-gray-500">
               <div>
-                <span className="font-medium">Created:</span> {new Date(task.created_at).toLocaleString()}
+                <span className="font-medium">Created:</span> {(() => { const date = new Date(task.created_at); const y = date.getFullYear(); const m = String(date.getMonth() + 1).padStart(2, '0'); const d = String(date.getDate()).padStart(2, '0'); const hh = String(date.getHours()).padStart(2, '0'); const mm = String(date.getMinutes()).padStart(2, '0'); const ss = String(date.getSeconds()).padStart(2, '0'); return `${d}-${m}-${y} ${hh}:${mm}:${ss}`; })()}
               </div>
               <div>
-                <span className="font-medium">Updated:</span> {new Date(task.updated_at).toLocaleString()}
+                <span className="font-medium">Updated:</span> {(() => { const date = new Date(task.updated_at); const y = date.getFullYear(); const m = String(date.getMonth() + 1).padStart(2, '0'); const d = String(date.getDate()).padStart(2, '0'); const hh = String(date.getHours()).padStart(2, '0'); const mm = String(date.getMinutes()).padStart(2, '0'); const ss = String(date.getSeconds()).padStart(2, '0'); return `${d}-${m}-${y} ${hh}:${mm}:${ss}`; })()}
               </div>
               {(task as any).created_by && (
                 <div>

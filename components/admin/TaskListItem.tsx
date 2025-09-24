@@ -110,7 +110,13 @@ export default function TaskListItem({ task, onEdit, onDelete }: TaskListItemPro
         const months = rules.months?.map(m => ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][m]).join(', ') || ''
         return `Certain months: ${months}`
       case 'once_off':
-        return `Once off${rules.due_date ? ` on ${new Date(rules.due_date).toLocaleDateString()}` : ''}`
+        return `Once off${rules.due_date ? ` on ${(() => {
+          const date = new Date(rules.due_date)
+          const year = date.getFullYear()
+          const month = String(date.getMonth() + 1).padStart(2, '0')
+          const day = String(date.getDate()).padStart(2, '0')
+          return `${day}-${month}-${year}`
+        })()}` : ''}`
       default:
         return rules.type
     }
@@ -156,14 +162,12 @@ export default function TaskListItem({ task, onEdit, onDelete }: TaskListItemPro
         if (previewDates.length >= 6) break
       }
       
-      const formattedOccurrences = previewDates.map(date => 
-        date.toLocaleDateString('en-US', { 
-          weekday: 'long', 
-          year: 'numeric', 
-          month: 'long', 
-          day: 'numeric' 
-        })
-      )
+      const formattedOccurrences = previewDates.map(date => {
+        const year = date.getFullYear()
+        const month = String(date.getMonth() + 1).padStart(2, '0')
+        const day = String(date.getDate()).padStart(2, '0')
+        return `${day}-${month}-${year}`
+      })
       
       setPreviewOccurrences(formattedOccurrences)
     } catch (error) {
@@ -362,9 +366,21 @@ export default function TaskListItem({ task, onEdit, onDelete }: TaskListItemPro
             </div>
             
             <div className="text-right">
-              <p>Created: {new Date(task.created_at).toLocaleDateString('en-AU', { timeZone: 'Australia/Sydney' })}</p>
+              <p>Created: {(() => {
+                const date = new Date(task.created_at)
+                const year = date.getFullYear()
+                const month = String(date.getMonth() + 1).padStart(2, '0')
+                const day = String(date.getDate()).padStart(2, '0')
+                return `${day}-${month}-${year}`
+              })()}</p>
               {task.updated_at !== task.created_at && (
-                <p>Updated: {new Date(task.updated_at).toLocaleDateString('en-AU', { timeZone: 'Australia/Sydney' })}</p>
+                <p>Updated: {(() => {
+                  const date = new Date(task.updated_at)
+                  const year = date.getFullYear()
+                  const month = String(date.getMonth() + 1).padStart(2, '0')
+                  const day = String(date.getDate()).padStart(2, '0')
+                  return `${day}-${month}-${year}`
+                })()}</p>
               )}
             </div>
           </div>

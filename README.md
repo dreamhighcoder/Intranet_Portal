@@ -187,7 +187,7 @@ This application allows pharmacists to track, manage, and complete daily tasks w
 
 #### Available Settings
 **Timezone & Regional Settings:**
-- System Timezone (configurable, currently Australia/Sydney)
+- System Timezone (configurable, currently Australia/Hobart)
 - Working Days (multi-select, affects task generation)
 
 **Task Management:**

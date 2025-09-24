@@ -31,7 +31,7 @@ export async function PUT(request: NextRequest) {
 
     // Validate timezone
     const validTimezones = [
-      'Australia/Sydney', 'Australia/Melbourne', 'Australia/Brisbane',
+      'Australia/Hobart', 'Australia/Melbourne', 'Australia/Brisbane',
       'Australia/Adelaide', 'Australia/Perth', 'Australia/Darwin',
       'Australia/Hobart'
     ]

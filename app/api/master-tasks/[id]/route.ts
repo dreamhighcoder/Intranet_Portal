@@ -92,7 +92,7 @@ export async function PUT(
 
     // Prepare data for update using new schema
     const updateData: any = {
-      // Persist UTC timestamp derived from Australia/Sydney "now"
+      // Persist UTC timestamp derived from Australia/Hobart "now"
       updated_at: australianNowUtcISOString()
     }
 

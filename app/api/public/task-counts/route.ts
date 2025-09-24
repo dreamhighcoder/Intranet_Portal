@@ -110,7 +110,7 @@ export async function GET(request: NextRequest) {
       : (taskInstances || [])
 
     // Calculate counts from actual task instances
-    // Compute boundaries in Australia/Sydney but compare in UTC (DB stores UTC)
+    // Compute boundaries in Australia/Hobart but compare in UTC (DB stores UTC)
     const settings = await getSystemSettings()
     const newTaskHourAus = createAustralianDateTime(date, settings.new_since_hour)
     const nineAmUtc = fromAustralianTime(newTaskHourAus)

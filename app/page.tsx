@@ -222,8 +222,8 @@ export default function HomePage() {
             </div>
 
             {/* Content */}
-            <div className="relative z-10 py-2">
-              <h1 className="text-3xl sm:text-4xl font-bold mb-2">Welcome to Richmond Pharmacy</h1>
+            <div className="relative z-10">
+              <h1 className="text-3xl sm:text-4xl font-bold mb-2 py-1">Welcome to Richmond Pharmacy HQ</h1>
               <p className="opacity-90 text-sm sm:text-base">
                 Access your position-specific checklist to manage daily tasks and responsibilities
               </p>

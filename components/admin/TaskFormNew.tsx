@@ -239,13 +239,13 @@ export default function TaskFormNew({ task, onSubmit, onCancel }: TaskFormProps)
     const timeValue = event.target.value
     setUpdateSource('due_time')
     form.setValue('due_time', timeValue)
-
+    
     // Auto-update timing based on due_time
     if (timeValue) {
       const newTiming = getTimingFromDueTime(timeValue)
       const currentTiming = form.getValues('timing')
       const currentDefaultTime = DEFAULT_DUE_TIMES[currentTiming as keyof typeof DEFAULT_DUE_TIMES]
-
+      
       // Only update timing if it's different and the due time doesn't match the default for current timing
       if (newTiming !== currentTiming && timeValue !== currentDefaultTime) {
         form.setValue('timing', newTiming as any)

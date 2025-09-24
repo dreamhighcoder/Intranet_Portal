@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
+import { formatInTimeZone } from 'date-fns-tz'
 import { usePositionAuth } from "@/lib/position-auth-context"
 import { Navigation } from "@/components/navigation"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -24,7 +25,7 @@ import {
   Loader2
 } from "lucide-react"
 import { useRouter } from "next/navigation"
-import { getAustralianToday, formatAustralianDate, toAustralianTime, getAustralianNow, parseAustralianDate } from "@/lib/timezone-utils"
+import { getAustralianToday, formatAustralianDate, formatAustralianDateDisplay, toAustralianTime, getAustralianNow, parseAustralianDate } from "@/lib/timezone-utils"
 import { calculateTaskStatus } from "@/lib/task-status-calculator"
 
 interface CalendarDay {
@@ -70,11 +71,6 @@ interface Position {
   id: string
   name: string
 }
-
-const monthNames = [
-  "January", "February", "March", "April", "May", "June",
-  "July", "August", "September", "October", "November", "December"
-]
 
 const dayNames = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
 
@@ -523,8 +519,8 @@ export default function CalendarPage() {
                       <CalendarIcon className="w-4 h-4" />
                       <span>
                         {view === 'month'
-                          ? `${monthNames[toAustralianTime(currentDate).getMonth()]} ${toAustralianTime(currentDate).getFullYear()}`
-                          : `Week of ${formatAustralianDate(currentDate)}`
+                          ? `${('0' + (toAustralianTime(currentDate).getMonth() + 1)).slice(-2)}-${toAustralianTime(currentDate).getFullYear()}`
+                          : `Week of ${formatInTimeZone(currentDate, 'Australia/Hobart', 'MM-dd-yyyy')}`
                         }
                       </span>
                     </>
