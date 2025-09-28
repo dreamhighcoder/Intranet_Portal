@@ -18,7 +18,8 @@ import { toastError, toastSuccess, toastWarning } from '@/hooks/use-toast'
 import { toKebabCase } from '@/lib/responsibility-mapper'
 import { authenticatedGet, authenticatedPost, positionsApi, publicHolidaysApi } from '@/lib/api-client'
 import TaskDetailModal from '@/components/checklist/TaskDetailModal'
-import { getAustralianNow, getAustralianToday, formatAustralianDate, parseAustralianDate, createAustralianDateTime, australianNowUtcISOString, toAustralianTime } from '@/lib/timezone-utils'
+import { getAustralianNow, getAustralianToday, formatAustralianDate, parseAustralianDate, createAustralianDateTime, australianNowUtcISOString, toAustralianTime, AUSTRALIAN_TIMEZONE } from '@/lib/timezone-utils'
+import { formatInTimeZone } from 'date-fns-tz'
 import { calculateTaskStatus, setHolidays } from '@/lib/task-status-calculator'
 import { TASK_FREQUENCIES } from '@/lib/constants'
 // Shared UI holiday set for PH-aware business day checks
@@ -269,12 +270,12 @@ const getTaskStatusWithCarryOver = (task: ChecklistTask, currentDate: string, is
     const month = date.getMonth()
     const lastDay = new Date(year, month + 1, 0) // Last day of month
     const lastSaturday = new Date(lastDay)
-    
+
     // Find the last Saturday
     while (lastSaturday.getDay() !== 6) { // 6 = Saturday
       lastSaturday.setDate(lastSaturday.getDate() - 1)
     }
-    
+
     return lastSaturday
   }
 
@@ -285,29 +286,29 @@ const getTaskStatusWithCarryOver = (task: ChecklistTask, currentDate: string, is
     // Every Day: No carry-over. Each day has its own instance.
     // Show "✓ Done" only on the completion date
     isWithinCarryOverPeriod = currentDate === completionDateStr
-  } else if (frequencies.includes('once_monthly') || 
-             frequencies.some(f => f.includes('month'))) {
+  } else if (frequencies.includes('once_monthly') ||
+    frequencies.some(f => f.includes('month'))) {
     // Monthly tasks: Carry-over until last Saturday of the month when completed
     const lastSaturday = getLastSaturdayOfMonth(completionDateObj)
     const lastSaturdayEndOfDay = new Date(lastSaturday)
     lastSaturdayEndOfDay.setHours(23, 59, 59, 999)
-    
+
     // Show "✓ Done" from completion date until last Saturday of the month at 23:59
     const currentDateTime = new Date(currentDateObj)
     currentDateTime.setHours(23, 59, 59, 999) // End of current viewing day
-    
+
     isWithinCarryOverPeriod = currentDateTime <= lastSaturdayEndOfDay && currentDateObj >= completionDateObj
-  } else if (frequencies.some(f => f.includes('weekly') || 
-                                  ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'].includes(f))) {
+  } else if (frequencies.some(f => f.includes('weekly') ||
+    ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'].includes(f))) {
     // Weekly tasks: Carry-over until Saturday of the week when completed
     const completionWeekSaturday = new Date(completionDateObj)
     const daysUntilSaturday = (6 - completionDateObj.getDay() + 7) % 7
     completionWeekSaturday.setDate(completionDateObj.getDate() + daysUntilSaturday)
     completionWeekSaturday.setHours(23, 59, 59, 999)
-    
+
     const currentDateTime = new Date(currentDateObj)
     currentDateTime.setHours(23, 59, 59, 999)
-    
+
     isWithinCarryOverPeriod = currentDateTime <= completionWeekSaturday && currentDateObj >= completionDateObj
   } else {
     // For other frequencies (once_off, etc.), show completed status indefinitely until manually changed
@@ -315,10 +316,10 @@ const getTaskStatusWithCarryOver = (task: ChecklistTask, currentDate: string, is
   }
 
   // Debug logging
-  if (frequencies.includes('every_day') || frequencies.includes('once_monthly') || 
-      frequencies.some(f => f.includes('weekly') || ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'].includes(f))) {
-    const taskType = frequencies.includes('every_day') ? 'Daily' : 
-                     frequencies.includes('once_monthly') ? 'Monthly' : 'Weekly'
+  if (frequencies.includes('every_day') || frequencies.includes('once_monthly') ||
+    frequencies.some(f => f.includes('weekly') || ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'].includes(f))) {
+    const taskType = frequencies.includes('every_day') ? 'Daily' :
+      frequencies.includes('once_monthly') ? 'Monthly' : 'Weekly'
     console.log(`🔍 ${taskType} task carry-over check:`, {
       taskTitle: task.master_task?.title,
       currentDate,
@@ -758,7 +759,7 @@ const renderBadgesWithTruncation = (
   colorFn?: (value: string) => string
 ) => {
   // For categories: if there are 2 or more items, show all as emoji-only badges
-  if (type === 'category' && items.length >= 2) {
+  if (type === 'category') {
     return items.map((item, index) => {
       const config = getCategoryConfig(item)
       return (
@@ -912,7 +913,7 @@ const renderSharedResponsibilities = (
   }
 
   return (
-    <div className="flex items-center gap-2">
+    <div className="justify-center flex gap-2">
       <Users className="h-5 w-5 text-blue-500" />
       <span className="text-sm text-gray-700">({totalResponsibilities})</span>
     </div>
@@ -929,9 +930,9 @@ const renderFrequencyWithDetails = (task: ChecklistTask) => {
   }
 
   return (
-    <div className="space-y-2">
+    <div className="justify-center space-y-2">
       {/* Frequencies */}
-      <div className="flex flex-wrap gap-1">
+      <div className="justify-center flex flex-wrap gap-1">
         {frequencies.slice(0, 2).map((freq, index) => (
           <Badge
             key={index}
@@ -2578,10 +2579,7 @@ export default function RoleChecklistPage() {
                   {isAdmin ? "Daily Checklist Overview" : `${formatResponsibility(role)} Checklist`} —{" "}
                   {(() => {
                     const date = parseAustralianDate(currentDate)
-                    const year = date.getFullYear()
-                    const month = String(date.getMonth() + 1).padStart(2, '0')
-                    const day = String(date.getDate()).padStart(2, '0')
-                    return `${day}-${month}-${year}`
+                    return formatInTimeZone(date, AUSTRALIAN_TIMEZONE, 'EEEE, d MMMM yyyy')
                   })()}
                 </h1>
                 <p className="text-white/90 text-sm lg:text-base">
@@ -2837,31 +2835,31 @@ export default function RoleChecklistPage() {
                   <Table className="table-fixed w-full">
                     <TableHeader>
                       <TableRow>
-                        <TableHead className="w-[3%] py-3 bg-gray-50 text-center">New</TableHead>
-                        <TableHead className={isAdmin ? "w-[36%] py-3 bg-gray-50" : "w-[40%] py-3 bg-gray-50"}>
+                        <TableHead className="text-center w-[3%] py-3 bg-gray-50">New</TableHead>
+                        <TableHead className={isAdmin ? "w-[53] py-3 bg-gray-50" : "w-[57] py-3 bg-gray-50"}>
                           Title & Description
                         </TableHead>
                         {isAdmin && (
-                          <TableHead className="w-[14%] py-3 bg-gray-50">
+                          <TableHead className="text-center w-[12%] py-3 bg-gray-50">
                             Responsibility
                           </TableHead>
                         )}
                         {!isAdmin && (
-                          <TableHead className="w-[5%] py-3 bg-gray-50 text-center">
+                          <TableHead className="text-center w-[4%] py-3 bg-gray-50">
                             Shared
                           </TableHead>
                         )}
-                        <TableHead className="w-[15%] py-3 bg-gray-50">
+                        <TableHead className="text-center w-[4%] py-3 bg-gray-50">
                           Category
                         </TableHead>
-                        <TableHead className="w-[11%] py-3 bg-gray-50">
+                        <TableHead className="text-center w-[10%] py-3 bg-gray-50">
                           Frequencies
                         </TableHead>
-                        <TableHead className="w-[7%] py-3 bg-gray-50 text-left">
+                        <TableHead className="text-center w-[5%] py-3 bg-gray-50">
                           Due Time
                         </TableHead>
-                        <TableHead className="w-[9%] py-3 bg-gray-50">Status</TableHead>
-                        <TableHead className={isAdmin ? "w-[5%] py-3 bg-gray-50" : "w-[10%] py-3 bg-gray-50"}>Actions</TableHead>
+                        <TableHead className="text-center w-[8%] py-3 bg-gray-50">Status</TableHead>
+                        <TableHead className={isAdmin ? "text-center w-[5%] py-3 bg-gray-50" : "text-center w-[10%] py-3 bg-gray-50"}>Actions</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -2870,7 +2868,6 @@ export default function RoleChecklistPage() {
                           key={`${task.id}-${refreshKey}`}
                           className="hover:bg-gray-50"
                         >
-
                           {/* Publish column */}
                           <TableCell className="py-3 text-center">
                             <div className="flex justify-center">
@@ -2906,7 +2903,7 @@ export default function RoleChecklistPage() {
                           {isAdmin && (
                             <TableCell className="py-3">
                               <div className="max-w-full overflow-hidden">
-                                <div className="flex flex-wrap gap-1">
+                                <div className="justify-center flex flex-wrap gap-1">
                                   {renderBadgesWithTruncation(task.master_task.responsibility, 2, 'responsibility')}
                                 </div>
                               </div>
@@ -2920,9 +2917,9 @@ export default function RoleChecklistPage() {
                               </div>
                             </TableCell>
                           )}
-                          <TableCell className="py-3">
-                            <div className="max-w-full overflow-hidden">
-                              <div className="flex flex-wrap gap-1">
+                          <TableCell className="text-center py-3">
+                            <div className="justify-center max-w-full overflow-hidden">
+                              <div className="justify-center flex flex-wrap gap-1">
                                 {renderBadgesWithTruncation(task.master_task.categories, 2, 'category')}
                               </div>
                             </div>
@@ -2930,20 +2927,25 @@ export default function RoleChecklistPage() {
                           <TableCell className="py-3 text-center">
                             {renderFrequencyWithDetails(task)}
                           </TableCell>
-                          <TableCell className="py-3">
-                            {task.master_task.due_time ? (
-                              <span className="text-sm font-medium">{task.master_task.due_time}</span>
-                            ) : (
-                              <span className="text-sm text-gray-500">No due time</span>
-                            )}
+                          <TableCell className="text-center">
+                            <div className="flex items-center justify-center text-sm">
+                              <Clock className="w-3 h-3 mr-1 text-gray-400" />
+                              {task.master_task.due_time ? (
+                                <span className="text-sm font-medium">
+                                  {task.master_task.due_time.substring(0, 5)}
+                                </span>
+                              ) : (
+                                <span className="text-sm text-gray-500">No due time</span>
+                              )}
+                            </div>
                           </TableCell>
                           <TableCell className="py-3">
-                            <div className="flex items-center gap-2">
+                            <div className="justify-center flex items-center gap-2">
                               {getStatusBadge(task)}
                             </div>
                           </TableCell>
                           <TableCell className="py-3">
-                            <div className="flex items-center space-x-2">
+                            <div className="justify-center flex space-x-2">
                               {/* Hide Done/Undo buttons for admins; show only details */}
                               {isAdmin ? (
                                 <Button
@@ -3165,57 +3167,123 @@ export default function RoleChecklistPage() {
                                 <>
                                   {/* Non-admin action buttons */}
                                   {(() => {
-                                    const today = getAustralianToday()
-                                    // currentDate and today are YYYY-MM-DD strings; compare directly
-                                    const isNotToday = currentDate !== today
-                                    const isLocked = task.is_locked
-                                    const isDisabled = isLocked || isNotToday
-                                    const getButtonTitle = () => {
-                                      if (isLocked) return "Task is locked and cannot be completed"
-                                      if (isNotToday) return "You can only complete tasks for today. Please go to today's page."
-                                      return "Mark task as done"
+                                    // Special handling for "Every Day" tasks on past dates
+                                    const frequencies = task.master_task?.frequencies || []
+                                    const isEveryDayTask = frequencies.includes('every_day')
+                                    const taskDate = parseAustralianDate(task.date)
+                                    const currentDateObj = parseAustralianDate(currentDate)
+                                    const isPastDate = currentDateObj < taskDate
+
+                                    if (isEveryDayTask && isPastDate && task.is_completed_for_position) {
+                                      // For "Every Day" tasks on past dates that are completed, show historical completion
+                                      return (
+                                        <Button
+                                          type="button"
+                                          size="sm"
+                                          variant="outline"
+                                          disabled={true}
+                                          className="font-medium border-green-300 bg-green-100 text-green-700 opacity-60 cursor-not-allowed"
+                                          title="Historical completion - cannot be undone"
+                                        >
+                                          <span>✓ Done</span>
+                                        </Button>
+                                      )
                                     }
 
-                                    const getButtonText = () => {
-                                      if (isLocked) return "Locked"
-                                      return "Done ?"
-                                    }
+                                    // Use the same logic as desktop layout
+                                    const dynamicStatus = getTaskStatusWithCarryOver(task, currentDate, isViewingToday)
+                                    if (dynamicStatus === 'completed') {
+                                      // Show "✓ Done" button for completed tasks
+                                      const isNotToday = !isViewingToday && !isAdmin
+                                      const isDisabled = processingTasks.has(task.id)
 
-                                    const getButtonStyle = () => {
-                                      if (isLocked) {
-                                        return "bg-gray-400 text-gray-600 border-gray-400 cursor-not-allowed"
+                                      const getUndoButtonStyle = () => {
+                                        if (isNotToday) {
+                                          return "border-green-300 bg-green-100 text-green-700 opacity-60"
+                                        }
+                                        return "border-green-300 bg-green-100 text-green-800 hover:bg-green-200 hover:border-green-400"
                                       }
-                                      if (isNotToday) {
-                                        return "bg-green-200 text-green-700 border-green-300 hover:bg-green-300 opacity-60"
-                                      }
-                                      return "bg-blue-600 text-white hover:bg-blue-700 border-blue-600 hover:border-blue-700"
-                                    }
 
-                                    return (
-                                      <Button
-                                        type="button"
-                                        size="sm"
-                                        onClick={() => {
-                                          if (isNotToday) {
-                                            toastWarning("Cannot Complete Task", "You can only complete tasks for today. Please go to today's page.")
-                                            return
-                                          }
-                                          handleTaskComplete(task.id)
-                                        }}
-                                        disabled={isDisabled}
-                                        className={`font-medium ${getButtonStyle()}`}
-                                        title={getButtonTitle()}
-                                      >
-                                        {processingTasks.has(task.id) ? (
-                                          <span className="flex items-center">
-                                            <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-white mr-1"></div>
-                                            Processing...
-                                          </span>
-                                        ) : (
-                                          <span>{getButtonText()}</span>
-                                        )}
-                                      </Button>
-                                    )
+                                      return (
+                                        <Button
+                                          type="button"
+                                          size="sm"
+                                          variant="outline"
+                                          onClick={() => {
+                                            if (isNotToday) {
+                                              toastWarning("Cannot Undo Task", "You can only undo tasks for today. Please go to today's page.")
+                                              return
+                                            }
+                                            handleTaskUndo(task.id)
+                                          }}
+                                          disabled={isDisabled}
+                                          className={`font-medium ${getUndoButtonStyle()}`}
+                                          title={isNotToday ? "You can only undo tasks for today. Please go to today's page." : "Undo task completion"}
+                                        >
+                                          {processingTasks.has(task.id) ? (
+                                            <span className="flex items-center">
+                                              <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-green-800 mr-1"></div>
+                                              Processing...
+                                            </span>
+                                          ) : (
+                                            <span>✓ Done</span>
+                                          )}
+                                        </Button>
+                                      )
+                                    } else {
+                                      // Show "Done ?" or "Locked" button for incomplete tasks
+                                      const isNewTaskInstance = task.is_completed_for_position && dynamicStatus !== 'completed'
+                                      const isLocked = dynamicStatus === 'missed' || (task.can_complete === false && !isNewTaskInstance)
+                                      const isNotToday = !isViewingToday && !isAdmin
+                                      const isDisabled = processingTasks.has(task.id) || isLocked
+
+                                      const getButtonTitle = () => {
+                                        if (isLocked) return "Task is locked and cannot be completed"
+                                        if (isNotToday) return "You can only complete tasks for today. Please go to today's page."
+                                        return "Mark task as done"
+                                      }
+
+                                      const getButtonText = () => {
+                                        if (isLocked) return "Locked"
+                                        return "Done ?"
+                                      }
+
+                                      const getButtonStyle = () => {
+                                        if (isLocked) {
+                                          return "bg-gray-400 text-gray-600 border-gray-400 cursor-not-allowed"
+                                        }
+                                        if (isNotToday) {
+                                          return "bg-green-200 text-green-700 border-green-300 hover:bg-green-300 opacity-60"
+                                        }
+                                        return "bg-blue-600 text-white hover:bg-blue-700 border-blue-600 hover:border-blue-700"
+                                      }
+
+                                      return (
+                                        <Button
+                                          type="button"
+                                          size="sm"
+                                          onClick={() => {
+                                            if (isNotToday) {
+                                              toastWarning("Cannot Complete Task", "You can only complete tasks for today. Please go to today's page.")
+                                              return
+                                            }
+                                            handleTaskComplete(task.id)
+                                          }}
+                                          disabled={isDisabled}
+                                          className={`font-medium ${getButtonStyle()}`}
+                                          title={getButtonTitle()}
+                                        >
+                                          {processingTasks.has(task.id) ? (
+                                            <span className="flex items-center">
+                                              <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-white mr-1"></div>
+                                              Processing...
+                                            </span>
+                                          ) : (
+                                            <span>{getButtonText()}</span>
+                                          )}
+                                        </Button>
+                                      )
+                                    }
                                   })()}
 
                                   <Button
@@ -3361,7 +3429,6 @@ export default function RoleChecklistPage() {
           </div>
         </div>
 
-
         {/* Task Detail Modal */}
         {selectedTask && (
           <TaskDetailModal
@@ -3377,4 +3444,3 @@ export default function RoleChecklistPage() {
     </div>
   )
 }
-         

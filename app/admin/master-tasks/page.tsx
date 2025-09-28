@@ -206,10 +206,10 @@ const renderTruncatedArray = (
     }
   }
 
-  // For categories: if there are 2 or more items, show all as emoji-only badges
-  if (type === 'category' && items.length >= 2) {
+  // For categories: always show emoji-only badges
+  if (type === 'category') {
     return (
-      <div className="flex flex-wrap gap-1 w-full">
+      <div className="justify-center flex flex-wrap gap-1 w-full">
         {items.map((item, index) => {
           const emoji = getCategoryEmoji(item)
           const displayName = getDisplayName(item)
@@ -233,7 +233,7 @@ const renderTruncatedArray = (
   // For responsibilities: if there are 2 or more items, show all as abbreviation badges
   if (type === 'responsibility' && items.length >= 2) {
     return (
-      <div className="flex flex-wrap gap-1 w-full">
+      <div className="justify-center flex flex-wrap gap-1 w-full">
         {items.map((item, index) => {
           const abbreviation = getResponsibilityAbbreviation(item)
           const displayName = getDisplayName(item)
@@ -255,7 +255,7 @@ const renderTruncatedArray = (
   }
 
   return (
-    <div className="flex flex-wrap gap-1 w-full">
+    <div className="justify-center flex flex-wrap gap-1 w-full">
       {visibleItems.map((item, index) => {
         const displayName = getDisplayName(item)
         const badgeClass = getBadgeClass(item, type)
@@ -290,6 +290,18 @@ const formatFrequency = (frequency: string | null | undefined) => {
     return 'Not set'
   }
   return frequency.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())
+}
+
+// Helper function to format time to show only hours and minutes
+const formatDueTime = (time: string | null | undefined) => {
+  if (!time) {
+    return 'Not set'
+  }
+  // If time includes seconds (HH:MM:SS), remove the seconds part
+  if (time.includes(':') && time.split(':').length === 3) {
+    return time.substring(0, 5) // Take only HH:MM part
+  }
+  return time
 }
 
 
@@ -362,7 +374,7 @@ const renderFrequencyWithDetails = (task: MasterTask) => {
   return (
     <div className="space-y-2">
       {/* Frequencies */}
-      <div className="flex flex-wrap gap-1">
+      <div className="justify-center flex flex-wrap gap-1">
         {frequencies.slice(0, 2).map((freq, index) => (
           <Badge
             key={index}
@@ -384,7 +396,7 @@ const renderFrequencyWithDetails = (task: MasterTask) => {
 
       {/* Timing */}
       {task.timing && (
-        <div className="flex items-center gap-1">
+        <div className="justify-center flex items-center gap-1">
           <Clock className="h-3 w-3 text-gray-400" />
           <span className="text-xs text-gray-600">
             {task.timing.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
@@ -2516,7 +2528,7 @@ export default function AdminMasterTasksPage() {
                   <Table className="table-fixed w-full">
                     <TableHeader>
                       <TableRow>
-                        <TableHead className="w-[5%] py-3 bg-gray-50 text-center">
+                        <TableHead className="w-[3%] py-3 bg-gray-50 text-center">
                           <Checkbox
                             checked={selectedTasks.size === paginatedTasks.length && paginatedTasks.length > 0}
                             onCheckedChange={handleSelectAll}
@@ -2529,7 +2541,7 @@ export default function AdminMasterTasksPage() {
                           sortField={sortField}
                           sortDirection={sortDirection}
                           onSort={handleSort}
-                          className="w-[23%] py-3 bg-gray-50"
+                          className="w-[45%] py-3 bg-gray-50"
                         >
                           Title & Description
                         </SortableHeader>
@@ -2538,7 +2550,7 @@ export default function AdminMasterTasksPage() {
                           sortField={sortField}
                           sortDirection={sortDirection}
                           onSort={handleSort}
-                          className="w-[14%] py-3 bg-gray-50"
+                          className="text-center w-[13%] py-3 bg-gray-50"
                         >
                           Responsibilities
                         </SortableHeader>
@@ -2547,7 +2559,7 @@ export default function AdminMasterTasksPage() {
                           sortField={sortField}
                           sortDirection={sortDirection}
                           onSort={handleSort}
-                          className="w-[14%] py-3 bg-gray-50"
+                          className="text-center w-[5%] py-3 bg-gray-50"
                         >
                           Categories
                         </SortableHeader>
@@ -2556,7 +2568,7 @@ export default function AdminMasterTasksPage() {
                           sortField={sortField}
                           sortDirection={sortDirection}
                           onSort={handleSort}
-                          className="w-[14%] py-3 bg-gray-50"
+                          className="text-center w-[13%] py-3 bg-gray-50"
                         >
                           Frequencies & Timing
                         </SortableHeader>
@@ -2565,7 +2577,7 @@ export default function AdminMasterTasksPage() {
                           sortField={sortField}
                           sortDirection={sortDirection}
                           onSort={handleSort}
-                          className="w-[10%] py-3 bg-gray-50 text-center"
+                          className="text-center w-[7%] py-3 bg-gray-50"
                         >
                           Status
                         </SortableHeader>
@@ -2574,11 +2586,11 @@ export default function AdminMasterTasksPage() {
                           sortField={sortField}
                           sortDirection={sortDirection}
                           onSort={handleSort}
-                          className="w-[10%] py-3 bg-gray-50 text-center"
+                          className="text-center w-[5%] py-3 bg-gray-50"
                         >
                           Due Time
                         </SortableHeader>
-                        <TableHead className="w-[10%] py-3 bg-gray-50 text-center">Actions</TableHead>
+                        <TableHead className="text-center w-[9%] py-3 bg-gray-50">Actions</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -2586,7 +2598,6 @@ export default function AdminMasterTasksPage() {
                         const globalIndex = startIndex + index
                         const isDragging = dragIndex === globalIndex
                         const canDrag = filterPosition === 'all' && !sortField // Only allow drag when showing all positions and no manual sorting
-
                         return (
                           <TableRow
                             key={task.id}
@@ -2616,7 +2627,7 @@ export default function AdminMasterTasksPage() {
                               </div>
                             </TableCell>
                             <TableCell className="py-3">
-                              <div className="max-w-full overflow-hidden">
+                              <div className="justify-center max-w-full overflow-hidden">
                                 {task.responsibility && task.responsibility.length > 0 ? (
                                   renderTruncatedArray(task.responsibility, 2, "secondary", "responsibility")
                                 ) : task.positions?.name || task.position?.name ? (
@@ -2629,14 +2640,14 @@ export default function AdminMasterTasksPage() {
                                 )}
                               </div>
                             </TableCell>
-                            <TableCell className="py-3">
-                              <div className="max-w-full overflow-hidden">
+                            <TableCell className="text-center py-3">
+                              <div className="justify-center max-w-full overflow-hidden">
                                 {task.categories && task.categories.length > 0 ? (
                                   renderTruncatedArray(task.categories, 2, "outline", "category")
                                 ) : task.category ? (
-                                  <div>
-                                    <Badge variant="outline" className="text-xs truncate max-w-full">{getCategoryDisplayName(task.category)}</Badge>
-                                    <div className="text-xs text-red-500 mt-1 truncate">Legacy data</div>
+                                  <div className="justify-center">
+                                    <Badge variant="outline" className="text-xs truncate max-w-full" title={getCategoryDisplayName(task.category)}>{getCategoryEmoji(task.category)}</Badge>
+                                    <div className="justify-center text-xs text-red-500 mt-1 truncate">Legacy data</div>
                                   </div>
                                 ) : (
                                   <span className="text-gray-400 text-xs">None</span>
@@ -2644,7 +2655,7 @@ export default function AdminMasterTasksPage() {
                               </div>
                             </TableCell>
                             <TableCell className="py-3">
-                              <div className="max-w-full overflow-hidden">
+                              <div className="justify-center max-w-full overflow-hidden">
                                 {renderFrequencyWithDetails(task)}
                               </div>
                             </TableCell>
@@ -2670,7 +2681,7 @@ export default function AdminMasterTasksPage() {
                             <TableCell className="text-center">
                               <div className="flex items-center justify-center text-sm">
                                 <Clock className="w-3 h-3 mr-1 text-gray-400" />
-                                {task.due_time || 'Not set'}
+                                <span className="text-sm font-medium">{formatDueTime(task.due_time)}</span>
                               </div>
                             </TableCell>
                             <TableCell className="text-center">

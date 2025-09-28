@@ -235,7 +235,7 @@ export default function TaskDetailModal({
   if (!task) return null
 
   // Helper functions for the timing & cutoffs section
-  
+
   const nowAU = getAustralianNow()
 
   const formatAUDate = (date: Date | string) => {
@@ -292,12 +292,12 @@ export default function TaskDetailModal({
     const addWorkdays = (startDate: Date, workdays: number): Date => {
       const result = new Date(startDate)
       let daysAdded = 0
-      
+
       // If start date is a business day, count it as the first workday
       if (isBusinessDay(result)) {
         daysAdded = 1
       }
-      
+
       // Add remaining workdays
       while (daysAdded < workdays) {
         result.setDate(result.getDate() + 1)
@@ -305,7 +305,7 @@ export default function TaskDetailModal({
           daysAdded++
         }
       }
-      
+
       // Result should already be a business day, but ensure it
       return findNextBusinessDay(result)
     }
@@ -343,13 +343,13 @@ export default function TaskDetailModal({
       try {
         // For multi-frequency tasks, calculate the appropriate date for each frequency
         let frequencyDate = instanceDate
-        
+
         // Extract month from frequency if it's a month-specific frequency
         const monthMap: { [key: string]: number } = {
           'jan': 0, 'feb': 1, 'mar': 2, 'apr': 3, 'may': 4, 'jun': 5,
           'jul': 6, 'aug': 7, 'sep': 8, 'oct': 9, 'nov': 10, 'dec': 11
         }
-        
+
         // Check if this frequency is for a specific month
         // Handle multiple formats: "Start Of Month (Dec)", "Start Of Month Dec", "start_of_month_dec"
         let monthMatch = frequency.match(/\(([A-Za-z]{3})\)/) // Format: "Start Of Month (Dec)"
@@ -359,7 +359,7 @@ export default function TaskDetailModal({
         if (!monthMatch) {
           monthMatch = frequency.match(/_([a-z]{3})$/) // Format: "start_of_month_dec"
         }
-        
+
         console.log(`Processing frequency: ${frequency}, monthMatch:`, monthMatch)
         if (monthMatch) {
           const targetMonth = monthMap[monthMatch[1].toLowerCase()]
@@ -368,17 +368,17 @@ export default function TaskDetailModal({
             // Calculate the appropriate year for this frequency
             const currentYear = instanceDate.getFullYear()
             const currentMonth = instanceDate.getMonth()
-            
+
             // If target month is before current month, use next year
             // If target month is current month or after, use current year
             const targetYear = targetMonth < currentMonth ? currentYear + 1 : currentYear
-            
+
             // Create date for the 1st of the target month
             frequencyDate = new Date(targetYear, targetMonth, 1)
             console.log(`Calculated frequencyDate for ${frequency}: ${frequencyDate.toISOString().split('T')[0]}`)
           }
         }
-        
+
         // Calculate appearance date (when task appears)
         let appearance = frequencyDate
 
@@ -386,13 +386,13 @@ export default function TaskDetailModal({
         // - For current month (when task is created): appearance = creation date
         // - For future months: appearance = 1st of month (adjusted for weekends/holidays)
         if ((frequency.startsWith('start_of_') && (frequency.includes('month') || frequency.includes('every_month'))) ||
-            (frequency.toLowerCase().includes('start of month'))) {
+          (frequency.toLowerCase().includes('start of month'))) {
           const today = new Date()
           const currentMonth = today.getMonth()
           const currentYear = today.getFullYear()
           const taskMonth = frequencyDate.getMonth()
           const taskYear = frequencyDate.getFullYear()
-          
+
           // If this is the current month and year, use the creation date as appearance
           if (taskMonth === currentMonth && taskYear === currentYear) {
             appearance = instanceDate // Use creation date for current month
@@ -429,7 +429,7 @@ export default function TaskDetailModal({
           const current = new Date(startDate)
           // If start date is after end date, return 0
           if (current > endDate) return 0
-          
+
           while (current <= endDate) {
             if (isBusinessDay(current)) {
               count++
@@ -443,13 +443,13 @@ export default function TaskDetailModal({
         // - For current month (when task is created): appearance = creation date
         // - For future months: appearance = last Monday of month (unless <5 workdays, then Monday prior)
         if ((frequency.includes('end_of_') && frequency.includes('month')) ||
-            (frequency.toLowerCase().includes('end of month'))) {
+          (frequency.toLowerCase().includes('end of month'))) {
           const today = new Date()
           const currentMonth = today.getMonth()
           const currentYear = today.getFullYear()
           const taskMonth = frequencyDate.getMonth()
           const taskYear = frequencyDate.getFullYear()
-          
+
           // If this is the current month and year, use the creation date as appearance
           if (taskMonth === currentMonth && taskYear === currentYear) {
             appearance = instanceDate // Use creation date for current month
@@ -458,7 +458,7 @@ export default function TaskDetailModal({
             const lastMonday = getLastMondayOfMonth(frequencyDate)
             const lastSaturday = getLastSaturdayOfMonth(frequencyDate)
             const workdaysFromLastMonday = countWorkdays(lastMonday, lastSaturday)
-            
+
             if (workdaysFromLastMonday >= 5) {
               // Use last Monday if there are at least 5 workdays
               appearance = findNextBusinessDay(lastMonday)
@@ -487,23 +487,23 @@ export default function TaskDetailModal({
           // Due date: That day's date (same as appearance date)
           dueDate = frequencyDate
         } else if ((frequency.startsWith('start_of_') && (frequency.includes('month') || frequency.includes('every_month'))) ||
-                   (frequency.toLowerCase().includes('start of month'))) {
-            // Due date: 5 full workdays from 1st of month (cannot fall on PH)
-            // Always calculate from 1st of month, not from appearance date
-            const firstOfMonth = new Date(frequencyDate.getFullYear(), frequencyDate.getMonth(), 1)
-            let monthStart = firstOfMonth
-            // If 1st is weekend, move to Monday
-            if (firstOfMonth.getDay() === 6) { // Saturday
-              monthStart = new Date(firstOfMonth.getFullYear(), firstOfMonth.getMonth(), 3) // Monday
-            } else if (firstOfMonth.getDay() === 0) { // Sunday
-              monthStart = new Date(firstOfMonth.getFullYear(), firstOfMonth.getMonth(), 2) // Monday
-            }
+          (frequency.toLowerCase().includes('start of month'))) {
+          // Due date: 5 full workdays from 1st of month (cannot fall on PH)
+          // Always calculate from 1st of month, not from appearance date
+          const firstOfMonth = new Date(frequencyDate.getFullYear(), frequencyDate.getMonth(), 1)
+          let monthStart = firstOfMonth
+          // If 1st is weekend, move to Monday
+          if (firstOfMonth.getDay() === 6) { // Saturday
+            monthStart = new Date(firstOfMonth.getFullYear(), firstOfMonth.getMonth(), 3) // Monday
+          } else if (firstOfMonth.getDay() === 0) { // Sunday
+            monthStart = new Date(firstOfMonth.getFullYear(), firstOfMonth.getMonth(), 2) // Monday
+          }
           // Adjust for holidays and calculate 5 workdays from there
           const adjustedMonthStart = findNextBusinessDay(monthStart)
           dueDate = addWorkdays(adjustedMonthStart, 5)
         } else if ((frequency.includes('end_of_') && frequency.includes('month')) ||
-                   (frequency.toLowerCase().includes('end of month')) ||
-                   frequency === 'once_monthly') {
+          (frequency.toLowerCase().includes('end of month')) ||
+          frequency === 'once_monthly') {
           // Due date: Last Saturday of the month (or nearest earlier business day if Saturday is holiday)
           const lastSat = getLastSaturdayOfMonth(frequencyDate)
           dueDate = findPreviousBusinessDay(lastSat)
@@ -527,10 +527,10 @@ export default function TaskDetailModal({
           const weekSat = getWeekSaturday(frequencyDate)
           lockDate = findPreviousBusinessDay(weekSat)
         } else if ((frequency.startsWith('start_of_') && (frequency.includes('month') || frequency.includes('every_month'))) ||
-                   (frequency.includes('end_of_') && frequency.includes('month')) ||
-                   (frequency.toLowerCase().includes('start of month')) ||
-                   (frequency.toLowerCase().includes('end of month')) ||
-                   frequency === 'once_monthly') {
+          (frequency.includes('end_of_') && frequency.includes('month')) ||
+          (frequency.toLowerCase().includes('start of month')) ||
+          (frequency.toLowerCase().includes('end of month')) ||
+          frequency === 'once_monthly') {
           // Lock at end of month (last Saturday or nearest earlier business day)
           const lastSat = getLastSaturdayOfMonth(frequencyDate)
           lockDate = findPreviousBusinessDay(lastSat)
@@ -549,8 +549,8 @@ export default function TaskDetailModal({
           const weekMon = getWeekMonday(frequencyDate)
           carryStart = findNextBusinessDay(weekMon)
         } else if ((frequency.startsWith('start_of_') && (frequency.includes('month') || frequency.includes('every_month'))) ||
-                   (frequency.toLowerCase().includes('start of month')) ||
-                   frequency === 'once_monthly') {
+          (frequency.toLowerCase().includes('start of month')) ||
+          frequency === 'once_monthly') {
           // Carry window: Always from 1st of month (first working day) to last Saturday (lock date)
           // Regardless of when the task was created
           const firstOfMonthCarry = new Date(frequencyDate.getFullYear(), frequencyDate.getMonth(), 1)
@@ -564,13 +564,13 @@ export default function TaskDetailModal({
           // Adjust for holidays
           carryStart = findNextBusinessDay(monthStartCarry)
         } else if ((frequency.includes('end_of_') && frequency.includes('month')) ||
-                   (frequency.toLowerCase().includes('end of month'))) {
+          (frequency.toLowerCase().includes('end of month'))) {
           // Carry window: ALWAYS from calculated Monday (last Monday or Monday prior)
           // This is independent of appearance date logic - carry window follows business rule
           const lastMonday = getLastMondayOfMonth(frequencyDate)
           const lastSaturday = getLastSaturdayOfMonth(frequencyDate)
           const workdaysFromLastMonday = countWorkdays(lastMonday, lastSaturday)
-          
+
           if (workdaysFromLastMonday >= 5) {
             // Use last Monday if there are at least 5 workdays
             carryStart = findNextBusinessDay(lastMonday)
@@ -621,12 +621,36 @@ export default function TaskDetailModal({
   // Apply carry-over logic to preserve position completion badges during carry-over period
   // This mirrors the exact logic from the main checklist page
   const getTaskStatusWithCarryOver = (task: any, currentDate: string, isViewingToday: boolean = false): string => {
-    // If task is not completed for this position, use the calculated status from API
+    // If task is not completed for this position, calculate the status
     if (!task.is_completed_for_position) {
-      return task.detailed_status || 'not_due_yet'
+      // If we have a cached detailed_status, use it (from API)
+      if (task.detailed_status) {
+        return task.detailed_status
+      }
+
+      // Otherwise, calculate the status (for clean tasks created by admin logic)
+      const taskInput = {
+        date: task.date,
+        due_date: task.due_date || undefined,
+        master_task: {
+          due_time: task.master_task?.due_time || undefined,
+          created_at: task.master_task?.created_at || undefined,
+          publish_delay: task.master_task?.publish_delay || undefined,
+          start_date: task.master_task?.start_date || undefined,
+          end_date: task.master_task?.end_date || undefined,
+          frequencies: task.master_task?.frequencies || undefined,
+        },
+        detailed_status: undefined,
+        is_completed_for_position: false,
+        status: undefined,
+        lock_date: undefined,
+        lock_time: undefined,
+      }
+
+      return calculateTaskStatus(taskInput, currentDate)
     }
 
-    // Task is completed for this position - check if we're still within carry-over period
+    // Task is completed for this position - implement proper carry-over logic
     // We need to determine the completion date for carry-over calculations
     let completionDateStr = task.date // Default to task date
 
@@ -645,44 +669,81 @@ export default function TaskDetailModal({
       completionDateStr = formatAustralianDate(completedAtAustralian)
     }
 
-    // Use the completion date as the task date for carry-over calculations
-    const taskInput = {
-      date: completionDateStr, // Use completion date instead of original task date
-      due_date: task.due_date || undefined,
-      master_task: {
-        due_time: task.master_task?.due_time || undefined,
-        created_at: task.master_task?.created_at || undefined,
-        publish_delay: task.master_task?.publish_delay || undefined,
-        start_date: task.master_task?.start_date || undefined,
-        end_date: task.master_task?.end_date || undefined,
-        frequencies: task.master_task?.frequencies || undefined,
-      },
-      detailed_status: task.detailed_status || undefined,
-      is_completed_for_position: task.is_completed_for_position,
-      status: task.status || undefined,
-      lock_date: task.lock_date || undefined,
-      lock_time: task.lock_time || undefined,
+    // Implement proper carry-over logic based on frequency rules
+    const frequencies = task.master_task?.frequencies || []
+    const currentDateObj = parseAustralianDate(currentDate)
+    const completionDateObj = parseAustralianDate(completionDateStr)
+    const taskInstanceDateObj = parseAustralianDate(task.date)
+
+    // Helper function to get last Saturday of month
+    const getLastSaturdayOfMonth = (date: Date): Date => {
+      const year = date.getFullYear()
+      const month = date.getMonth()
+      const lastDay = new Date(year, month + 1, 0) // Last day of month
+      const lastSaturday = new Date(lastDay)
+
+      // Find the last Saturday
+      while (lastSaturday.getDay() !== 6) { // 6 = Saturday
+        lastSaturday.setDate(lastSaturday.getDate() - 1)
+      }
+
+      return lastSaturday
     }
 
-    const calculatedStatus = calculateTaskStatus(taskInput, currentDate)
+    // Check if we're within the carry-over period based on frequency
+    let isWithinCarryOverPeriod = false
 
-    // Debug logging for daily tasks
-    if (task.master_task?.frequencies?.includes('every_day')) {
-      console.log(`🔍 Daily task carry-over check (Modal):`, {
+    if (frequencies.includes('every_day')) {
+      // Every Day: No carry-over. Each day has its own instance.
+      // Show "✓ Done" only on the completion date
+      isWithinCarryOverPeriod = currentDate === completionDateStr
+    } else if (frequencies.includes('once_monthly') ||
+      frequencies.some(f => f.includes('month'))) {
+      // Monthly tasks: Carry-over until last Saturday of the month when completed
+      const lastSaturday = getLastSaturdayOfMonth(completionDateObj)
+      const lastSaturdayEndOfDay = new Date(lastSaturday)
+      lastSaturdayEndOfDay.setHours(23, 59, 59, 999)
+
+      // Show "✓ Done" from completion date until last Saturday of the month at 23:59
+      const currentDateTime = new Date(currentDateObj)
+      currentDateTime.setHours(23, 59, 59, 999) // End of current viewing day
+
+      isWithinCarryOverPeriod = currentDateTime <= lastSaturdayEndOfDay && currentDateObj >= completionDateObj
+    } else if (frequencies.some(f => f.includes('weekly') ||
+      ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'].includes(f))) {
+      // Weekly tasks: Carry-over until Saturday of the week when completed
+      const completionWeekSaturday = new Date(completionDateObj)
+      const daysUntilSaturday = (6 - completionDateObj.getDay() + 7) % 7
+      completionWeekSaturday.setDate(completionDateObj.getDate() + daysUntilSaturday)
+      completionWeekSaturday.setHours(23, 59, 59, 999)
+
+      const currentDateTime = new Date(currentDateObj)
+      currentDateTime.setHours(23, 59, 59, 999)
+
+      isWithinCarryOverPeriod = currentDateTime <= completionWeekSaturday && currentDateObj >= completionDateObj
+    } else {
+      // For other frequencies (once_off, etc.), show completed status indefinitely until manually changed
+      isWithinCarryOverPeriod = currentDateObj >= completionDateObj
+    }
+
+    // Debug logging
+    if (frequencies.includes('every_day') || frequencies.includes('once_monthly') ||
+      frequencies.some(f => f.includes('weekly') || ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'].includes(f))) {
+      const taskType = frequencies.includes('every_day') ? 'Daily' :
+        frequencies.includes('once_monthly') ? 'Monthly' : 'Weekly'
+      console.log(`🔍 ${taskType} task carry-over check (Modal):`, {
         taskTitle: task.master_task?.title,
         currentDate,
-        originalTaskDate: task.date,
+        taskInstanceDate: task.date,
         completionDate: completionDateStr,
         isCompleted: task.is_completed_for_position,
-        frequencies: task.master_task?.frequencies,
-        calculatedStatus,
-        willShowCompleted: calculatedStatus === 'completed'
+        frequencies,
+        isWithinCarryOverPeriod,
+        willShowCompleted: isWithinCarryOverPeriod
       })
     }
 
-    // If the shared calculator says the task is still 'completed', 
-    // we're within the carry-over period and should show the completion badge
-    if (calculatedStatus === 'completed') {
+    if (isWithinCarryOverPeriod) {
       return 'completed'
     }
 
@@ -690,7 +751,7 @@ export default function TaskDetailModal({
     // Calculate what the status would be if this was a new task for the current viewing date
     const newTaskInput = {
       date: currentDate, // Use current viewing date as the new task date
-      due_date: task.due_date || undefined,
+      due_date: task.due_date || currentDate, // For recurring tasks, due date is the current date
       master_task: {
         due_time: task.master_task?.due_time || undefined,
         created_at: task.master_task?.created_at || undefined,
@@ -725,10 +786,10 @@ export default function TaskDetailModal({
       currentDate,
       originalTaskDate: task.date,
       completionDate: completionDateStr,
-      carryOverEnded: true,
+      carryOverEnded: !isWithinCarryOverPeriod,
       isViewingToday,
       frequencies: task.master_task?.frequencies,
-      calculatedStatus: newTaskStatus,
+      newTaskCalculatedStatus: newTaskStatus,
       finalStatus
     })
 
@@ -739,166 +800,6 @@ export default function TaskDetailModal({
   const selectedDate = currentDate || getAustralianToday()
   const todayStr = getAustralianToday()
   const isViewingToday = selectedDate === todayStr
-
-  // Complex status calculation that matches main page getStatusBadge function exactly
-  const getComplexTaskStatus = (task: any) => {
-    // Special handling for PAST dates (before today) and "Every Day" tasks
-    const today = getAustralianToday()
-    const isViewingPastDate = selectedDate < today
-    if (isViewingPastDate && task.master_task?.frequencies?.includes('every_day')) {
-      // For admin view with "All Responsibilities" filter
-      if (isAdmin && selectedResponsibility === 'all') {
-        const completions = task.position_completions || []
-        const validCompletions = completions.filter((completion: any) => {
-          if (!completion.is_completed) return false
-          const mockTask = {
-            ...task,
-            is_completed_for_position: completion.is_completed,
-            completed_at: completion.completed_at,
-            position_completions: [completion]
-          }
-          const status = getTaskStatusWithCarryOver(mockTask, selectedDate, false)
-          return status === 'completed'
-        })
-
-        if (validCompletions.length > 0) {
-          return 'completed' // Will show multiple completion badges in the UI
-        } else {
-          return 'missed'
-        }
-      }
-
-      // For admin with specific responsibility filter or regular user
-      const completions = task.position_completions || []
-      let relevantCompletion = null
-      if (isAdmin && selectedResponsibility !== 'all') {
-        relevantCompletion = completions.find((c: any) =>
-          formatResponsibility(c.position_name) === selectedResponsibility
-        )
-      } else {
-        relevantCompletion = completions.find((c: any) => c.is_completed)
-      }
-
-      if (relevantCompletion && relevantCompletion.is_completed) {
-        const mockTask = {
-          ...task,
-          is_completed_for_position: relevantCompletion.is_completed,
-          completed_at: relevantCompletion.completed_at,
-          position_completions: [relevantCompletion]
-        }
-        const status = getTaskStatusWithCarryOver(mockTask, selectedDate, false)
-        if (status === 'completed') {
-          return 'completed'
-        }
-      }
-
-      return 'missed'
-    }
-
-    // Regular logic for current/future dates or non-"Every Day" tasks
-    // For admin view with "All Responsibilities" filter
-    if (isAdmin && selectedResponsibility === 'all') {
-      const completions = task.position_completions || []
-
-      if (completions.length === 0) {
-        // No completions - treat as new task instance
-        const cleanTask = {
-          ...task,
-          is_completed_for_position: false,
-          completed_at: undefined,
-          position_completions: []
-        }
-        return getTaskStatusWithCarryOver(cleanTask, selectedDate, isViewingToday)
-      }
-
-      // Filter completions based on carry-over periods
-      const validCompletions = completions.filter((completion: any) => {
-        // Create a mock task with this position's completion status and completion date
-        const mockTask = {
-          ...task,
-          is_completed_for_position: completion.is_completed,
-          completed_at: completion.completed_at,
-          position_completions: [completion]
-        }
-        const status = getTaskStatusWithCarryOver(mockTask, selectedDate, isViewingToday)
-        return status === 'completed' // Only show if still within carry-over period
-      })
-
-      if (validCompletions.length === 0) {
-        // No valid completions within carry-over period - treat as new task instance
-        const cleanTask = {
-          ...task,
-          is_completed_for_position: false,
-          completed_at: undefined,
-          completed_by: undefined,
-          position_completions: [],
-          status: undefined,
-          detailed_status: undefined,
-          date: selectedDate
-        }
-        return getTaskStatusWithCarryOver(cleanTask, selectedDate, isViewingToday)
-      }
-
-      // Has valid completions - return completed status
-      return 'completed'
-    }
-
-    // For specific position view (admin with specific filter or regular user)
-    if (isAdmin && selectedResponsibility !== 'all') {
-      // Admin viewing specific responsibility - need to check if task is completed for that position
-      const completions = task.position_completions || []
-      const relevantCompletion = completions.find((c: any) =>
-        formatResponsibility(c.position_name) === selectedResponsibility
-      )
-
-      if (relevantCompletion && relevantCompletion.is_completed) {
-        // Task is completed for this position - check if still within carry-over period
-        const mockTask = {
-          ...task,
-          is_completed_for_position: true,
-          completed_at: relevantCompletion.completed_at,
-          position_completions: [relevantCompletion]
-        }
-        const status = getTaskStatusWithCarryOver(mockTask, selectedDate, isViewingToday)
-
-        if (status === 'completed') {
-          // Still within carry-over period
-          return status
-        } else {
-          // Beyond carry-over period - treat as new task instance
-          const cleanTask = {
-            ...task,
-            is_completed_for_position: false,
-            completed_at: undefined,
-            completed_by: undefined,
-            position_completions: [],
-            status: undefined,
-            detailed_status: undefined,
-            date: selectedDate
-          }
-          return getTaskStatusWithCarryOver(cleanTask, selectedDate, isViewingToday)
-        }
-      } else {
-        // Task is not completed for this position - use normal status calculation
-        const cleanTask = {
-          ...task,
-          is_completed_for_position: false,
-          completed_at: undefined,
-          completed_by: undefined,
-          position_completions: [],
-          status: undefined,
-          detailed_status: undefined,
-          date: selectedDate
-        }
-        return getTaskStatusWithCarryOver(cleanTask, selectedDate, isViewingToday)
-      }
-    }
-
-    // For regular user (individual position view)
-    return getTaskStatusWithCarryOver(task, selectedDate, isViewingToday)
-  }
-
-  const status = getComplexTaskStatus(task)
 
   // Get completion data for display (matches the complex logic)
   const getCompletionData = () => {
@@ -991,6 +892,9 @@ export default function TaskDetailModal({
   }
 
   const completionData = getCompletionData()
+
+  // Calculate the main status for the modal display (matches main page logic)
+  const status = getTaskStatusWithCarryOver(task, selectedDate, isViewingToday)
 
   // Get the appropriate badge for the top of the modal (matches main page exactly)
   const getTopBadge = () => {
@@ -1132,7 +1036,8 @@ export default function TaskDetailModal({
     }
 
     // For all other cases (admin with specific responsibility or regular user), use standard badge
-    return getStatusBadgeByStatus(status)
+    const taskStatus = getTaskStatusWithCarryOver(task, selectedDate, isViewingToday)
+    return getStatusBadgeByStatus(taskStatus)
   }
 
   return (

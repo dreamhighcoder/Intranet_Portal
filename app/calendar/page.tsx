@@ -506,7 +506,7 @@ export default function CalendarPage() {
               <PopoverTrigger asChild>
                 <Button
                   variant="outline"
-                  className="flex items-center space-x-2 font-medium hover:bg-blue-50"
+                  className="flex items-center font-medium hover:bg-blue-50"
                   disabled={loadingButton === 'calendar'}
                 >
                   {loadingButton === 'calendar' ? (

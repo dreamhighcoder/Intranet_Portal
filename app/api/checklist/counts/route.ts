@@ -63,7 +63,7 @@ export async function GET(request: NextRequest) {
 
     if (tasksError) {
       console.error('Error fetching master tasks:', tasksError)
-      const fallback = { total: 0, newSinceNine: 0, dueToday: 0, overdue: 0, missed: 0, completed: 0 }
+      const fallback = { total: 0, newSinceNine: 0, dueToday: 0, overdue: 0, completed: 0 }
       return NextResponse.json({
         success: true,
         data: fallback,
@@ -230,7 +230,6 @@ export async function GET(request: NextRequest) {
       newSinceNine: 0,    // tasks that appeared today
       dueToday: 0,        // pending and scheduled for today
       overdue: 0,         // pending and past due time
-      missed: 0,          // tasks that are locked and can no longer be completed
       completed: 0        // completed today by this role
     }
 
@@ -281,51 +280,57 @@ export async function GET(request: NextRequest) {
       }
       const statusInfo = recurrenceEngine.calculateTaskStatus(mtForStatus, validatedDate, now, isCompletedForRole)
 
-      const taskStatus = calculateTaskStatusForCounts({
-        date: validatedDate,
-        due_date: statusInfo.dueDate || undefined,
-        master_task: {
-          due_time: statusInfo.dueTime || undefined,
-          created_at: task.created_at || undefined,
-          publish_delay: (task as any).publish_delay || undefined,
-          start_date: (task as any).start_date || undefined,
-          end_date: (task as any).end_date || undefined,
-          frequencies: task.frequencies || undefined, // Pass frequencies for carry-over period calculation
-        },
-        detailed_status: statusInfo.status,
-        is_completed_for_position: isCompletedForRole,
-        status: instance?.status || undefined,
-        lock_date: undefined, // Not available in task_instances table
-        lock_time: undefined, // Not available in task_instances table
-      }, validatedDate)
+      // For homepage display, prioritize completion status over carry-over periods
+      // If task is completed for this position, always show as completed
+      if (isCompletedForRole) {
+        counts.completed++
+      } else {
+        // Only calculate detailed status for non-completed tasks
+        const taskStatus = calculateTaskStatusForCounts({
+          date: validatedDate,
+          due_date: statusInfo.dueDate || undefined,
+          master_task: {
+            due_time: statusInfo.dueTime || undefined,
+            created_at: task.created_at || undefined,
+            publish_delay: (task as any).publish_delay || undefined,
+            start_date: (task as any).start_date || undefined,
+            end_date: (task as any).end_date || undefined,
+            frequencies: task.frequencies || undefined, // Pass frequencies for carry-over period calculation
+          },
+          detailed_status: statusInfo.status,
+          is_completed_for_position: isCompletedForRole,
+          status: instance?.status || undefined,
+          lock_date: undefined, // Not available in task_instances table
+          lock_time: undefined, // Not available in task_instances table
+        }, validatedDate)
 
-
-
-      // Count based on calculated status
-      switch (taskStatus) {
-        case 'completed':
-          counts.completed++
-          break
-        case 'due_today':
-          counts.total++
-          counts.dueToday++
-          break
-        case 'overdue':
-          counts.total++
-          counts.overdue++
-          break
-        case 'missed':
-          counts.missed++
-          break
-        case 'not_due_yet':
-          // Include not_due_yet tasks in total count to match checklist page behavior
-          // This ensures "Tasks to do" count includes "Not Due Yet" tasks for frequencies like "Once Off" and "Once Weekly"
-          counts.total++
-          break
-        default:
-          // Fallback - include in total
-          counts.total++
-          break
+        // Count based on calculated status for non-completed tasks
+        switch (taskStatus) {
+          case 'completed':
+            // This shouldn't happen since we checked isCompletedForRole above, but just in case
+            counts.completed++
+            break
+          case 'due_today':
+            counts.total++
+            counts.dueToday++
+            break
+          case 'overdue':
+            counts.total++
+            counts.overdue++
+            break
+          case 'missed':
+            // Missed tasks are no longer displayed on homepage, so don't count them
+            break
+          case 'not_due_yet':
+            // Include not_due_yet tasks in total count to match checklist page behavior
+            // This ensures "Tasks to do" count includes "Not Due Yet" tasks for frequencies like "Once Off" and "Once Weekly"
+            counts.total++
+            break
+          default:
+            // Fallback - include in total
+            counts.total++
+            break
+        }
       }
 
       // New tasks: align with checklist page "is_new" logic (12 hours after activation, not completed)
@@ -448,7 +453,7 @@ export async function GET(request: NextRequest) {
   } catch (error) {
     console.error('Checklist counts API error:', error)
 
-    const fallback = { total: 0, newSinceNine: 0, dueToday: 0, overdue: 0, missed: 0, completed: 0 }
+    const fallback = { total: 0, newSinceNine: 0, dueToday: 0, overdue: 0, completed: 0 }
     return NextResponse.json({
       success: true,
       data: fallback,

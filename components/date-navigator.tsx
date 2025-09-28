@@ -2,7 +2,7 @@
 
 import { Button } from "@/components/ui/button"
 import { Calendar } from "@/components/ui/calendar"
-import { formatDate, formatDateWithDay, getDateNavigation, formatLocalDate } from "@/lib/task-utils"
+import { formatDate, getDateNavigation, formatLocalDate } from "@/lib/task-utils"
 import { parseAustralianDate } from "@/lib/timezone-utils"
 import { ChevronLeft, ChevronRight, CalendarIcon, Loader2 } from "lucide-react"
 import { useState, useEffect, useRef } from "react"
@@ -143,7 +143,7 @@ export function DateNavigator({ currentDate, onDateChange, isLoading = false }: 
             ) : (
               <>
                 <CalendarIcon className="w-4 h-4" />
-                <span className="font-medium text-sm sm:text-base">{formatDateWithDay(currentDate)}</span>
+                <span className="font-medium text-sm sm:text-base">{formatDate(currentDate)}</span>
               </>
             )}
           </Button>
@@ -229,7 +229,7 @@ export function DateNavigator({ currentDate, onDateChange, isLoading = false }: 
               ) : (
                 <>
                   <CalendarIcon className="w-4 h-4" />
-                  <span className="font-medium">{formatDateWithDay(currentDate)}</span>
+                  <span className="font-medium">{formatDate(currentDate)}</span>
                 </>
               )}
             </Button>

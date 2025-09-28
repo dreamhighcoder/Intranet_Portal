@@ -48,6 +48,33 @@ export async function GET(
       }, { status: 404 })
     }
 
+    // Get position-specific completions for this task instance
+    const { data: positionCompletions, error: completionsError } = await supabase
+      .from('task_position_completions')
+      .select(`
+        task_instance_id,
+        position_id,
+        position_name,
+        completed_by,
+        completed_at,
+        is_completed,
+        positions!inner(name)
+      `)
+      .eq('task_instance_id', id)
+      .eq('is_completed', true)
+
+    if (completionsError) {
+      console.error('Error fetching position completions:', completionsError)
+    }
+
+    // Prepare position completion data for the UI
+    const positionCompletionData = (positionCompletions || []).map(completion => ({
+      position_name: completion.position_name,
+      completed_by: completion.completed_by,
+      completed_at: completion.completed_at,
+      is_completed: completion.is_completed
+    }))
+
     // Transform data to match frontend expectations
     const transformedData = {
       id: taskInstance.id,
@@ -62,6 +89,8 @@ export async function GET(
       resolved: taskInstance.resolved,
       created_at: taskInstance.created_at,
       updated_at: taskInstance.updated_at,
+      // Add position-specific completion data
+      position_completions: positionCompletionData,
       master_task: {
         id: taskInstance.master_tasks.id,
         title: taskInstance.master_tasks.title,
@@ -209,6 +238,33 @@ export async function PUT(
       }, { status: 500 })
     }
 
+    // Get position-specific completions for this task instance
+    const { data: positionCompletions, error: completionsError } = await supabase
+      .from('task_position_completions')
+      .select(`
+        task_instance_id,
+        position_id,
+        position_name,
+        completed_by,
+        completed_at,
+        is_completed,
+        positions!inner(name)
+      `)
+      .eq('task_instance_id', taskId)
+      .eq('is_completed', true)
+
+    if (completionsError) {
+      console.error('Error fetching position completions:', completionsError)
+    }
+
+    // Prepare position completion data for the UI
+    const positionCompletionData = (positionCompletions || []).map(completion => ({
+      position_name: completion.position_name,
+      completed_by: completion.completed_by,
+      completed_at: completion.completed_at,
+      is_completed: completion.is_completed
+    }))
+
     // Log the action in audit log
     try {
       await supabase
@@ -245,6 +301,8 @@ export async function PUT(
       resolved: updatedInstance.resolved,
       created_at: updatedInstance.created_at,
       updated_at: updatedInstance.updated_at,
+      // Add position-specific completion data
+      position_completions: positionCompletionData,
       master_task: {
         id: updatedInstance.master_tasks.id,
         title: updatedInstance.master_tasks.title,
