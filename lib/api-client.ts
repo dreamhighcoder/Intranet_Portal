@@ -345,11 +345,16 @@ export const publicHolidaysApi = {
     return await authenticatedPost('/api/public-holidays', data)
   },
 
-  async update(date: string, data: { date: string; name: string; region?: string; source?: string }, originalRegion?: string) {
+  async update(
+    originalDate: string,
+    data: { date: string; name: string; region?: string; source?: string },
+    originalRegion?: string,
+    originalName?: string
+  ) {
     return await authenticatedFetch('/api/public-holidays', {
       method: 'PATCH',
-      body: JSON.stringify({ ...data, date, originalRegion }),
-    }).then(response => response.ok ? response.json() : null)
+      body: JSON.stringify({ ...data, originalDate, originalRegion, originalName }),
+    }).then(response => (response.ok ? response.json() : null))
   },
 
   async delete(date: string, region?: string) {

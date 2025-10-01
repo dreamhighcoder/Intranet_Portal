@@ -96,27 +96,35 @@ export async function PATCH(request: Request) {
     const supabase = createClient(supabaseUrl, supabaseServiceKey)
     
     const body = await request.json()
-    const { date, name, region, source, originalRegion } = body
+    const { date, name, region, source, originalDate, originalRegion, originalName } = body
     
-    console.log('Public holidays PATCH - Request data:', { date, name, region, source, originalRegion })
+    console.log('Public holidays PATCH - Request data:', { date, name, region, source, originalDate, originalRegion, originalName })
 
-    if (!date || !name) {
+    const targetDate = originalDate || date
+    const targetName = originalName || name
+
+    if (!targetDate || !targetName) {
       console.log('Public holidays PATCH - Missing required fields')
       return NextResponse.json({ error: 'Date and name are required' }, { status: 400 })
     }
 
-    // Build the update query - use originalRegion if provided for precise identification
+    // Build the update query - use original identifiers when provided for precise identification
     let updateQuery = supabase
       .from('public_holidays')
-      .update({ name, region, source })
-      .eq('date', date)
-    
+      .update({ name, region, source, date })
+      .eq('date', targetDate)
+
+    // include name in identifier when available
+    if (targetName) {
+      updateQuery = updateQuery.eq('name', targetName)
+    }
+
     // If originalRegion is provided, use it to identify the exact record
     if (originalRegion) {
       updateQuery = updateQuery.eq('region', originalRegion)
-      console.log('Public holidays PATCH - Updating with date and originalRegion:', { date, originalRegion })
+      console.log('Public holidays PATCH - Updating with original identifiers:', { targetDate, originalRegion, targetName })
     } else {
-      console.log('Public holidays PATCH - Updating with date only:', { date })
+      console.log('Public holidays PATCH - Updating with original date and name only:', { targetDate, targetName })
     }
 
     const { data: holiday, error } = await updateQuery

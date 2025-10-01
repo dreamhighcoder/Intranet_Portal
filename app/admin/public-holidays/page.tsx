@@ -231,7 +231,8 @@ export default function AdminPublicHolidaysPage() {
         const updatedHoliday = await publicHolidaysApi.update(
           editingHoliday.date,
           newHoliday,
-          editingHoliday.region
+          editingHoliday.region,
+          editingHoliday.name
         )
         if (updatedHoliday) {
           // Reload holidays to ensure consistency with database
