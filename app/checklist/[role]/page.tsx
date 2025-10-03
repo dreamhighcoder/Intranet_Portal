@@ -2836,11 +2836,11 @@ export default function RoleChecklistPage() {
                     <TableHeader>
                       <TableRow>
                         <TableHead className="text-center w-[3%] py-3 bg-gray-50">New</TableHead>
-                        <TableHead className={isAdmin ? "w-[53] py-3 bg-gray-50" : "w-[57] py-3 bg-gray-50"}>
+                        <TableHead className={isAdmin ? "w-[57] py-3 bg-gray-50" : "w-[61] py-3 bg-gray-50"}>
                           Title & Description
                         </TableHead>
                         {isAdmin && (
-                          <TableHead className="text-center w-[12%] py-3 bg-gray-50">
+                          <TableHead className="text-center w-[10%] py-3 bg-gray-50">
                             Responsibility
                           </TableHead>
                         )}
@@ -2852,14 +2852,14 @@ export default function RoleChecklistPage() {
                         <TableHead className="text-center w-[4%] py-3 bg-gray-50">
                           Category
                         </TableHead>
-                        <TableHead className="text-center w-[10%] py-3 bg-gray-50">
+                        <TableHead className="text-center w-[9%] py-3 bg-gray-50">
                           Frequencies
                         </TableHead>
                         <TableHead className="text-center w-[5%] py-3 bg-gray-50">
                           Due Time
                         </TableHead>
-                        <TableHead className="text-center w-[8%] py-3 bg-gray-50">Status</TableHead>
-                        <TableHead className={isAdmin ? "text-center w-[5%] py-3 bg-gray-50" : "text-center w-[10%] py-3 bg-gray-50"}>Actions</TableHead>
+                        <TableHead className="text-center w-[7%] py-3 bg-gray-50">Status</TableHead>
+                        <TableHead className={isAdmin ? "text-center w-[5%] py-3 bg-gray-50" : "text-center w-[7%] py-3 bg-gray-50"}>Actions</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -2945,7 +2945,7 @@ export default function RoleChecklistPage() {
                             </div>
                           </TableCell>
                           <TableCell className="py-3">
-                            <div className="justify-center flex space-x-2">
+                            <div className="justify-center flex">
                               {/* Hide Done/Undo buttons for admins; show only details */}
                               {isAdmin ? (
                                 <Button
