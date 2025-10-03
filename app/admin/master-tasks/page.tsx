@@ -2541,7 +2541,7 @@ export default function AdminMasterTasksPage() {
                           sortField={sortField}
                           sortDirection={sortDirection}
                           onSort={handleSort}
-                          className="w-[45%] py-3 bg-gray-50"
+                          className="w-[55%] py-3 bg-gray-50"
                         >
                           Title & Description
                         </SortableHeader>
@@ -2550,7 +2550,7 @@ export default function AdminMasterTasksPage() {
                           sortField={sortField}
                           sortDirection={sortDirection}
                           onSort={handleSort}
-                          className="text-center w-[13%] py-3 bg-gray-50"
+                          className="text-center w-[10%] py-3 bg-gray-50"
                         >
                           Responsibilities
                         </SortableHeader>
@@ -2559,7 +2559,7 @@ export default function AdminMasterTasksPage() {
                           sortField={sortField}
                           sortDirection={sortDirection}
                           onSort={handleSort}
-                          className="text-center w-[5%] py-3 bg-gray-50"
+                          className="text-center w-[4%] py-3 bg-gray-50"
                         >
                           Categories
                         </SortableHeader>
@@ -2568,7 +2568,7 @@ export default function AdminMasterTasksPage() {
                           sortField={sortField}
                           sortDirection={sortDirection}
                           onSort={handleSort}
-                          className="text-center w-[13%] py-3 bg-gray-50"
+                          className="text-center w-[11%] py-3 bg-gray-50"
                         >
                           Frequencies & Timing
                         </SortableHeader>
@@ -2577,7 +2577,7 @@ export default function AdminMasterTasksPage() {
                           sortField={sortField}
                           sortDirection={sortDirection}
                           onSort={handleSort}
-                          className="text-center w-[7%] py-3 bg-gray-50"
+                          className="text-center w-[5%] py-3 bg-gray-50"
                         >
                           Status
                         </SortableHeader>
@@ -2590,7 +2590,7 @@ export default function AdminMasterTasksPage() {
                         >
                           Due Time
                         </SortableHeader>
-                        <TableHead className="text-center w-[9%] py-3 bg-gray-50">Actions</TableHead>
+                        <TableHead className="text-center w-[7%] py-3 bg-gray-50">Actions</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
