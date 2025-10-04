@@ -2299,7 +2299,7 @@ export default function RoleChecklistPage() {
             const formattedDueDate = formatDueDate(dueDate)
             return (
               <Badge className="bg-blue-100 text-blue-800 border-blue-200">
-                📅 Due – {formattedDueDate}
+                📅 Due: {formattedDueDate}
               </Badge>
             )
           }
