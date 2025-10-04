@@ -482,7 +482,12 @@ const getFrequencyCutoffs = (task: ChecklistTask, frequency: string, instanceDat
     }
     const lastDay = new Date(d.getFullYear(), d.getMonth() + 1, 0)
     const day = lastDay.getDay() // 0=Sun..6=Sat
-    const diff = day === 0 ? 1 : (7 - day + 6) % 7
+    // Calculate days to go back to reach Saturday
+    // If last day is Saturday (6): diff = 0
+    // If last day is Sunday (0): diff = 1
+    // If last day is Friday (5): diff = 6
+    // If last day is Monday (1): diff = 2, etc.
+    const diff = day === 6 ? 0 : (day + 1) % 7
     const lastSaturday = new Date(lastDay)
     lastSaturday.setDate(lastDay.getDate() - diff)
     return lastSaturday
@@ -730,6 +735,34 @@ const getFrequencyCutoffs = (task: ChecklistTask, frequency: string, instanceDat
       }
 
       // Lock at the same time as due date for end-of-month tasks
+      const lockDate = new Date(dueDate)
+
+      return {
+        appearanceDate,
+        dueDate,
+        lockDate,
+        lockTime: '23:59'
+      }
+    }
+
+    case 'once_monthly': {
+      // Once monthly tasks: Due on the last Saturday of the month
+      const lastSaturday = getLastSaturdayOfMonth(instanceDate)
+
+      // Appearance date: First business day of the month
+      const monthStart = new Date(instanceDate.getFullYear(), instanceDate.getMonth(), 1)
+      let appearanceDate = new Date(monthStart)
+      while (!isBusinessDay(appearanceDate)) {
+        appearanceDate.setDate(appearanceDate.getDate() + 1)
+      }
+
+      // Due date: Last Saturday of the month (adjusted for business days)
+      let dueDate = new Date(lastSaturday)
+      while (!isBusinessDay(dueDate)) {
+        dueDate.setDate(dueDate.getDate() - 1)
+      }
+
+      // Lock date: Same as due date
       const lockDate = new Date(dueDate)
 
       return {
@@ -2222,6 +2255,87 @@ export default function RoleChecklistPage() {
     )
   }
 
+  // Helper function to calculate due date for a task
+  const getTaskDueDate = (task: ChecklistTask): Date | null => {
+    try {
+      const instanceDate = parseAustralianDate(task.date)
+      const frequencies = task.master_task?.frequencies || []
+
+      // Get the primary frequency (first one in the array)
+      const frequency = frequencies[0]
+      if (!frequency) return null
+
+      // Get the cutoffs for this frequency
+      const cutoffs = getFrequencyCutoffs(task, frequency, instanceDate)
+      return cutoffs.dueDate || null
+    } catch (error) {
+      console.warn('Error calculating due date:', error)
+      return null
+    }
+  }
+
+  // Helper function to format due date for display
+  const formatDueDate = (dueDate: Date): string => {
+    // Format as "Sat, 4 Oct"
+    return formatInTimeZone(dueDate, AUSTRALIAN_TIMEZONE, 'EEE, d MMM')
+  }
+
+  // Helper function to get status badge by status string
+  const getStatusBadgeByStatus = (status: string, task?: ChecklistTask) => {
+    console.log('🏷️ getStatusBadgeByStatus called with status:', status)
+    switch (status) {
+      case "completed":
+        return (
+          <Badge className="bg-green-100 text-green-800 border-green-200">
+            ✓ Done
+          </Badge>
+        )
+      case "not_due_yet":
+      case "pending":
+        // When viewing today and status is "not_due_yet", show the due date
+        if (isViewingToday && task) {
+          const dueDate = getTaskDueDate(task)
+          if (dueDate) {
+            const formattedDueDate = formatDueDate(dueDate)
+            return (
+              <Badge className="bg-blue-100 text-blue-800 border-blue-200">
+                📅 Due – {formattedDueDate}
+              </Badge>
+            )
+          }
+        }
+        return (
+          <Badge className="bg-blue-100 text-blue-800 border-blue-200">
+            📅 Not Due Yet
+          </Badge>
+        )
+      case "due_today":
+        return (
+          <Badge className="bg-orange-100 text-orange-800 border-orange-200">
+            ⏰ Due Today
+          </Badge>
+        )
+      case "overdue":
+        return (
+          <Badge className="bg-red-100 text-red-800 border-red-200">
+            ⚠️ Overdue
+          </Badge>
+        )
+      case "missed":
+        return (
+          <Badge className="bg-gray-400 text-white border-gray-400">
+            ❌ Missed
+          </Badge>
+        )
+      default:
+        return (
+          <Badge className="bg-blue-100 text-blue-800 border-blue-200">
+            📅 Not Due Yet
+          </Badge>
+        )
+    }
+  }
+
   const getStatusBadge = (task: ChecklistTask) => {
     console.log('🎯 getStatusBadge called for task:', task.master_task?.title, {
       isAdmin,
@@ -2335,7 +2449,7 @@ export default function RoleChecklistPage() {
           status: task.status,
           detailed_status: task.detailed_status
         })
-        return getStatusBadgeByStatus(status)
+        return getStatusBadgeByStatus(status, task)
       }
 
       // Filter completions based on carry-over periods
@@ -2381,7 +2495,7 @@ export default function RoleChecklistPage() {
         }
         const status = getTaskStatusWithCarryOver(cleanTask, currentDate, isViewingToday)
         console.log('❌ No valid completions, treating as new task, status:', status)
-        return getStatusBadgeByStatus(status)
+        return getStatusBadgeByStatus(status, task)
       }
 
       // Show position completion badges with truncation (only valid ones)
@@ -2470,7 +2584,7 @@ export default function RoleChecklistPage() {
         if (status === 'completed') {
           // Still within carry-over period
           console.log('✅ Within carry-over period, showing Done badge')
-          return getStatusBadgeByStatus(status)
+          return getStatusBadgeByStatus(status, task)
         } else {
           // Beyond carry-over period - treat as new task instance, preserve original task dates
           console.log('❌ Beyond carry-over period, calculating new task status')
@@ -2485,7 +2599,7 @@ export default function RoleChecklistPage() {
           }
           const newTaskStatus = getTaskStatusWithCarryOver(cleanTask, currentDate, isViewingToday)
           console.log('🔄 New task status:', newTaskStatus)
-          return getStatusBadgeByStatus(newTaskStatus)
+          return getStatusBadgeByStatus(newTaskStatus, cleanTask)
         }
       } else {
         // Task is not completed for this position - use normal status calculation, preserve original task dates
@@ -2499,7 +2613,7 @@ export default function RoleChecklistPage() {
           detailed_status: undefined
         }
         const status = getTaskStatusWithCarryOver(cleanTask, currentDate, isViewingToday)
-        return getStatusBadgeByStatus(status)
+        return getStatusBadgeByStatus(status, task)
       }
     }
 
@@ -2515,51 +2629,7 @@ export default function RoleChecklistPage() {
     })
     const status = getTaskStatusWithCarryOver(task, currentDate, isViewingToday)
     console.log('👤 Regular user status:', status)
-    return getStatusBadgeByStatus(status)
-  }
-
-  // Helper function to get status badge by status string
-  const getStatusBadgeByStatus = (status: string) => {
-    console.log('🏷️ getStatusBadgeByStatus called with status:', status)
-    switch (status) {
-      case "completed":
-        return (
-          <Badge className="bg-green-100 text-green-800 border-green-200">
-            ✓ Done
-          </Badge>
-        )
-      case "not_due_yet":
-      case "pending":
-        return (
-          <Badge className="bg-blue-100 text-blue-800 border-blue-200">
-            📅 Not Due Yet
-          </Badge>
-        )
-      case "due_today":
-        return (
-          <Badge className="bg-orange-100 text-orange-800 border-orange-200">
-            ⏰ Due Today
-          </Badge>
-        )
-      case "overdue":
-        return (
-          <Badge className="bg-red-100 text-red-800 border-red-200">
-            ⚠️ Overdue
-          </Badge>
-        )
-      case "missed":
-        return (
-          <Badge className="bg-gray-400 text-white border-gray-400">
-            ❌ Missed
-          </Badge>
-        )
-      default:
-        return (
-          <Badge className="bg-blue-100 text-blue-800 border-blue-200">
-            📅 Not Due Yet
-          </Badge>
-        )
-    }
+    return getStatusBadgeByStatus(status, task)
   }
 
   const allTasksCompleted = filteredAndSortedTasks.length > 0 && filteredAndSortedTasks.every((task) =>
