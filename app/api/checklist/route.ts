@@ -259,15 +259,32 @@ export async function GET(request: NextRequest) {
       })
       
       taskInstanceGroups.forEach((instances, taskId) => {
+        // Get the master task to check if it's an "Every Day" task
+        const masterTask = filteredTasks.find(t => t.id === taskId)
+        const isEveryDayTask = masterTask?.frequencies?.includes('every_day')
+        
         // Sort instances by relevance
         const sortedInstances = instances.sort((a, b) => {
-          // First priority: completed instances (status = 'done') - these should always show their completion status
-          if (a.status === 'done' && b.status !== 'done') return -1
-          if (b.status === 'done' && a.status !== 'done') return 1
-          
-          // Second priority: exact date match (for non-completed instances)
-          if (a.instance_date === validatedDate && b.instance_date !== validatedDate) return -1
-          if (b.instance_date === validatedDate && a.instance_date !== validatedDate) return 1
+          // For "Every Day" tasks, prioritize exact date match FIRST
+          // This ensures we show today's instance (even if incomplete) rather than yesterday's completed instance
+          if (isEveryDayTask) {
+            // First priority: exact date match
+            if (a.instance_date === validatedDate && b.instance_date !== validatedDate) return -1
+            if (b.instance_date === validatedDate && a.instance_date !== validatedDate) return 1
+            
+            // Second priority: completed instances
+            if (a.status === 'done' && b.status !== 'done') return -1
+            if (b.status === 'done' && a.status !== 'done') return 1
+          } else {
+            // For non-daily tasks, prioritize completed instances FIRST
+            // This allows carry-over logic to work (show completed status across multiple days)
+            if (a.status === 'done' && b.status !== 'done') return -1
+            if (b.status === 'done' && a.status !== 'done') return 1
+            
+            // Second priority: exact date match
+            if (a.instance_date === validatedDate && b.instance_date !== validatedDate) return -1
+            if (b.instance_date === validatedDate && a.instance_date !== validatedDate) return 1
+          }
           
           // Third priority: most recent instance_date
           return new Date(b.instance_date).getTime() - new Date(a.instance_date).getTime()
@@ -541,6 +558,7 @@ export async function GET(request: NextRequest) {
           timing: task.timing || 'anytime_during_day',
           // Provide default 09:30 if missing to align UI with engine and API calc
           due_time: task.due_time || '09:30',
+          due_date: task.due_date || undefined, // Include due_date for once_off tasks
           responsibility: task.responsibility || [],
           categories: task.categories || ['general'],
           frequencies: task.frequencies || [], // Using frequencies from database

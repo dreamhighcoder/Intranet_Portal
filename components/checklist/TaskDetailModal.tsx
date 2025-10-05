@@ -507,6 +507,15 @@ export default function TaskDetailModal({
           // Due date: Last Saturday of the month (or nearest earlier business day if Saturday is holiday)
           const lastSat = getLastSaturdayOfMonth(frequencyDate)
           dueDate = findPreviousBusinessDay(lastSat)
+        } else if (['once_off', 'once_off_sticky'].includes(frequency)) {
+          // For once_off tasks, use the due_date from master_task (required field)
+          if (task.master_task?.due_date) {
+            dueDate = parseAustralianDate(task.master_task.due_date)
+          } else {
+            // Fallback if due_date is missing (should not happen for properly configured once_off tasks)
+            console.warn('Once-off task missing due_date, using instance date as fallback:', task.master_task?.title)
+            dueDate = frequencyDate
+          }
         } else {
           // For other frequencies, use the provided due_date if available
           if (task.due_date) {

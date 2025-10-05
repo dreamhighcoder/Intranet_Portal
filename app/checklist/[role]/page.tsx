@@ -210,10 +210,24 @@ const getResponsibilityAbbreviation = (responsibility: string) => {
 
 // Apply carry-over logic to preserve position completion badges during carry-over period
 const getTaskStatusWithCarryOver = (task: ChecklistTask, currentDate: string, isViewingToday: boolean = false): string => {
+  // Debug: Log task data at entry
+  console.log('🔍 getTaskStatusWithCarryOver called:', {
+    taskTitle: task.master_task?.title,
+    taskId: task.id,
+    currentDate,
+    isViewingToday,
+    is_completed_for_position: task.is_completed_for_position,
+    completed_at: task.completed_at,
+    position_completions: task.position_completions,
+    detailed_status: task.detailed_status,
+    frequencies: task.master_task?.frequencies
+  })
+
   // If task is not completed for this position, calculate the status
   if (!task.is_completed_for_position) {
     // If we have a cached detailed_status, use it (from API)
     if (task.detailed_status) {
+      console.log('✅ Using cached detailed_status:', task.detailed_status)
       return task.detailed_status
     }
 
@@ -246,16 +260,27 @@ const getTaskStatusWithCarryOver = (task: ChecklistTask, currentDate: string, is
   // Use position completion date if available
   if (task.position_completions && task.position_completions.length > 0) {
     const completedAt = task.position_completions[0].completed_at
+    console.log('📅 Extracting completion date from position_completions:', {
+      taskTitle: task.master_task?.title,
+      completed_at_raw: completedAt,
+      position_completions_length: task.position_completions.length
+    })
     if (completedAt) {
       // Convert UTC timestamp to Australian date
       const completedAtDate = new Date(completedAt)
       const completedAtAustralian = toAustralianTime(completedAtDate)
       completionDateStr = formatAustralianDate(completedAtAustralian)
+      console.log('📅 Completion date extracted:', {
+        completedAtDate: completedAtDate.toISOString(),
+        completedAtAustralian: completedAtAustralian.toISOString(),
+        completionDateStr
+      })
     }
   } else if (task.completed_at) {
     // Use task completion date
     const completedAtAustralian = toAustralianTime(new Date(task.completed_at))
     completionDateStr = formatAustralianDate(completedAtAustralian)
+    console.log('📅 Completion date from task.completed_at:', completionDateStr)
   }
 
   // Implement proper carry-over logic based on frequency rules
@@ -286,6 +311,13 @@ const getTaskStatusWithCarryOver = (task: ChecklistTask, currentDate: string, is
     // Every Day: No carry-over. Each day has its own instance.
     // Show "✓ Done" only on the completion date
     isWithinCarryOverPeriod = currentDate === completionDateStr
+    console.log('📅 Every Day task carry-over check:', {
+      taskTitle: task.master_task?.title,
+      currentDate,
+      completionDateStr,
+      isWithinCarryOverPeriod,
+      matches: currentDate === completionDateStr
+    })
   } else if (frequencies.includes('once_monthly') ||
     frequencies.some(f => f.includes('month'))) {
     // Monthly tasks: Carry-over until last Saturday of the month when completed
@@ -333,8 +365,11 @@ const getTaskStatusWithCarryOver = (task: ChecklistTask, currentDate: string, is
   }
 
   if (isWithinCarryOverPeriod) {
+    console.log('✅ Task is within carry-over period, returning "completed"')
     return 'completed'
   }
+  
+  console.log('⚠️ Task is NOT within carry-over period, calculating new status')
 
   // Carry-over period has ended - calculate status for new task instance
   // Calculate what the status would be if this was a new task for the current viewing date
@@ -1513,6 +1548,22 @@ export default function RoleChecklistPage() {
         console.log('📋 Setting tasks in state...')
         const newTasks = data.data || []
 
+        // Debug logging for completed tasks
+        const completedTasks = newTasks.filter((task: ChecklistTask) =>
+          task.is_completed_for_position === true
+        )
+        if (completedTasks.length > 0) {
+          console.log('🎯 Completed tasks from API:', completedTasks.map((task: ChecklistTask) => ({
+            title: task.master_task?.title,
+            id: task.id,
+            is_completed_for_position: task.is_completed_for_position,
+            completed_at: task.completed_at,
+            position_completions: task.position_completions,
+            detailed_status: task.detailed_status,
+            frequencies: task.master_task?.frequencies
+          })))
+        }
+
         // Debug logging for Saturday tasks
         const saturdayTasks = newTasks.filter((task: ChecklistTask) =>
           task.master_task?.frequencies?.includes('saturday')
@@ -1652,13 +1703,32 @@ export default function RoleChecklistPage() {
     // Add to processing set
     setProcessingTasks(prev => new Set(prev).add(taskId))
 
-    // Optimistic update
+    // Optimistic update - include position_completions array for proper carry-over logic
+    const completedAtTimestamp = australianNowUtcISOString()
+    const userDisplayName = user?.displayName || user?.position?.displayName || 'Unknown'
+    
     setTasks(prevTasks =>
-      prevTasks.map(task =>
-        task.id === taskId
-          ? { ...task, status: 'completed', completed_at: australianNowUtcISOString(), is_completed_for_position: true }
-          : task
-      )
+      prevTasks.map(task => {
+        if (task.id === taskId) {
+          // Create a new position completion entry for optimistic update
+          const newPositionCompletion: PositionCompletion = {
+            position_name: role, // Current role/position
+            completed_by: userDisplayName,
+            completed_at: completedAtTimestamp,
+            is_completed: true
+          }
+          
+          return {
+            ...task,
+            status: 'completed',
+            completed_at: completedAtTimestamp,
+            is_completed_for_position: true,
+            position_completions: [newPositionCompletion],
+            detailed_status: 'completed' as const // Clear cached status to force recalculation
+          }
+        }
+        return task
+      })
     )
 
     try {
@@ -1723,11 +1793,19 @@ export default function RoleChecklistPage() {
     // Add to processing set
     setProcessingTasks(prev => new Set(prev).add(taskId))
 
-    // Optimistic update
+    // Optimistic update - clear position_completions array
     setTasks(prevTasks =>
       prevTasks.map(task =>
         task.id === taskId
-          ? { ...task, status: 'pending', completed_at: undefined, completed_by: undefined, is_completed_for_position: false }
+          ? { 
+              ...task, 
+              status: 'pending', 
+              completed_at: undefined, 
+              completed_by: undefined, 
+              is_completed_for_position: false,
+              position_completions: [], // Clear position completions
+              detailed_status: undefined // Clear cached status to force recalculation
+            }
           : task
       )
     )
@@ -2296,6 +2374,21 @@ export default function RoleChecklistPage() {
         if (isViewingToday && task) {
           const dueDate = getTaskDueDate(task)
           if (dueDate) {
+            // Check if the due date is today
+            const today = getAustralianNow()
+            const dueDateStr = formatInTimeZone(dueDate, AUSTRALIAN_TIMEZONE, 'yyyy-MM-dd')
+            const todayStr = formatInTimeZone(today, AUSTRALIAN_TIMEZONE, 'yyyy-MM-dd')
+            
+            // If due date is today, show "Due Today" badge instead
+            if (dueDateStr === todayStr) {
+              return (
+                <Badge className="bg-orange-100 text-orange-800 border-orange-200">
+                  ⏰ Due Today
+                </Badge>
+              )
+            }
+            
+            // Otherwise, show the formatted due date
             const formattedDueDate = formatDueDate(dueDate)
             return (
               <Badge className="bg-blue-100 text-blue-800 border-blue-200">
@@ -3514,3 +3607,4 @@ export default function RoleChecklistPage() {
     </div>
   )
 }
+       
