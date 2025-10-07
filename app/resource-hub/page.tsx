@@ -28,7 +28,8 @@ import {
   ArrowUpDown,
   X as XIcon,
   ChevronDown,
-  Home
+  Home,
+  ArrowLeft
 } from 'lucide-react'
 import { toastSuccess, toastError } from '@/hooks/use-toast'
 import * as XLSX from 'xlsx'
@@ -669,8 +670,9 @@ export default function ResourceHubPage() {
                     size="sm"
                     className="bg-white text-blue-600 hover:bg-gray-100 w-full sm:w-auto"
                   >
-                    <Home className="w-4 h-4 mr-2" />
+                    <ArrowLeft className="w-4 h-4 mr-2" />
                     Back Home
+                    <Home className="w-4 h-4 ml-2" />
                   </Button>
                 )}
               </div>
