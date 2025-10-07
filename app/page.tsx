@@ -64,19 +64,16 @@ export default function HomePage() {
     return toKebabCase(displayName)
   }
 
-  // Check for new documents (created within 12 hours)
+  // Check for new documents (documents that still show "N" badge on Resource Hub page)
   const checkForNewDocuments = async () => {
     try {
       const response = await fetch('/api/resource-hub')
       const data = await response.json()
 
       if (data.success && data.data) {
-        const now = getAustralianNow()
-        const twelveHoursAgo = new Date(now.getTime() - 12 * 60 * 60 * 1000)
-
-        const hasNew = data.data.some((doc: any) =>
-          new Date(doc.created_at) >= twelveHoursAgo
-        )
+        // The badge should stay visible as long as there is at least one document
+        // on the Resource Hub page that still shows its own "N" badge
+        const hasNew = data.data.some((doc: any) => doc.is_new)
         setHasNewDocuments(hasNew)
       }
     } catch (error) {
