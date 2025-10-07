@@ -32,6 +32,7 @@ import {
   Download,
   Upload,
   Eye,
+  BookOpen,
   EyeOff,
   Menu,
   FileText,
@@ -994,6 +995,9 @@ export default function AdminMasterTasksPage() {
   const [isResettingToDefault, setIsResettingToDefault] = useState(false)
   const [showResetConfirmDialog, setShowResetConfirmDialog] = useState(false)
 
+  // Linked documents state
+  const [taskLinkedDocuments, setTaskLinkedDocuments] = useState<Record<string, any[]>>({})
+
   // Sorting function
   const handleSort = (field: string) => {
     if (sortField === field) {
@@ -1018,6 +1022,43 @@ export default function AdminMasterTasksPage() {
       console.log('Authentication complete but user is not admin:', user.position.name)
     }
   }, [authLoading, user])
+
+  // Load linked documents for all tasks
+  useEffect(() => {
+    const loadLinkedDocuments = async () => {
+      if (tasks.length === 0) return
+
+      try {
+        // Get unique master task IDs
+        const masterTaskIds = [...new Set(tasks.map(task => task.id))]
+
+        // Fetch linked documents for each master task
+        const documentsMap: Record<string, any[]> = {}
+
+        await Promise.all(
+          masterTaskIds.map(async (masterTaskId) => {
+            try {
+              const response = await fetch(`/api/resource-hub/task-links/${masterTaskId}`)
+              if (response.ok) {
+                const data = await response.json()
+                if (data.success && data.data) {
+                  documentsMap[masterTaskId] = data.data
+                }
+              }
+            } catch (error) {
+              console.error(`Error loading documents for task ${masterTaskId}:`, error)
+            }
+          })
+        )
+
+        setTaskLinkedDocuments(documentsMap)
+      } catch (error) {
+        console.error('Error loading linked documents:', error)
+      }
+    }
+
+    loadLinkedDocuments()
+  }, [tasks])
 
   const loadData = async () => {
     setLoading(true)
@@ -2379,7 +2420,6 @@ export default function AdminMasterTasksPage() {
                     </span>
                   )}
                 </CardTitle>
-
               </div>
               <div className="mt-2 sm:mt-0 sm:ml-4 flex items-center gap-2">
                 <span className="text-sm text-gray-600">Per page:</span>
@@ -2541,16 +2581,17 @@ export default function AdminMasterTasksPage() {
                           sortField={sortField}
                           sortDirection={sortDirection}
                           onSort={handleSort}
-                          className="w-[55%] py-3 bg-gray-50"
+                          className="w-[51%] py-3 bg-gray-50"
                         >
                           Title & Description
                         </SortableHeader>
+                        <TableHead className="text-center w-[3%] py-3 bg-gray-50">Policy</TableHead>
                         <SortableHeader
                           field="responsibility"
                           sortField={sortField}
                           sortDirection={sortDirection}
                           onSort={handleSort}
-                          className="text-center w-[10%] py-3 bg-gray-50"
+                          className="text-center w-[11%] py-3 bg-gray-50"
                         >
                           Responsibilities
                         </SortableHeader>
@@ -2626,6 +2667,26 @@ export default function AdminMasterTasksPage() {
                                 )}
                               </div>
                             </TableCell>
+                            <TableCell className="text-center py-1">
+                              <div className="text-center max-w-full">
+                                {taskLinkedDocuments[task.id]?.length > 0 && (
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => {
+                                      const docs = taskLinkedDocuments[task.id]
+                                      if (docs && docs.length > 0) {
+                                        window.open(docs[0].document_url, '_blank')
+                                      }
+                                    }}
+                                    title="View Instructions"
+                                    className="hover:bg-cyan-200 text-cyan-600 h-8 w-9 p-0"
+                                  >
+                                    <BookOpen className="h-6 w-6" />
+                                  </Button>
+                                )}
+                              </div>
+                            </TableCell>
                             <TableCell className="py-3">
                               <div className="justify-center max-w-full overflow-hidden">
                                 {task.responsibility && task.responsibility.length > 0 ? (
@@ -2691,10 +2752,10 @@ export default function AdminMasterTasksPage() {
                                     <Button
                                       size="sm"
                                       variant="outline"
-                                      className="h-7 w-7 p-0"
+                                      className="h-8 w-7 p-0"
                                       title="View task details"
                                     >
-                                      <Eye className="w-3 h-3" />
+                                      <Eye className="w-4 h-4" />
                                     </Button>
                                   </DialogTrigger>
                                   <TaskDetailsModal task={task} positions={positions} />
@@ -2707,23 +2768,23 @@ export default function AdminMasterTasksPage() {
                                     setEditingTask(task)
                                     setIsTaskDialogOpen(true)
                                   }}
-                                  className="h-7 w-7 p-0"
+                                  className="h-8 w-7 p-0"
                                   title="Edit task"
                                 >
-                                  <Edit className="w-3 h-3" />
+                                  <Edit className="w-4 h-4" />
                                 </Button>
                                 <Button
                                   size="sm"
                                   variant="outline"
                                   onClick={() => handleDeleteTask(task.id)}
                                   disabled={deletingTaskId === task.id}
-                                  className="h-7 w-7 p-0 text-red-600 hover:text-red-700"
+                                  className="h-8 w-7 p-0 text-red-600 hover:text-red-700"
                                   title="Delete task"
                                 >
                                   {deletingTaskId === task.id ? (
                                     <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-red-600"></div>
                                   ) : (
-                                    <Trash2 className="w-3 h-3" />
+                                    <Trash2 className="w-4 h-4" />
                                   )}
                                 </Button>
                               </div>

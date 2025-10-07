@@ -79,6 +79,7 @@ export async function PUT(
       end_date,
       sticky_once_off,
       allow_edit_when_locked,
+      linked_documents,
       // Legacy fields for backward compatibility
       position_id,
       weekdays,
@@ -163,6 +164,104 @@ export async function PUT(
         details: error.message,
         code: error.code
       }, { status: 500 })
+    }
+
+    // Handle linked documents if provided
+    if (linked_documents !== undefined) {
+      try {
+        console.log('Master task [id] PUT - Updating linked documents')
+        
+        // Get the list of previously linked documents before deletion
+        const { data: previousLinks } = await supabase
+          .from('task_document_links')
+          .select('policy_document_id')
+          .eq('master_task_id', params.id)
+        
+        const previousDocIds = previousLinks?.map(link => link.policy_document_id) || []
+        
+        // First, delete all existing links for this task
+        const { error: deleteError } = await supabase
+          .from('task_document_links')
+          .delete()
+          .eq('master_task_id', params.id)
+        
+        if (deleteError) {
+          console.error('Master task [id] PUT - Error deleting existing document links:', deleteError)
+        }
+        
+        // Then, insert new links if any
+        if (linked_documents && linked_documents.length > 0) {
+          const linkData = linked_documents.map((docId: string) => ({
+            master_task_id: params.id,
+            policy_document_id: docId
+          }))
+          
+          const { error: insertError } = await supabase
+            .from('task_document_links')
+            .insert(linkData)
+          
+          if (insertError) {
+            console.error('Master task [id] PUT - Error inserting document links:', insertError)
+          } else {
+            console.log('Master task [id] PUT - Successfully linked', linked_documents.length, 'documents')
+            
+            // Update document type to 'task-instruction' for newly linked documents
+            try {
+              const { error: updateError } = await supabase
+                .from('policy_documents')
+                .update({ document_type: 'task-instruction' })
+                .in('id', linked_documents)
+              
+              if (updateError) {
+                console.error('Master task [id] PUT - Error updating document types:', updateError)
+              } else {
+                console.log('Master task [id] PUT - Updated document types to task-instruction')
+              }
+            } catch (updateError) {
+              console.error('Master task [id] PUT - Exception updating document types:', updateError)
+            }
+          }
+        }
+        
+        // Check if any previously linked documents are no longer linked to any task
+        // and update their type back to 'general-policy'
+        if (previousDocIds.length > 0) {
+          try {
+            // Find documents that were unlinked
+            const unlinkedDocIds = previousDocIds.filter(docId => !linked_documents?.includes(docId))
+            
+            if (unlinkedDocIds.length > 0) {
+              // For each unlinked document, check if it's still linked to other tasks
+              for (const docId of unlinkedDocIds) {
+                const { data: remainingLinks } = await supabase
+                  .from('task_document_links')
+                  .select('id')
+                  .eq('policy_document_id', docId)
+                  .limit(1)
+                
+                // If no remaining links, update document type back to 'general-policy'
+                if (!remainingLinks || remainingLinks.length === 0) {
+                  const { error: revertError } = await supabase
+                    .from('policy_documents')
+                    .update({ document_type: 'general-policy' })
+                    .eq('id', docId)
+                  
+                  if (revertError) {
+                    console.error('Master task [id] PUT - Error reverting document type:', revertError)
+                  } else {
+                    console.log('Master task [id] PUT - Reverted document type to general-policy for:', docId)
+                  }
+                }
+              }
+            }
+          } catch (revertError) {
+            console.error('Master task [id] PUT - Exception reverting document types:', revertError)
+          }
+        }
+      } catch (linkError) {
+        console.error('Master task [id] PUT - Exception updating document links:', linkError)
+        // Don't fail the task update if document linking fails
+      }
     }
 
     // Check if task was just activated and trigger frequency logic immediately

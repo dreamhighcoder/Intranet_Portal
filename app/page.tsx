@@ -8,13 +8,15 @@ import { PositionLoginModal } from "@/components/position-login-modal"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import ChecklistCard from "@/components/ui/ChecklistCard"
-import { Users, Stethoscope, Package, Building } from "lucide-react"
+import { Users, Stethoscope, Package, Building, BookOpen } from "lucide-react"
 import { PositionAuthService } from "@/lib/position-auth"
 import { useRouter } from "next/navigation"
 import { useEffect } from "react"
 import { toKebabCase } from "@/lib/responsibility-mapper"
 import { positionsApi } from "@/lib/api-client"
 import { getPositionIcon, hasSpecificIcon } from "@/lib/position-icons"
+import Link from "next/link"
+import { getAustralianNow } from "@/lib/timezone-utils"
 
 export default function HomePage() {
   const { user, isLoading } = usePositionAuth()
@@ -47,6 +49,9 @@ export default function HomePage() {
     responsibility: string
   }>>([])
 
+  // State for new documents notification
+  const [hasNewDocuments, setHasNewDocuments] = useState(false)
+
   // Helper function to get position descriptions
   const getPositionDescription = (displayName: string): string => {
     // Generate generic description based on position name
@@ -57,6 +62,27 @@ export default function HomePage() {
   // Map position names to responsibility values using our utility
   const getResponsibilityValue = (displayName: string): string => {
     return toKebabCase(displayName)
+  }
+
+  // Check for new documents (created within 12 hours)
+  const checkForNewDocuments = async () => {
+    try {
+      const response = await fetch('/api/resource-hub')
+      const data = await response.json()
+
+      if (data.success && data.data) {
+        const now = getAustralianNow()
+        const twelveHoursAgo = new Date(now.getTime() - 12 * 60 * 60 * 1000)
+
+        const hasNew = data.data.some((doc: any) =>
+          new Date(doc.created_at) >= twelveHoursAgo
+        )
+        setHasNewDocuments(hasNew)
+      }
+    } catch (error) {
+      console.error('Error checking for new documents:', error)
+      setHasNewDocuments(false)
+    }
   }
 
   // Load positions from database - always show all positions
@@ -131,6 +157,11 @@ export default function HomePage() {
       window.removeEventListener('open-checklist-login', handleOpenChecklistLogin);
     }
   }, [isLoading, user])
+
+  // Check for new documents on component mount
+  useEffect(() => {
+    checkForNewDocuments()
+  }, [])
 
   // Show loading state
   if (isLoading) {
@@ -222,11 +253,49 @@ export default function HomePage() {
             </div>
 
             {/* Content */}
-            <div className="relative z-10">
-              <h1 className="text-3xl sm:text-4xl font-bold mb-2 py-1">Welcome to Richmond Pharmacy HQ</h1>
-              <p className="opacity-90 text-sm sm:text-base">
-                Access your position-specific checklist to manage daily tasks and responsibilities
-              </p>
+            <div className="relative z-10 flex items-center justify-between">
+              <div>
+                <h1 className="text-3xl sm:text-4xl font-bold mb-2 py-1">Welcome to Richmond Pharmacy HQ</h1>
+                <p className="opacity-90 text-sm sm:text-base">
+                  Access your position-specific checklist to manage daily tasks and responsibilities
+                </p>
+              </div>
+
+              {/* Resource Hub Button with animated border */}
+              <Link href="/resource-hub">
+                <div className="relative">
+                  <Button
+                    className="h-8 relative bg-white text-[var(--color-primary)] hover:bg-white/90 font-semibold px-6 py-3 shadow-lg overflow-hidden group"
+                    style={{
+                      animation: 'pulse-border 2s ease-in-out infinite'
+                    }}
+                  >
+                    <style jsx>{`
+                    @keyframes pulse-border {
+                      0%, 100% {
+                        box-shadow: 0 0 0 0 rgba(255, 255, 255, 0.7),
+                                    0 0 0 5px rgba(255, 255, 255, 0.3);
+                      }
+                      50% {
+                        box-shadow: 0 0 0 5px rgba(255, 255, 255, 0.3),
+                                    0 0 0 6px rgba(255, 255, 255, 0);
+                      }
+                    }
+                  `}</style>
+                    <BookOpen className="w-5 h-5 mr-2" />
+                    Resource Hub
+                  </Button>
+                  {hasNewDocuments && (
+                    <span
+                      title="New documents available"
+                      className="absolute -top-1 -right-1 flex items-center justify-center w-4 h-4 rounded-full bg-blue-600 text-white text-[8px] font-bold shadow-lg shadow-blue-300 ring-2 ring-white"
+                      style={{ zIndex: 10 }}
+                    >
+                      N
+                    </span>
+                  )}
+                </div>
+              </Link>
             </div>
           </div>
         </div>

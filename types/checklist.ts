@@ -229,6 +229,7 @@ export interface MasterChecklistTask {
   title: string
   description: string
   position_id?: string // Legacy field for backward compatibility
+  policy_link: string // 
   responsibility: string[] // Multi-select array of role names responsible for this task
   categories: string[] // Multi-select array of category tags
   frequencies: string[] // Multi-select array of frequencies - supports multiple recurrence patterns

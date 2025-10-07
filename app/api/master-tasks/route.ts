@@ -154,6 +154,7 @@ export async function POST(request: NextRequest) {
       end_date,
       sticky_once_off = false,
       allow_edit_when_locked = false,
+      linked_documents = [],
       // Legacy fields for backward compatibility
       position_id,
       weekdays = [],
@@ -286,7 +287,46 @@ export async function POST(request: NextRequest) {
       }, { status: 500 })
     }
 
-
+    // Handle linked documents if any
+    if (linked_documents && linked_documents.length > 0 && masterTask) {
+      try {
+        console.log('Master task POST - Linking documents:', linked_documents)
+        const linkData = linked_documents.map((docId: string) => ({
+          master_task_id: masterTask.id,
+          policy_document_id: docId
+        }))
+        
+        const { error: linkError } = await supabase
+          .from('task_document_links')
+          .insert(linkData)
+        
+        if (linkError) {
+          console.error('Master task POST - Error linking documents:', linkError)
+          // Don't fail the task creation if document linking fails
+        } else {
+          console.log('Master task POST - Successfully linked', linked_documents.length, 'documents')
+          
+          // Update document type to 'task-instruction' for all linked documents
+          try {
+            const { error: updateError } = await supabase
+              .from('policy_documents')
+              .update({ document_type: 'task-instruction' })
+              .in('id', linked_documents)
+            
+            if (updateError) {
+              console.error('Master task POST - Error updating document types:', updateError)
+            } else {
+              console.log('Master task POST - Updated document types to task-instruction')
+            }
+          } catch (updateError) {
+            console.error('Master task POST - Exception updating document types:', updateError)
+          }
+        }
+      } catch (linkError) {
+        console.error('Master task POST - Exception linking documents:', linkError)
+        // Don't fail the task creation if document linking fails
+      }
+    }
 
     // After successfully creating the master task, generate task instances for today and future dates
     try {

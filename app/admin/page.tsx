@@ -10,7 +10,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
-import { Users, ClipboardList, Calendar, Settings, BarChart3, Activity } from "lucide-react"
+import { Users, ClipboardList, Calendar, Settings, BarChart3, Activity, BookOpen } from "lucide-react"
 import { authenticatedGet } from "@/lib/api-client"
 import { toKebabCase } from "@/lib/responsibility-mapper"
 
@@ -112,6 +112,14 @@ export default function AdminDashboard() {
       href: "/admin/reports",
       color: "text-green-600",
       bgColor: "bg-green-100",
+    },
+    {
+      title: "Resource Hub",
+      description: "Manage policy documents and task instructions",
+      icon: BookOpen,
+      href: "/resource-hub",
+      color: "text-cyan-600",
+      bgColor: "bg-cyan-100",
     },
     {
       title: "Public Holidays",

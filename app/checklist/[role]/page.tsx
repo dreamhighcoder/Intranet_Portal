@@ -12,7 +12,7 @@ import { Badge } from '@/components/ui/badge'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Input } from '@/components/ui/input'
-import { Check, X, Eye, LogOut, Settings, ChevronRight, Search, Clock, Users } from 'lucide-react'
+import { Check, X, Eye, LogOut, Settings, ChevronRight, Search, Clock, Users, FileText, BookOpen } from 'lucide-react'
 import Link from 'next/link'
 import { toastError, toastSuccess, toastWarning } from '@/hooks/use-toast'
 import { toKebabCase } from '@/lib/responsibility-mapper'
@@ -368,7 +368,7 @@ const getTaskStatusWithCarryOver = (task: ChecklistTask, currentDate: string, is
     console.log('✅ Task is within carry-over period, returning "completed"')
     return 'completed'
   }
-  
+
   console.log('⚠️ Task is NOT within carry-over period, calculating new status')
 
   // Carry-over period has ended - calculate status for new task instance
@@ -1364,6 +1364,9 @@ export default function RoleChecklistPage() {
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false)
   const [processingTasks, setProcessingTasks] = useState<Set<string>>(new Set())
 
+  // Linked documents state
+  const [taskLinkedDocuments, setTaskLinkedDocuments] = useState<Record<string, any[]>>({})
+
   // Bulk action states
   const [selectedTasks, setSelectedTasks] = useState<Set<string>>(new Set())
   const [setBulkDeleteConfirmModal] = useState(false)
@@ -1648,6 +1651,43 @@ export default function RoleChecklistPage() {
     loadTasks()
   }, [refreshKey, isLoading, user, role, isAdmin, currentDate])
 
+  // Load linked documents for all tasks
+  useEffect(() => {
+    const loadLinkedDocuments = async () => {
+      if (tasks.length === 0) return
+
+      try {
+        // Get unique master task IDs
+        const masterTaskIds = [...new Set(tasks.map(task => task.master_task_id))]
+
+        // Fetch linked documents for each master task
+        const documentsMap: Record<string, any[]> = {}
+
+        await Promise.all(
+          masterTaskIds.map(async (masterTaskId) => {
+            try {
+              const response = await fetch(`/api/resource-hub/task-links/${masterTaskId}`)
+              if (response.ok) {
+                const data = await response.json()
+                if (data.success && data.data) {
+                  documentsMap[masterTaskId] = data.data
+                }
+              }
+            } catch (error) {
+              console.error(`Error loading documents for task ${masterTaskId}:`, error)
+            }
+          })
+        )
+
+        setTaskLinkedDocuments(documentsMap)
+      } catch (error) {
+        console.error('Error loading linked documents:', error)
+      }
+    }
+
+    loadLinkedDocuments()
+  }, [tasks])
+
   useEffect(() => {
     console.log('🔄 URL params useEffect triggered')
     const dateParam = searchParams.get("date")
@@ -1706,7 +1746,7 @@ export default function RoleChecklistPage() {
     // Optimistic update - include position_completions array for proper carry-over logic
     const completedAtTimestamp = australianNowUtcISOString()
     const userDisplayName = user?.displayName || user?.position?.displayName || 'Unknown'
-    
+
     setTasks(prevTasks =>
       prevTasks.map(task => {
         if (task.id === taskId) {
@@ -1717,7 +1757,7 @@ export default function RoleChecklistPage() {
             completed_at: completedAtTimestamp,
             is_completed: true
           }
-          
+
           return {
             ...task,
             status: 'completed',
@@ -1797,15 +1837,15 @@ export default function RoleChecklistPage() {
     setTasks(prevTasks =>
       prevTasks.map(task =>
         task.id === taskId
-          ? { 
-              ...task, 
-              status: 'pending', 
-              completed_at: undefined, 
-              completed_by: undefined, 
-              is_completed_for_position: false,
-              position_completions: [], // Clear position completions
-              detailed_status: undefined // Clear cached status to force recalculation
-            }
+          ? {
+            ...task,
+            status: 'pending',
+            completed_at: undefined,
+            completed_by: undefined,
+            is_completed_for_position: false,
+            position_completions: [], // Clear position completions
+            detailed_status: undefined // Clear cached status to force recalculation
+          }
           : task
       )
     )
@@ -2378,7 +2418,7 @@ export default function RoleChecklistPage() {
             const today = getAustralianNow()
             const dueDateStr = formatInTimeZone(dueDate, AUSTRALIAN_TIMEZONE, 'yyyy-MM-dd')
             const todayStr = formatInTimeZone(today, AUSTRALIAN_TIMEZONE, 'yyyy-MM-dd')
-            
+
             // If due date is today, show "Due Today" badge instead
             if (dueDateStr === todayStr) {
               return (
@@ -2387,7 +2427,7 @@ export default function RoleChecklistPage() {
                 </Badge>
               )
             }
-            
+
             // Otherwise, show the formatted due date
             const formattedDueDate = formatDueDate(dueDate)
             return (
@@ -2999,9 +3039,10 @@ export default function RoleChecklistPage() {
                     <TableHeader>
                       <TableRow>
                         <TableHead className="text-center w-[3%] py-3 bg-gray-50">New</TableHead>
-                        <TableHead className={isAdmin ? "w-[57] py-3 bg-gray-50" : "w-[61] py-3 bg-gray-50"}>
+                        <TableHead className={isAdmin ? "w-[54] py-3 bg-gray-50" : "w-[58] py-3 bg-gray-50"}>
                           Title & Description
                         </TableHead>
+                        <TableHead className="text-center w-[3%] py-3 bg-gray-50">Policy</TableHead>
                         {isAdmin && (
                           <TableHead className="text-center w-[10%] py-3 bg-gray-50">
                             Responsibility
@@ -3063,6 +3104,28 @@ export default function RoleChecklistPage() {
                               </div>
                             </div>
                           </TableCell>
+
+                          <TableCell className="text-center py-1">
+                            <div className="text-center max-w-full">
+                              {taskLinkedDocuments[task.master_task_id]?.length > 0 && (
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => {
+                                    const docs = taskLinkedDocuments[task.master_task_id]
+                                    if (docs && docs.length > 0) {
+                                      window.open(docs[0].document_url, '_blank')
+                                    }
+                                  }}
+                                  title="View Instructions"
+                                  className="hover:bg-cyan-200 text-cyan-600 h-8 w-9 p-0"
+                                >
+                                  <BookOpen className="h-6 w-6" />
+                                </Button>
+                              )}
+                            </div>
+                          </TableCell>
+
                           {isAdmin && (
                             <TableCell className="py-3">
                               <div className="max-w-full overflow-hidden">
@@ -3108,19 +3171,20 @@ export default function RoleChecklistPage() {
                             </div>
                           </TableCell>
                           <TableCell className="py-3">
-                            <div className="justify-center flex">
+                            <div className="justify-center flex gap-2">
                               {/* Hide Done/Undo buttons for admins; show only details */}
                               {isAdmin ? (
-                                <Button
-                                  type="button"
-                                  size="sm"
-                                  variant="ghost"
-                                  onClick={() => handleViewDetails(task)}
-                                  title="View Details"
-                                  className="hover:bg-gray-100"
-                                >
-                                  <Eye className="h-4 w-4" />
-                                </Button>
+                                <>
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => handleViewDetails(task)}
+                                    title="View Details"
+                                    className="h-8 w-8 p-0"
+                                  >
+                                    <Eye className="h-4 w-4" />
+                                  </Button>
+                                </>
                               ) : (
                                 <>
                                   {(() => {
@@ -3607,4 +3671,3 @@ export default function RoleChecklistPage() {
     </div>
   )
 }
-       

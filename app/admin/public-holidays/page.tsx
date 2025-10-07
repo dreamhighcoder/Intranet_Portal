@@ -826,23 +826,24 @@ export default function AdminPublicHolidaysPage() {
                               </span>
                             </TableCell>
                             <TableCell>
-                              <div className="flex justify-center space-x-1">
+                              <div className="flex justify-center space-x-2">
                                 <Button
                                   size="sm"
                                   variant="outline"
                                   onClick={() => handleEditHoliday(holiday)}
+                                  className="h-8 w-7"
                                   title="Edit holiday"
                                 >
-                                  <Edit className="w-3 h-3" />
+                                  <Edit className="w-4 h-4" />
                                 </Button>
                                 <Button
                                   size="sm"
                                   variant="outline"
                                   onClick={() => handleDeleteHoliday(holiday)}
-                                  className="text-red-600 hover:text-red-700"
+                                  className="h-8 w-7 text-red-600 hover:text-red-700"
                                   title="Delete holiday"
                                 >
-                                  <Trash2 className="w-3 h-3" />
+                                  <Trash2 className="w-4 h-4" />
                                 </Button>
                               </div>
                             </TableCell>

@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Separator } from '@/components/ui/separator'
-import { Clock, User, Calendar, CheckCircle, XCircle, AlertTriangle, Tag, FileText, Settings, Hash } from 'lucide-react'
+import { Clock, User, Calendar, CheckCircle, XCircle, AlertTriangle, Tag, FileText, Settings, Hash, BookOpen } from 'lucide-react'
 import { toDisplayFormat } from '@/lib/responsibility-mapper'
 import { getAustralianNow, getAustralianToday, parseAustralianDate, createAustralianDateTime, toAustralianTime, formatAustralianDate, formatAustralianDateDisplay } from '@/lib/timezone-utils'
 import { calculateTaskStatus, setHolidays } from '@/lib/task-status-calculator'
@@ -69,10 +69,12 @@ export default function TaskDetailModal({
   const [loading, setLoading] = useState(false)
   const [holidaysLoaded, setHolidaysLoaded] = useState(false)
   const [localHolidaySet, setLocalHolidaySet] = useState<Set<string>>(new Set())
+  const [linkedDocuments, setLinkedDocuments] = useState<any[]>([])
 
   useEffect(() => {
     if (isOpen && task?.id) {
       loadCompletionLog()
+      loadLinkedDocuments()
     }
   }, [isOpen, task?.id])
 
@@ -91,6 +93,23 @@ export default function TaskDetailModal({
       console.error('Error loading completion log:', error)
     } finally {
       setLoading(false)
+    }
+  }
+
+  const loadLinkedDocuments = async () => {
+    try {
+      if (!task?.master_task_id) return
+      
+      const response = await fetch(`/api/resource-hub/task-links/${task.master_task_id}`)
+      if (response.ok) {
+        const data = await response.json()
+        if (data.success) {
+          setLinkedDocuments(data.data || [])
+        }
+      }
+    } catch (error) {
+      console.error('Error loading linked documents:', error)
+      setLinkedDocuments([])
     }
   }
 
@@ -1177,6 +1196,36 @@ export default function TaskDetailModal({
                     </div>
                   )}
                 </div>
+
+                {/* Linked Policy Documents */}
+                {linkedDocuments.length > 0 && (
+                  <div className="bg-cyan-50 px-4 py-3 rounded-lg border border-cyan-200">
+                    <div className="flex items-center space-x-2 mb-3">
+                      <BookOpen className="h-4 w-4 text-cyan-600" />
+                      <span className="font-medium text-cyan-800">Linked Policy Documents</span>
+                    </div>
+                    <div className="space-y-2">
+                      {linkedDocuments.map((doc: any, index: number) => (
+                        <div key={index} className="bg-white px-3 py-2 rounded border border-cyan-200 hover:border-cyan-400 transition-colors">
+                          <button
+                            onClick={() => window.open(doc.document_link, '_blank')}
+                            className="w-full text-left flex items-center justify-between group"
+                          >
+                            <div className="flex items-center space-x-2 flex-1">
+                              <FileText className="h-4 w-4 text-cyan-600 flex-shrink-0" />
+                              <span className="text-sm text-cyan-700 group-hover:text-cyan-900 font-medium truncate">
+                                {doc.document_title}
+                              </span>
+                            </div>
+                            <Badge className="ml-2 bg-cyan-100 text-cyan-800 border-cyan-200 text-xs flex-shrink-0">
+                              {doc.document_type === 'task_instruction' ? 'Task Instruction' : 'General Policy'}
+                            </Badge>
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
 
                 {/* Task Payload */}
                 {task.payload && Object.keys(task.payload).length > 0 && (

@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
-import { Calendar, Clock, Tag, Users, CalendarDays, AlertCircle, CheckCircle2, Info, Plus, X as XIcon } from 'lucide-react'
+import { Calendar, Clock, Tag, Users, CalendarDays, AlertCircle, CheckCircle2, Info, Plus, X as XIcon, FileText, BookOpen } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -45,7 +45,8 @@ const taskFormSchema = z.object({
     'end_of_month_nov', 'end_of_month_dec'
   ])).min(1, 'At least one frequency is required'),
   start_date: z.string().optional(),
-  end_date: z.string().optional()
+  end_date: z.string().optional(),
+  linked_documents: z.array(z.string()).optional()
 })
 
 type TaskFormData = z.infer<typeof taskFormSchema>
@@ -60,6 +61,9 @@ export default function TaskFormNew({ task, onSubmit, onCancel }: TaskFormProps)
   const [showConfirmModal, setShowConfirmModal] = useState(false)
   const [responsibilityOptions, setResponsibilityOptions] = useState<{ value: string; label: string }[]>([])
   const [updateSource, setUpdateSource] = useState<'timing' | 'due_time' | null>(null) // Track which field initiated the update
+  const [policyDocuments, setPolicyDocuments] = useState<any[]>([])
+  const [loadingDocuments, setLoadingDocuments] = useState(false)
+  const [documentSearchQuery, setDocumentSearchQuery] = useState('')
 
   const isEditing = !!task
 
@@ -77,7 +81,8 @@ export default function TaskFormNew({ task, onSubmit, onCancel }: TaskFormProps)
       publish_delay: task?.publish_delay || undefined,
       frequencies: task?.frequencies || [],
       start_date: task?.start_date || getAustralianToday(),
-      end_date: task?.end_date || undefined
+      end_date: task?.end_date || undefined,
+      linked_documents: []
     }
   })
 
@@ -128,6 +133,48 @@ export default function TaskFormNew({ task, onSubmit, onCancel }: TaskFormProps)
     return () => { mounted = false }
   }, [])
 
+  // Load policy documents for linking
+  useEffect(() => {
+    let mounted = true
+      ; (async () => {
+        try {
+          setLoadingDocuments(true)
+          const response = await fetch('/api/resource-hub')
+          if (response.ok) {
+            const data = await response.json()
+            if (mounted && data.success) {
+              setPolicyDocuments(data.data || [])
+            }
+          }
+        } catch (error) {
+          console.error('Error loading policy documents:', error)
+        } finally {
+          if (mounted) setLoadingDocuments(false)
+        }
+      })()
+    return () => { mounted = false }
+  }, [])
+
+  // Load existing linked documents when editing
+  useEffect(() => {
+    if (task?.id) {
+      ; (async () => {
+        try {
+          const response = await fetch(`/api/resource-hub/task-links/${task.id}`)
+          if (response.ok) {
+            const data = await response.json()
+            if (data.success && data.data) {
+              const linkedDocIds = data.data.map((doc: any) => doc.id)
+              form.setValue('linked_documents', linkedDocIds)
+            }
+          }
+        } catch (error) {
+          console.error('Error loading linked documents:', error)
+        }
+      })()
+    }
+  }, [task?.id])
+
   // Note: Timing and due_time synchronization is now handled directly in custom handlers
   // to prevent infinite loops that were occurring with useEffect hooks
 
@@ -159,6 +206,11 @@ export default function TaskFormNew({ task, onSubmit, onCancel }: TaskFormProps)
 
     if (data.end_date && data.end_date.trim() !== '') {
       taskData.end_date = data.end_date
+    }
+
+    // Add linked documents if any
+    if (data.linked_documents && data.linked_documents.length > 0) {
+      taskData.linked_documents = data.linked_documents
     }
 
     console.log('Submitting task data:', taskData)
@@ -740,6 +792,160 @@ export default function TaskFormNew({ task, onSubmit, onCancel }: TaskFormProps)
           </CardContent>
         </Card>
         {/* </div> */}
+
+        {/* Linked Policy Documents */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center space-x-2">
+              <BookOpen className="h-5 w-5" />
+              <span>Linked Policy Documents</span>
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <Label>Policy Documents (Optional)</Label>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="w-auto"
+                      type="button"
+                      disabled={loadingDocuments}
+                    >
+                      <Plus className="mr-2 h-4 w-4" />
+                      {loadingDocuments ? 'Loading...' : 'Link Document'}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent
+                    className="w-96 p-2"
+                    align="start"
+                    onWheel={(e) => {
+                      e.stopPropagation();
+                    }}
+                  >
+                    <div className="space-y-2">
+                      {/* Search input */}
+                      <div className="p-2 border-b">
+                        <Input
+                          placeholder="Search documents..."
+                          value={documentSearchQuery}
+                          onChange={(e) => setDocumentSearchQuery(e.target.value)}
+                          className="h-8"
+                        />
+                      </div>
+                      
+                      {/* Document list grouped by category */}
+                      <div className="max-h-80 overflow-y-auto">
+                        {loadingDocuments ? (
+                          <div className="p-4 text-center text-sm text-muted-foreground">
+                            Loading documents...
+                          </div>
+                        ) : (
+                          (() => {
+                            // Filter documents based on search query
+                            const filteredDocs = policyDocuments.filter(doc =>
+                              doc.title.toLowerCase().includes(documentSearchQuery.toLowerCase()) ||
+                              doc.category.toLowerCase().includes(documentSearchQuery.toLowerCase())
+                            )
+
+                            // Group by category
+                            const groupedDocs = filteredDocs.reduce((acc: any, doc: any) => {
+                              if (!acc[doc.category]) {
+                                acc[doc.category] = []
+                              }
+                              acc[doc.category].push(doc)
+                              return acc
+                            }, {})
+
+                            const categories = Object.keys(groupedDocs).sort()
+
+                            if (categories.length === 0) {
+                              return (
+                                <div className="p-4 text-center text-sm text-muted-foreground">
+                                  {documentSearchQuery ? 'No documents found' : 'No documents available'}
+                                </div>
+                              )
+                            }
+
+                            return categories.map(category => (
+                              <div key={category} className="mb-3">
+                                <div className="px-2 py-1 text-xs font-semibold text-gray-500 uppercase">
+                                  {category.replace(/-/g, ' ')}
+                                </div>
+                                {groupedDocs[category].map((doc: any) => (
+                                  <div
+                                    key={doc.id}
+                                    className="flex items-start space-x-2 p-2 hover:bg-gray-50 rounded cursor-pointer"
+                                    onClick={() => {
+                                      const currentValues = form.watch('linked_documents') || [];
+                                      if (currentValues.includes(doc.id)) {
+                                        removeArrayItem('linked_documents', doc.id);
+                                      } else {
+                                        addArrayItem('linked_documents', doc.id);
+                                      }
+                                    }}
+                                  >
+                                    <Checkbox
+                                      checked={form.watch('linked_documents')?.includes(doc.id)}
+                                      readOnly
+                                      className="mt-0.5 data-[state=checked]:bg-blue-500 data-[state=checked]:border-blue-500 data-[state=checked]:text-white"
+                                    />
+                                    <div className="flex-1 min-w-0">
+                                      <div className="text-sm font-medium truncate">{doc.title}</div>
+                                      <div className="text-xs text-muted-foreground">
+                                        {doc.document_type === 'task_instruction' ? '📋 Task Instruction' : '📄 General Policy'}
+                                      </div>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            ))
+                          })()
+                        )}
+                      </div>
+                    </div>
+                  </PopoverContent>
+                </Popover>
+              </div>
+
+              <div>
+                <span className="text-xs text-muted-foreground mb-2 block">
+                  {form.watch('linked_documents')?.length || 0} document(s) linked
+                </span>
+
+                {/* Selected Documents */}
+                <div className="flex flex-wrap gap-2 min-h-[2rem]">
+                  {form.watch('linked_documents')?.map(docId => {
+                    const doc = policyDocuments.find(d => d.id === docId);
+                    if (!doc) return null;
+                    return (
+                      <Badge
+                        key={docId}
+                        className="bg-cyan-600 text-white hover:bg-cyan-700 px-3 py-1 flex items-center gap-2"
+                      >
+                        <FileText className="h-3 w-3" />
+                        {doc.title}
+                        <button
+                          type="button"
+                          className="hover:bg-cyan-800 rounded-full p-0.5"
+                          onClick={() => removeArrayItem('linked_documents', docId)}
+                        >
+                          <XIcon className="h-3 w-3" />
+                        </button>
+                      </Badge>
+                    );
+                  })}
+                </div>
+              </div>
+              
+              <p className="text-xs text-muted-foreground">
+                Link policy documents or instructions that staff should reference when completing this task.
+              </p>
+            </div>
+          </CardContent>
+        </Card>
 
         {/* Form Actions */}
         <div className="flex justify-end space-x-4 pt-4 border-t">
