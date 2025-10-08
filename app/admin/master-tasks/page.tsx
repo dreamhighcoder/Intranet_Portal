@@ -735,7 +735,7 @@ const TaskDetailsModal = ({ task, positions }: { task: MasterTask, positions: Po
         </Card>
 
         {/* Assignment & Responsibilities */}
-        <Card className="border-l-4 border-l-indigo-500 gap-2">
+        <Card className="border-l-4 border-l-indigo-500 gap-0">
           <CardHeader>
             <CardTitle className="text-lg flex items-center space-x-2">
               <Users className="h-5 w-5" />

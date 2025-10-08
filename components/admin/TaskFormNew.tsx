@@ -351,7 +351,7 @@ export default function TaskFormNew({ task, onSubmit, onCancel }: TaskFormProps)
       <form onSubmit={form.handleSubmit(handleSubmit)} className="flex-1 space-y-4 sm:space-y-6 pb-4">
 
         {/* Basic Information */}
-        <Card>
+        <Card className="gap-3">
           <CardHeader>
             <CardTitle className="flex items-center space-x-2">
               <CheckCircle2 className="h-5 w-5" />
@@ -439,18 +439,17 @@ export default function TaskFormNew({ task, onSubmit, onCancel }: TaskFormProps)
         </Card>
 
         {/* Responsibilities & Categories */}
-        <Card>
+        <Card className="gap-1">
           <CardHeader>
             <CardTitle className="flex items-center space-x-2">
               <Tag className="h-5 w-5" />
               <span>Responsibilities & Categories</span>
             </CardTitle>
           </CardHeader>
-          <CardContent className="space-y-6">
-
+          <CardContent className="space-y-0 gap-0">
             {/* Responsibilities Section */}
             <div className="space-y-3">
-              <div className="flex items-center justify-between">
+              <div className="flex items-center justify-between mb-0">
                 <Label>Responsibilities * (Multi-select)</Label>
                 <Popover>
                   <PopoverTrigger asChild>
@@ -533,7 +532,7 @@ export default function TaskFormNew({ task, onSubmit, onCancel }: TaskFormProps)
 
             {/* Categories Section */}
             <div className="space-y-3">
-              <div className="flex items-center justify-between">
+              <div className="flex items-center justify-between mb-0">
                 <Label>Categories * (Multi-select)</Label>
                 <Popover>
                   <PopoverTrigger asChild>
@@ -618,7 +617,7 @@ export default function TaskFormNew({ task, onSubmit, onCancel }: TaskFormProps)
 
         {/* <div className="grid grid-cols-1 md:grid-cols-2 gap-6"> */}
         {/* Frequency */}
-        <Card>
+        <Card className="gap-1">
           <CardHeader>
             <CardTitle className="flex items-center space-x-2">
               <CalendarDays className="h-5 w-5" />
@@ -626,10 +625,10 @@ export default function TaskFormNew({ task, onSubmit, onCancel }: TaskFormProps)
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-1 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-1 gap-0">
               {/* <div className="grid grid-cols-2 gap-4"> */}
               <div className="space-y-3">
-                <div className="flex items-center justify-between">
+                <div className="flex items-center justify-between mb-0">
                   <Label>Frequencies * (Multi-select)</Label>
                   <Popover>
                     <PopoverTrigger asChild>
@@ -742,7 +741,7 @@ export default function TaskFormNew({ task, onSubmit, onCancel }: TaskFormProps)
         </Card>
 
         {/* Publishing */}
-        <Card>
+        <Card className="gap-3">
           <CardHeader>
             <CardTitle className="flex items-center space-x-2">
               <AlertCircle className="h-5 w-5" />
@@ -794,7 +793,7 @@ export default function TaskFormNew({ task, onSubmit, onCancel }: TaskFormProps)
         {/* </div> */}
 
         {/* Linked Policy Documents */}
-        <Card>
+        <Card className="gap-1">
           <CardHeader>
             <CardTitle className="flex items-center space-x-2">
               <BookOpen className="h-5 w-5" />
@@ -803,7 +802,7 @@ export default function TaskFormNew({ task, onSubmit, onCancel }: TaskFormProps)
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="space-y-3">
-              <div className="flex items-center justify-between">
+              <div className="flex items-center justify-between mb-0">
                 <Label>Policy Documents (Optional)</Label>
                 <Popover>
                   <PopoverTrigger asChild>
