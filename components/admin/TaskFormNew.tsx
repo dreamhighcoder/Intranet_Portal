@@ -291,13 +291,13 @@ export default function TaskFormNew({ task, onSubmit, onCancel }: TaskFormProps)
     const timeValue = event.target.value
     setUpdateSource('due_time')
     form.setValue('due_time', timeValue)
-    
+
     // Auto-update timing based on due_time
     if (timeValue) {
       const newTiming = getTimingFromDueTime(timeValue)
       const currentTiming = form.getValues('timing')
       const currentDefaultTime = DEFAULT_DUE_TIMES[currentTiming as keyof typeof DEFAULT_DUE_TIMES]
-      
+
       // Only update timing if it's different and the due time doesn't match the default for current timing
       if (newTiming !== currentTiming && timeValue !== currentDefaultTime) {
         form.setValue('timing', newTiming as any)
@@ -835,7 +835,7 @@ export default function TaskFormNew({ task, onSubmit, onCancel }: TaskFormProps)
                           className="h-8"
                         />
                       </div>
-                      
+
                       {/* Document list grouped by category */}
                       <div className="max-h-80 overflow-y-auto">
                         {loadingDocuments ? (
@@ -894,9 +894,6 @@ export default function TaskFormNew({ task, onSubmit, onCancel }: TaskFormProps)
                                     />
                                     <div className="flex-1 min-w-0">
                                       <div className="text-sm font-medium truncate">{doc.title}</div>
-                                      <div className="text-xs text-muted-foreground">
-                                        {doc.document_type === 'task_instruction' ? '📋 Task Instruction' : '📄 General Policy'}
-                                      </div>
                                     </div>
                                   </div>
                                 ))}
@@ -939,7 +936,7 @@ export default function TaskFormNew({ task, onSubmit, onCancel }: TaskFormProps)
                   })}
                 </div>
               </div>
-              
+
               <p className="text-xs text-muted-foreground">
                 Link policy documents or instructions that staff should reference when completing this task.
               </p>

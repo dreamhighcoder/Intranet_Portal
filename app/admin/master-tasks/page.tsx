@@ -663,10 +663,34 @@ const Pagination = ({
 
 // Task Details Modal Component
 const TaskDetailsModal = ({ task, positions }: { task: MasterTask, positions: Position[] }) => {
+  const [linkedDocuments, setLinkedDocuments] = useState<any[]>([])
+
   const getPositionName = (positionId: string) => {
     const position = positions.find(p => p.id === positionId)
     return position?.name || 'Unknown Position'
   }
+
+  // Load linked documents when modal opens
+  useEffect(() => {
+    const loadLinkedDocuments = async () => {
+      try {
+        if (!task?.id) return
+
+        const response = await fetch(`/api/resource-hub/task-links/${task.id}`)
+        if (response.ok) {
+          const data = await response.json()
+          if (data.success) {
+            setLinkedDocuments(data.data || [])
+          }
+        }
+      } catch (error) {
+        console.error('Error loading linked documents:', error)
+        setLinkedDocuments([])
+      }
+    }
+
+    loadLinkedDocuments()
+  }, [task?.id])
 
   return (
     <DialogContent className="task-details-modal overflow-hidden flex flex-col" style={{ maxWidth: "80rem", width: "80vw", maxHeight: "90vh", height: "90vh" }}>
@@ -695,14 +719,14 @@ const TaskDetailsModal = ({ task, positions }: { task: MasterTask, positions: Po
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-              <div className="items-center  p-4 bg-gray-50 rounded-md border border-gray-100 shadow-sm">
-                <label className="font-medium text-gray-600">Title</label>
+              <div className="bg-blue-50 px-4 py-3 rounded-lg border border-blue-200">
+                <label className="font-medium text-blue-800">Title</label>
                 <p className="text-sm mt-2 font-medium">{task.title}</p>
               </div>
               {task.description && (
-                <div className="relative lg:col-span-3 items-center p-4 bg-gray-50 rounded-md border border-gray-100 shadow-sm">
-                  <label className="font-medium text-gray-600">Description</label>
-                  <p className="text-sm mt-2 bg-gray-50 rounded-md">{task.description}</p>
+                <div className="relative lg:col-span-3 items-center bg-blue-50 px-4 py-3 rounded-lg border border-blue-200">
+                  <label className="font-medium text-blue-800">Description</label>
+                  <p className="text-sm mt-2 text-blue-800">{task.description}</p>
                 </div>
               )}
 
@@ -720,8 +744,8 @@ const TaskDetailsModal = ({ task, positions }: { task: MasterTask, positions: Po
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="items-center  p-4 bg-gray-50 rounded-md border border-gray-100 shadow-sm">
-                <label className="font-medium text-gray-600">Responsibilities</label>
+              <div className="items-center bg-indigo-50 px-4 py-3 rounded-lg border border-indigo-200">
+                <label className="font-medium text-indigo-600">Responsibilities</label>
                 <div className="mt-2">
                   {task.responsibility && task.responsibility.length > 0 ? (
                     <div className="flex flex-wrap gap-1">
@@ -743,8 +767,8 @@ const TaskDetailsModal = ({ task, positions }: { task: MasterTask, positions: Po
                   )}
                 </div>
               </div>
-              <div className="items-center  p-4 bg-gray-50 rounded-md border border-gray-100 shadow-sm">
-                <label className="font-medium text-gray-600">Categories</label>
+              <div className="items-center bg-indigo-50 px-4 py-3 rounded-lg border border-indigo-200">
+                <label className="font-medium text-indigo-600">Categories</label>
                 <div className="mt-2">
                   {task.categories && task.categories.length > 0 ? (
                     <div className="flex flex-wrap gap-1">
@@ -780,8 +804,8 @@ const TaskDetailsModal = ({ task, positions }: { task: MasterTask, positions: Po
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-              <div className="relative lg:col-span-2 items-center p-4 bg-gray-50 rounded-md border border-gray-100 shadow-sm">
-                <label className="font-medium text-gray-600">Frequencies</label>
+              <div className="relative lg:col-span-2 items-center bg-green-50 px-4 py-3 rounded-lg border border-green-200">
+                <label className="font-medium text-green-600">Frequencies</label>
                 <div className="flex flex-wrap gap-1 mt-2">
                   {task.frequencies && task.frequencies.length > 0 ? (
                     task.frequencies.map((freq, index) => (
@@ -795,8 +819,8 @@ const TaskDetailsModal = ({ task, positions }: { task: MasterTask, positions: Po
                 </div>
               </div>
 
-              <div className="items-center  p-4 bg-gray-50 rounded-md border border-gray-100 shadow-sm">
-                <label className="font-medium text-gray-600">Timing</label>
+              <div className="items-center  bg-green-50 px-4 py-3 rounded-lg border border-green-200">
+                <label className="font-medium text-green-600">Timing</label>
                 <p className="text-sm mt-2">
                   {task.timing ? (
                     <Badge variant="outline" className={`
@@ -811,9 +835,9 @@ const TaskDetailsModal = ({ task, positions }: { task: MasterTask, positions: Po
                   ) : 'Not specified'}
                 </p>
               </div>
-              <div className="items-center p-4 bg-gray-50 rounded-md border border-gray-100 shadow-sm">
-                <label className="font-medium text-gray-600">Due Time</label>
-                <p className="text-sm mt-2 flex items-center gap-1">
+              <div className="items-center bg-green-50 px-4 py-3 rounded-lg border border-green-200">
+                <label className="font-medium text-green-600">Due Time</label>
+                <p className="text-sm mt-2 flex items-center gap-1 text-green-600">
                   <Clock className="h-3 w-3" />
                   {task.due_time || 'Not specified'}
                 </p>
@@ -834,9 +858,9 @@ const TaskDetailsModal = ({ task, positions }: { task: MasterTask, positions: Po
             <CardContent className="space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 {task.due_date && (
-                  <div className="flex items-center justify-between p-4 bg-gray-50 rounded-md border border-gray-100 shadow-sm">
-                    <label className="text-sm font-medium text-gray-600">Due Date (Once-off)</label>
-                    <p className="text-sm mt-1">{(() => {
+                  <div className="flex items-center justify-between bg-indigo-50 px-4 py-3 rounded-lg border border-indigo-200">
+                    <label className="text-sm font-medium text-indigo-600">Due Date (Once-off)</label>
+                    <p className="text-sm mt-1 text-indigo-600">{(() => {
                       const date = new Date(task.due_date)
                       const year = date.getFullYear()
                       const month = String(date.getMonth() + 1).padStart(2, '0')
@@ -846,9 +870,9 @@ const TaskDetailsModal = ({ task, positions }: { task: MasterTask, positions: Po
                   </div>
                 )}
                 {task.start_date && (
-                  <div className="flex items-center justify-between p-4 bg-gray-50 rounded-md border border-gray-100 shadow-sm">
-                    <label className="text-sm font-medium text-gray-600">Start Date</label>
-                    <p className="text-sm mt-1">{(() => {
+                  <div className="flex items-center justify-between bg-indigo-50 px-4 py-3 rounded-lg border border-indigo-200">
+                    <label className="font-medium text-indigo-600">Start Date</label>
+                    <p className="text-sm mt-1 text-indigo-600">{(() => {
                       const date = new Date(task.start_date)
                       const year = date.getFullYear()
                       const month = String(date.getMonth() + 1).padStart(2, '0')
@@ -858,9 +882,9 @@ const TaskDetailsModal = ({ task, positions }: { task: MasterTask, positions: Po
                   </div>
                 )}
                 {task.publish_delay && (
-                  <div className="flex items-center justify-between p-4 bg-gray-50 rounded-md border border-gray-100 shadow-sm">
-                    <label className="text-sm font-medium text-gray-600">Publish Delay</label>
-                    <p className="text-sm mt-1">{(() => {
+                  <div className="flex items-center justify-between bg-indigo-50 px-4 py-3 rounded-lg border border-indigo-200">
+                    <label className="text-sm font-medium text-indigo-600">Publish Delay</label>
+                    <p className="text-sm mt-1 text-indigo-600">{(() => {
                       const date = new Date(task.publish_delay)
                       const year = date.getFullYear()
                       const month = String(date.getMonth() + 1).padStart(2, '0')
@@ -870,9 +894,9 @@ const TaskDetailsModal = ({ task, positions }: { task: MasterTask, positions: Po
                   </div>
                 )}
                 {task.end_date && (
-                  <div className="flex items-center justify-between p-4 bg-gray-50 rounded-md border border-gray-100 shadow-sm">
-                    <label className="text-sm font-medium text-gray-600">End Date</label>
-                    <p className="text-sm mt-1">{(() => {
+                  <div className="flex items-center justify-between bg-indigo-50 px-4 py-3 rounded-lg border border-indigo-200">
+                    <label className="text-sm font-medium text-indigo-600">End Date</label>
+                    <p className="text-sm mt-1 text-indigo-600">{(() => {
                       const date = new Date(task.end_date)
                       const year = date.getFullYear()
                       const month = String(date.getMonth() + 1).padStart(2, '0')
@@ -882,6 +906,75 @@ const TaskDetailsModal = ({ task, positions }: { task: MasterTask, positions: Po
                   </div>
                 )}
 
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Linked Policy Documents */}
+        {linkedDocuments.length > 0 && (
+          <Card className="border-l-4 border-l-cyan-500 gap-2">
+            <CardHeader>
+              <CardTitle className="text-lg flex items-center space-x-2">
+                <BookOpen className="h-5 w-5" />
+                <span>Linked Policy Documents</span>
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-2">
+                {linkedDocuments.map((doc: any, index: number) => (
+                  <div key={index} className="bg-cyan-50 px-3 py-2 rounded border border-cyan-200 hover:border-cyan-400 transition-colors">
+                    <button
+                      onClick={() => {
+                        const rawUrl = doc.document_url || doc.document_link
+                        if (!rawUrl) return
+
+                        try {
+                          const isExternal = rawUrl.startsWith('http://') || rawUrl.startsWith('https://')
+                          const normalizedPath = rawUrl.startsWith('/') ? rawUrl : `/${rawUrl}`
+                          const targetUrl = isExternal ? rawUrl : `${window.location.origin}${normalizedPath}`
+                          window.open(targetUrl, '_blank', 'noopener,noreferrer')
+                        } catch (error) {
+                          console.error('Failed to open linked document:', error)
+                        }
+                      }}
+                      className="w-full text-left flex items-center justify-between group"
+                    >
+                      <div className="flex items-center space-x-2 flex-1 min-w-0">
+                        <FileText className="h-4 w-4 text-cyan-600 flex-shrink-0" />
+                        <div className="flex flex-col min-w-0 flex-1">
+                          <span
+                            className="text-sm text-cyan-700 group-hover:text-cyan-900 font-medium truncate block cursor-help"
+                            title={doc.document_title || doc.title || 'Untitled Document'}
+                          >
+                            {doc.document_title || doc.title || 'Untitled Document'}
+                          </span>
+                        </div>
+                      </div>
+                      {(doc.document_category || doc.category || doc.document_type || doc.documentType) && (
+                        <Badge className="ml-2 bg-cyan-100 text-cyan-800 border-cyan-200 text-xs flex-shrink-0">
+                          {(() => {
+                            const categoryValue = doc.document_category || doc.category
+                            if (categoryValue) {
+                              return categoryValue
+                                .replace(/_/g, ' ')
+                                .replace(/-/g, ' ')
+                                .replace(/\b\w/g, (c: string) => c.toUpperCase())
+                            }
+                            const typeValue = doc.document_type || doc.documentType
+                            if (typeValue) {
+                              return typeValue
+                                .replace(/_/g, ' ')
+                                .replace(/-/g, ' ')
+                                .replace(/\b\w/g, (c: string) => c.toUpperCase())
+                            }
+                            return 'Document'
+                          })()}
+                        </Badge>
+                      )}
+                    </button>
+                  </div>
+                ))}
               </div>
             </CardContent>
           </Card>
@@ -897,20 +990,23 @@ const TaskDetailsModal = ({ task, positions }: { task: MasterTask, positions: Po
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm text-gray-500">
-              <div>
-                <span className="font-medium">Created:</span> {(() => { const date = new Date(task.created_at); const y = date.getFullYear(); const m = String(date.getMonth() + 1).padStart(2, '0'); const d = String(date.getDate()).padStart(2, '0'); const hh = String(date.getHours()).padStart(2, '0'); const mm = String(date.getMinutes()).padStart(2, '0'); const ss = String(date.getSeconds()).padStart(2, '0'); return `${d}-${m}-${y} ${hh}:${mm}:${ss}`; })()}
+              <div className="flex items-center justify-between bg-yellow-50 px-4 py-3 rounded-lg border border-yellow-200">
+                <span className="font-medium text-yellow-600">Created:</span> <span className="text-yellow-600">{(() => { const date = new Date(task.created_at); const y = date.getFullYear(); const m = String(date.getMonth() + 1).padStart(2, '0'); const d = String(date.getDate()).padStart(2, '0'); const hh = String(date.getHours()).padStart(2, '0'); const mm = String(date.getMinutes()).padStart(2, '0'); const ss = String(date.getSeconds()).padStart(2, '0'); return `${d}-${m}-${y} ${hh}:${mm}:${ss}`; })()}
+                </span>
               </div>
-              <div>
-                <span className="font-medium">Updated:</span> {(() => { const date = new Date(task.updated_at); const y = date.getFullYear(); const m = String(date.getMonth() + 1).padStart(2, '0'); const d = String(date.getDate()).padStart(2, '0'); const hh = String(date.getHours()).padStart(2, '0'); const mm = String(date.getMinutes()).padStart(2, '0'); const ss = String(date.getSeconds()).padStart(2, '0'); return `${d}-${m}-${y} ${hh}:${mm}:${ss}`; })()}
+              <div className="flex items-center justify-between bg-yellow-50 px-4 py-3 rounded-lg border border-yellow-200">
+                <span className="font-medium text-yellow-600">Updated:</span>
+                <span className="text-yellow-600">{(() => { const date = new Date(task.updated_at); const y = date.getFullYear(); const m = String(date.getMonth() + 1).padStart(2, '0'); const d = String(date.getDate()).padStart(2, '0'); const hh = String(date.getHours()).padStart(2, '0'); const mm = String(date.getMinutes()).padStart(2, '0'); const ss = String(date.getSeconds()).padStart(2, '0'); return `${d}-${m}-${y} ${hh}:${mm}:${ss}`; })()}
+                </span>
               </div>
               {(task as any).created_by && (
                 <div>
-                  <span className="font-medium">Created By:</span> {(task as any).created_by}
+                  <span className="font-medium text-yellow-600">Created By:</span> {(task as any).created_by}
                 </div>
               )}
               {(task as any).updated_by && (
                 <div>
-                  <span className="font-medium">Updated By:</span> {(task as any).updated_by}
+                  <span className="font-medium text-yellow-600">Updated By:</span> {(task as any).updated_by}
                 </div>
               )}
             </div>
@@ -2273,7 +2369,7 @@ export default function AdminMasterTasksPage() {
                     setEditingTask(null)
                     setIsTaskDialogOpen(true)
                   }}
-                  className="bg-white text-blue-600 hover:bg-gray-100 w-full sm:w-auto"
+                  className="h-8 bg-white text-blue-600 hover:bg-gray-100 w-full sm:w-auto"
                 >
                   <Plus className="w-4 h-4 mr-2" />
                   New Task
@@ -2568,7 +2664,7 @@ export default function AdminMasterTasksPage() {
                   <Table className="table-fixed w-full">
                     <TableHeader>
                       <TableRow>
-                        <TableHead className="w-[3%] py-3 bg-gray-50 text-center">
+                        <TableHead className="w-[3%] py-4 bg-gray-50 text-center">
                           <Checkbox
                             checked={selectedTasks.size === paginatedTasks.length && paginatedTasks.length > 0}
                             onCheckedChange={handleSelectAll}
@@ -2581,17 +2677,17 @@ export default function AdminMasterTasksPage() {
                           sortField={sortField}
                           sortDirection={sortDirection}
                           onSort={handleSort}
-                          className="w-[51%] py-3 bg-gray-50"
+                          className="w-[50%] py-4 bg-gray-50"
                         >
                           Title & Description
                         </SortableHeader>
-                        <TableHead className="text-center w-[3%] py-3 bg-gray-50">Policy</TableHead>
+                        <TableHead className="text-center w-[4%] py-4 bg-gray-50">Policy</TableHead>
                         <SortableHeader
                           field="responsibility"
                           sortField={sortField}
                           sortDirection={sortDirection}
                           onSort={handleSort}
-                          className="text-center w-[11%] py-3 bg-gray-50"
+                          className="text-center w-[10%] py-4 bg-gray-50"
                         >
                           Responsibilities
                         </SortableHeader>
@@ -2600,7 +2696,7 @@ export default function AdminMasterTasksPage() {
                           sortField={sortField}
                           sortDirection={sortDirection}
                           onSort={handleSort}
-                          className="text-center w-[4%] py-3 bg-gray-50"
+                          className="text-center w-[4%] py-4 bg-gray-50"
                         >
                           Categories
                         </SortableHeader>
@@ -2609,7 +2705,7 @@ export default function AdminMasterTasksPage() {
                           sortField={sortField}
                           sortDirection={sortDirection}
                           onSort={handleSort}
-                          className="text-center w-[11%] py-3 bg-gray-50"
+                          className="text-center w-[11%] py-4 bg-gray-50"
                         >
                           Frequencies & Timing
                         </SortableHeader>
@@ -2618,7 +2714,7 @@ export default function AdminMasterTasksPage() {
                           sortField={sortField}
                           sortDirection={sortDirection}
                           onSort={handleSort}
-                          className="text-center w-[5%] py-3 bg-gray-50"
+                          className="text-center w-[5%] py-4 bg-gray-50"
                         >
                           Status
                         </SortableHeader>
@@ -2627,11 +2723,11 @@ export default function AdminMasterTasksPage() {
                           sortField={sortField}
                           sortDirection={sortDirection}
                           onSort={handleSort}
-                          className="text-center w-[5%] py-3 bg-gray-50"
+                          className="text-center w-[5%] py-4 bg-gray-50"
                         >
                           Due Time
                         </SortableHeader>
-                        <TableHead className="text-center w-[7%] py-3 bg-gray-50">Actions</TableHead>
+                        <TableHead className="text-center w-[7%] py-4 bg-gray-50">Actions</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -2668,26 +2764,36 @@ export default function AdminMasterTasksPage() {
                               </div>
                             </TableCell>
                             <TableCell className="text-center py-1">
-                              <div className="text-center max-w-full">
-                                {taskLinkedDocuments[task.id]?.length > 0 && (
-                                  <Button
-                                    size="sm"
-                                    variant="outline"
-                                    onClick={() => {
-                                      const docs = taskLinkedDocuments[task.id]
-                                      if (docs && docs.length > 0) {
-                                        window.open(docs[0].document_url, '_blank')
-                                      }
-                                    }}
-                                    title="View Instructions"
-                                    className="hover:bg-cyan-200 text-cyan-600 h-8 w-9 p-0"
-                                  >
-                                    <BookOpen className="h-6 w-6" />
-                                  </Button>
-                                )}
+                              <div className="max-w-full">
+                                {taskLinkedDocuments[task.id]?.length > 0 && (() => {
+                                  const documents = taskLinkedDocuments[task.id]
+                                  const docCount = documents.length
+                                  const gridColsClass =
+                                    docCount === 1 ? 'grid-cols-1' : docCount === 2 ? 'grid-cols-2' : 'grid-cols-3'
+                                  const buttonSizeClass =
+                                    docCount === 1 ? 'h-8 w-8' : docCount === 2 ? 'h-7 w-6' : docCount === 3 ? 'h-7 w-5' : 'h-5 w-5'
+                                  const iconSizeClass =
+                                    docCount === 1 ? 'h-6 w-6' : docCount === 2 ? 'h-4 w-4' : 'h-3 w-3'
+                                  return (
+                                    <div className={`grid ${gridColsClass} gap-1 justify-items-center mx-auto w-fit`}>
+                                      {documents.map((doc) => (
+                                        <Button
+                                          key={doc.id}
+                                          size="sm"
+                                          variant="outline"
+                                          onClick={() => window.open(doc.document_url, '_blank')}
+                                          title={docCount === 1 ? 'View Instructions' : `View Instructions - ${doc.title}`}
+                                          className={`hover:bg-cyan-200 text-cyan-600 ${buttonSizeClass} p-0`}
+                                        >
+                                          <BookOpen className={iconSizeClass} />
+                                        </Button>
+                                      ))}
+                                    </div>
+                                  )
+                                })()}
                               </div>
                             </TableCell>
-                            <TableCell className="py-3">
+                            <TableCell className="py-1">
                               <div className="justify-center max-w-full overflow-hidden">
                                 {task.responsibility && task.responsibility.length > 0 ? (
                                   renderTruncatedArray(task.responsibility, 2, "secondary", "responsibility")
@@ -2701,7 +2807,7 @@ export default function AdminMasterTasksPage() {
                                 )}
                               </div>
                             </TableCell>
-                            <TableCell className="text-center py-3">
+                            <TableCell className="text-center py-1">
                               <div className="justify-center max-w-full overflow-hidden">
                                 {task.categories && task.categories.length > 0 ? (
                                   renderTruncatedArray(task.categories, 2, "outline", "category")
@@ -2715,7 +2821,7 @@ export default function AdminMasterTasksPage() {
                                 )}
                               </div>
                             </TableCell>
-                            <TableCell className="py-3">
+                            <TableCell className="py-2">
                               <div className="justify-center max-w-full overflow-hidden">
                                 {renderFrequencyWithDetails(task)}
                               </div>

@@ -24,18 +24,18 @@ export default function UsersPositionsPage() {
   const [positions, setPositions] = useState<Position[]>([])
   const [users, setUsers] = useState<UserProfile[]>([])
   const [isLoadingData, setIsLoadingData] = useState(true)
-  
+
   // Dialog states
   const [positionDialogOpen, setPositionDialogOpen] = useState(false)
   const [userDialogOpen, setUserDialogOpen] = useState(false)
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
-  
+
   // Selected items for editing
   const [selectedPosition, setSelectedPosition] = useState<Position | null>(null)
   const [selectedUser, setSelectedUser] = useState<UserProfile | null>(null)
   const [itemToDelete, setItemToDelete] = useState<{ type: 'position' | 'user'; id: string; name: string } | null>(null)
   const [isDeleting, setIsDeleting] = useState(false)
-  
+
   // Password visibility state for each position
   const [passwordVisibility, setPasswordVisibility] = useState<Record<string, boolean>>({})
 
@@ -48,7 +48,7 @@ export default function UsersPositionsPage() {
   useEffect(() => {
     async function fetchData() {
       if (!isAdmin) return
-      
+
       setIsLoadingData(true)
       try {
         // Fetch positions and users using authenticated API client
@@ -82,7 +82,7 @@ export default function UsersPositionsPage() {
   // Helper function to safely format dates with time - DD-MM-YYYY format
   const formatDateTime = (dateString: string | undefined | null) => {
     if (!dateString) return "Unknown"
-    
+
     try {
       const date = new Date(dateString)
       if (isNaN(date.getTime())) {
@@ -127,23 +127,23 @@ export default function UsersPositionsPage() {
 
   // Count total admins for delete protection (both user profiles and position-based)
   const adminUserCount = users.filter((user: UserProfile) => user.role === "admin").length
-  const adminPositionCount = positions.filter((position: Position) => 
+  const adminPositionCount = positions.filter((position: Position) =>
     position.name === 'Administrator'
   ).length
-  
+
   const totalAdminCount = adminUserCount + adminPositionCount
-  
+
   // Debug logging
   console.log("🔍 Admin count analysis:", {
     adminUserCount,
-    adminPositionCount, 
+    adminPositionCount,
     totalAdminCount,
     adminUsers: users.filter((user: UserProfile) => user.role === "admin").map((u: UserProfile) => ({
       id: u.id,
       displayName: u.display_name,
       role: u.role
     })),
-    adminPositions: positions.filter((p: Position) => 
+    adminPositions: positions.filter((p: Position) =>
       p.password_hash && (p.name.toLowerCase().includes('administrator') || p.name.toLowerCase().includes('admin'))
     ).map((p: Position) => ({
       id: p.id,
@@ -151,7 +151,7 @@ export default function UsersPositionsPage() {
       hasPassword: !!p.password_hash
     }))
   })
-  
+
   // Permission check functions
   const canManageAdmins = () => {
     return isSuperAdmin
@@ -167,12 +167,12 @@ export default function UsersPositionsPage() {
     if (isSuperAdmin) {
       return true
     }
-    
+
     // Regular admins cannot delete Administrator position
     if (position.name === 'Administrator') {
       return false
     }
-    
+
     // Regular admins can delete non-admin positions
     return true
   }
@@ -182,12 +182,12 @@ export default function UsersPositionsPage() {
     if (isSuperAdmin) {
       return userProfile.id !== user?.id
     }
-    
+
     // Regular admins cannot delete admin users
     if (userProfile.role === 'admin') {
       return false
     }
-    
+
     // Regular admins can delete non-admin users
     return true
   }
@@ -197,17 +197,17 @@ export default function UsersPositionsPage() {
     if (isSuperAdmin) {
       return true
     }
-    
+
     // Regular admins can edit their own account
     if (userProfile.id === user?.id) {
       return true
     }
-    
+
     // Regular admins cannot edit other admin users
     if (userProfile.role === 'admin') {
       return false
     }
-    
+
     // Regular admins can edit non-admin users
     return true
   }
@@ -224,7 +224,7 @@ export default function UsersPositionsPage() {
     if (isSuperAdmin) {
       return true
     }
-    
+
     // Regular admins cannot view Administrator password (unless it's their own by password match)
     if (position.name === 'Administrator') {
       if (user?.position?.password && position.password_hash) {
@@ -233,7 +233,7 @@ export default function UsersPositionsPage() {
       }
       return false
     }
-    
+
     // Regular admins can view non-admin position passwords
     return true
   }
@@ -244,7 +244,7 @@ export default function UsersPositionsPage() {
     if (isSuperAdmin) {
       return true
     }
-    
+
     // Regular admins cannot edit Administrator position (unless it's their own by password match)
     if (position.name === 'Administrator') {
       // Check if this is their own position by comparing the password
@@ -254,7 +254,7 @@ export default function UsersPositionsPage() {
       }
       return false
     }
-    
+
     // Regular admins can edit non-admin positions
     return true
   }
@@ -272,14 +272,14 @@ export default function UsersPositionsPage() {
     if (!position.password_hash) {
       return "No password set"
     }
-    
+
     if (!canViewPassword(position)) {
       return "••••••••"
     }
-    
+
     const decodedPassword = atob(position.password_hash)
     const isVisible = passwordVisibility[position.id]
-    
+
     return isVisible ? decodedPassword : "••••••••"
   }
 
@@ -287,7 +287,7 @@ export default function UsersPositionsPage() {
     try {
       // Clear positions cache to ensure fresh data
       PositionAuthService.clearCache()
-      
+
       const [positionsData, usersData] = await Promise.all([
         positionsApi.getAll(),
         authenticatedGet('/api/user-profiles')
@@ -320,16 +320,16 @@ export default function UsersPositionsPage() {
     console.log("=== DELETE POSITION CLICKED ===")
     console.log("Position to delete:", position)
     console.log("Position name:", position.name)
-    console.log("Is admin position:", position.password_hash && 
+    console.log("Is admin position:", position.password_hash &&
       (position.name.toLowerCase().includes('administrator') || position.name.toLowerCase().includes('admin')))
     console.log("Can delete this position:", canDeletePosition(position))
-    
+
     if (!canDeletePosition(position)) {
       console.log("DELETE BLOCKED: Cannot delete this position")
       toastError("Cannot Delete", "Cannot delete the last administrator position. At least one admin (user or position) must remain.")
       return
     }
-    
+
     setItemToDelete({ type: 'position', id: position.id, name: position.name })
     setDeleteDialogOpen(true)
   }
@@ -351,13 +351,13 @@ export default function UsersPositionsPage() {
     console.log("User role:", user.role)
     console.log("Current admin count:", totalAdminCount)
     console.log("Can delete this user:", canDeleteUser(user))
-    
+
     if (!canDeleteUser(user)) {
       console.log("DELETE BLOCKED: Cannot delete this user")
       toastError("Cannot Delete", "Cannot delete the last administrator. At least one admin (user or position) must remain.")
       return
     }
-    
+
     setItemToDelete({ type: 'user', id: user.id, name: user.display_name || user.id })
     setDeleteDialogOpen(true)
   }
@@ -367,31 +367,31 @@ export default function UsersPositionsPage() {
     if (!itemToDelete) return
 
     setIsDeleting(true)
-    
+
     try {
-      const endpoint = itemToDelete.type === 'position' 
+      const endpoint = itemToDelete.type === 'position'
         ? `/api/positions/${itemToDelete.id}`
         : `/api/user-profiles/${itemToDelete.id}`
-      
+
       await authenticatedDelete(endpoint)
-      
+
       toastSuccess(
         `${itemToDelete.type === 'position' ? 'Position' : 'User'} Deleted`,
         `${itemToDelete.name} has been deleted successfully`
       )
-      
+
       // Clear positions cache if a position was deleted
       if (itemToDelete.type === 'position') {
         PositionAuthService.clearCache()
       }
-      
+
       await refreshData()
       setDeleteDialogOpen(false)
       setItemToDelete(null)
     } catch (error) {
       console.error('Error deleting item:', error)
       toastError(
-        "Delete Failed", 
+        "Delete Failed",
         `Failed to delete ${itemToDelete.type}. Please try again.`
       )
     } finally {
@@ -427,22 +427,20 @@ export default function UsersPositionsPage() {
         <div className="flex space-x-1 mb-6 bg-gray-100 p-1 rounded-lg w-fit">
           <button
             onClick={() => setActiveTab("positions")}
-            className={`flex items-center space-x-2 px-4 py-2 rounded-md text-sm font-medium transition-colors ${
-              activeTab === "positions"
-                ? "bg-white text-[var(--color-primary)] shadow-sm"
-                : "text-gray-600 hover:text-gray-900"
-            }`}
+            className={`flex items-center space-x-2 px-4 py-2 rounded-md text-sm font-medium transition-colors ${activeTab === "positions"
+              ? "bg-white text-[var(--color-primary)] shadow-sm"
+              : "text-gray-600 hover:text-gray-900"
+              }`}
           >
             <Briefcase className="w-4 h-4" />
             <span>Positions</span>
           </button>
           <button
             onClick={() => setActiveTab("order")}
-            className={`flex items-center space-x-2 px-4 py-2 rounded-md text-sm font-medium transition-colors ${
-              activeTab === "order"
-                ? "bg-white text-[var(--color-primary)] shadow-sm"
-                : "text-gray-600 hover:text-gray-900"
-            }`}
+            className={`h-8 flex items-center space-x-2 px-4 py-2 rounded-md text-sm font-medium transition-colors ${activeTab === "order"
+              ? "h-8 bg-white text-[var(--color-primary)] shadow-sm"
+              : "h-8 text-gray-600 hover:text-gray-900"
+              }`}
             title="Reorder positions (excluding Administrator)"
           >
             <Briefcase className="w-4 h-4" />
@@ -450,11 +448,10 @@ export default function UsersPositionsPage() {
           </button>
           <button
             onClick={() => setActiveTab("users")}
-            className={`flex items-center space-x-2 px-4 py-2 rounded-md text-sm font-medium transition-colors ${
-              activeTab === "users"
-                ? "bg-white text-[var(--color-primary)] shadow-sm"
-                : "text-gray-600 hover:text-gray-900"
-            }`}
+            className={`flex items-center space-x-2 px-4 py-2 rounded-md text-sm font-medium transition-colors ${activeTab === "users"
+              ? "bg-white text-[var(--color-primary)] shadow-sm"
+              : "text-gray-600 hover:text-gray-900"
+              }`}
           >
             <Users className="w-4 h-4" />
             <span>Users</span>
@@ -467,8 +464,8 @@ export default function UsersPositionsPage() {
             <CardHeader>
               <div className="flex items-center justify-between">
                 <CardTitle>Positions</CardTitle>
-                <Button 
-                  className="bg-[var(--color-primary)] hover:bg-[var(--color-primary)]/90 text-white"
+                <Button
+                  className="h-8 bg-[var(--color-primary)] hover:bg-[var(--color-primary)]/90 text-white"
                   onClick={handleAddPosition}
                 >
                   <Plus className="w-4 h-4 mr-2" />
@@ -480,13 +477,13 @@ export default function UsersPositionsPage() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead className="w-[15%] py-3 bg-gray-50">Name</TableHead>
-                    <TableHead className="w-[30%] py-3 bg-gray-50">Description</TableHead>
-                    <TableHead className="w-[10%] py-3 bg-gray-50">Type</TableHead>
-                    <TableHead className="w-[10%] py-3 bg-gray-50">Password</TableHead>
-                    <TableHead className="w-[15%] py-3 bg-gray-50">Created</TableHead>
-                    <TableHead className="w-[15%] py-3 bg-gray-50">Updated</TableHead>
-                    <TableHead className="w-[10%] py-3 bg-gray-50 text-center">Actions</TableHead>
+                    <TableHead className="w-[15%] py-4 bg-gray-50">Name</TableHead>
+                    <TableHead className="w-[30%] py-4 bg-gray-50">Description</TableHead>
+                    <TableHead className="w-[10%] py-4 bg-gray-50">Type</TableHead>
+                    <TableHead className="w-[10%] py-4 bg-gray-50">Password</TableHead>
+                    <TableHead className="w-[15%] py-4 bg-gray-50">Created</TableHead>
+                    <TableHead className="w-[15%] py-4 bg-gray-50">Updated</TableHead>
+                    <TableHead className="w-[10%] py-4 bg-gray-50 text-center">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -545,12 +542,12 @@ export default function UsersPositionsPage() {
                       <TableCell className="justify-center">{formatDateTime(position.updated_at)}</TableCell>
                       <TableCell>
                         <div className="flex items-center space-x-2">
-                          <Button 
-                            size="sm" 
+                          <Button
+                            size="sm"
                             variant="outline"
                             onClick={() => handleEditPosition(position)}
                             disabled={!canEditPosition(position)}
-                            className={!canEditPosition(position) ? "text-gray-400 hover:text-gray-400 bg-gray-50 cursor-not-allowed" : ""}
+                            className={!canEditPosition(position) ? "h-8 w-8 text-gray-400 hover:text-gray-400 bg-gray-50 cursor-not-allowed" : "h-8 w-8"}
                             title={!canEditPosition(position) ? "Cannot edit other admin positions" : "Edit position"}
                           >
                             <Edit className="w-4 h-4" />
@@ -560,12 +557,12 @@ export default function UsersPositionsPage() {
                             variant="outline"
                             onClick={() => handleDeletePosition(position)}
                             className={`${!canDeletePosition(position)
-                              ? "text-gray-400 hover:text-gray-400 bg-gray-50 cursor-not-allowed" 
-                              : "text-red-600 hover:text-red-700 bg-transparent"
-                            }`}
+                              ? "h-8 w-8 text-gray-400 hover:text-gray-400 bg-gray-50 cursor-not-allowed"
+                              : "h-8 w-8 text-red-600 hover:text-red-700 bg-transparent"
+                              }`}
                             disabled={!canDeletePosition(position)}
-                            title={!canDeletePosition(position) ? 
-                              (position.is_super_admin ? "Cannot delete Super Admin position" : "Cannot delete admin position") 
+                            title={!canDeletePosition(position) ?
+                              (position.is_super_admin ? "Cannot delete Super Admin position" : "Cannot delete admin position")
                               : "Delete position"
                             }
                           >
@@ -587,8 +584,8 @@ export default function UsersPositionsPage() {
             <CardHeader>
               <div className="flex items-center justify-between">
                 <CardTitle>Reorder Positions</CardTitle>
-                <Button 
-                  className="bg-[var(--color-primary)] hover:bg-[var(--color-primary)]/90 text-white"
+                <Button
+                  className="h-8 bg-[var(--color-primary)] hover:bg-[var(--color-primary)]/90 text-white"
                   onClick={async () => {
                     try {
                       // Build new order for non-admin positions only
@@ -665,8 +662,8 @@ export default function UsersPositionsPage() {
             <CardHeader>
               <div className="flex items-center justify-between">
                 <CardTitle>Users</CardTitle>
-                <Button 
-                  className="bg-[var(--color-primary)] hover:bg-[var(--color-primary)]/90 text-white"
+                <Button
+                  className="h-8 bg-[var(--color-primary)] hover:bg-[var(--color-primary)]/90 text-white"
                   onClick={handleAddUser}
                   disabled={!canAddUser()}
                   title={!canAddUser() ? "Admin access required to add users" : "Add User"}
@@ -680,12 +677,12 @@ export default function UsersPositionsPage() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead className="w-[20%] py-3 bg-gray-50">Name</TableHead>
-                    <TableHead className="w-[20%] py-3 bg-gray-50">Email</TableHead>
-                    <TableHead className="w-[20%] py-3 bg-gray-50">Position</TableHead>
-                    <TableHead className="w-[10%] py-3 bg-gray-50">Role</TableHead>
-                    <TableHead className="w-[20%] py-3 bg-gray-50">Last Login</TableHead>
-                    <TableHead className="w-[10%] py-3 bg-gray-50">Actions</TableHead>
+                    <TableHead className="w-[20%] py-4 bg-gray-50">Name</TableHead>
+                    <TableHead className="w-[20%] py-4 bg-gray-50">Email</TableHead>
+                    <TableHead className="w-[20%] py-4 bg-gray-50">Position</TableHead>
+                    <TableHead className="w-[10%] py-4 bg-gray-50">Role</TableHead>
+                    <TableHead className="w-[20%] py-4 bg-gray-50">Last Login</TableHead>
+                    <TableHead className="w-[10%] py-4 bg-gray-50">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -708,19 +705,19 @@ export default function UsersPositionsPage() {
                         </Badge>
                       </TableCell>
                       <TableCell>
-                        {userProfile.last_login 
+                        {userProfile.last_login
                           ? formatDateTime(userProfile.last_login)
                           : (formatDateTime(userProfile.updated_at) !== "Unknown" ? formatDateTime(userProfile.updated_at) : "Never")
                         }
                       </TableCell>
                       <TableCell>
                         <div className="flex items-center space-x-2">
-                          <Button 
-                            size="sm" 
+                          <Button
+                            size="sm"
                             variant="outline"
                             onClick={() => handleEditUser(userProfile)}
                             disabled={!canEditUser(userProfile)}
-                            className={!canEditUser(userProfile) ? "text-gray-400 hover:text-gray-400 bg-gray-50 cursor-not-allowed" : ""}
+                            className={!canEditUser(userProfile) ? "h-8 w-8 text-gray-400 hover:text-gray-400 bg-gray-50 cursor-not-allowed" : "h-8 w-8"}
                             title={!canEditUser(userProfile) ? "Cannot edit other admin users" : "Edit user"}
                           >
                             <Edit className="w-4 h-4" />
@@ -729,13 +726,13 @@ export default function UsersPositionsPage() {
                             size="sm"
                             variant="outline"
                             onClick={() => handleDeleteUser(userProfile)}
-                            className={`${!canDeleteUser(userProfile) 
-                              ? "text-gray-400 hover:text-gray-400 bg-gray-50 cursor-not-allowed" 
-                              : "text-red-600 hover:text-red-700 bg-transparent"
-                            }`}
+                            className={`${!canDeleteUser(userProfile)
+                              ? "h-8 w-8 text-gray-400 hover:text-gray-400 bg-gray-50 cursor-not-allowed"
+                              : "h-8 w-8 text-red-600 hover:text-red-700 bg-transparent"
+                              }`}
                             disabled={!canDeleteUser(userProfile)}
-                            title={!canDeleteUser(userProfile) ? 
-                              (userProfile.role === 'admin' ? "Cannot delete admin users" : "Cannot delete the last administrator") 
+                            title={!canDeleteUser(userProfile) ?
+                              (userProfile.role === 'admin' ? "Cannot delete admin users" : "Cannot delete the last administrator")
                               : "Delete user"
                             }
                           >

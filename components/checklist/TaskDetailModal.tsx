@@ -99,7 +99,7 @@ export default function TaskDetailModal({
   const loadLinkedDocuments = async () => {
     try {
       if (!task?.master_task_id) return
-      
+
       const response = await fetch(`/api/resource-hub/task-links/${task.master_task_id}`)
       if (response.ok) {
         const data = await response.json()
@@ -1208,18 +1208,53 @@ export default function TaskDetailModal({
                       {linkedDocuments.map((doc: any, index: number) => (
                         <div key={index} className="bg-white px-3 py-2 rounded border border-cyan-200 hover:border-cyan-400 transition-colors">
                           <button
-                            onClick={() => window.open(doc.document_link, '_blank')}
+                            onClick={() => {
+                              const rawUrl = doc.document_url || doc.document_link
+                              if (!rawUrl) return
+
+                              try {
+                                const isExternal = rawUrl.startsWith('http://') || rawUrl.startsWith('https://')
+                                const normalizedPath = rawUrl.startsWith('/') ? rawUrl : `/${rawUrl}`
+                                const targetUrl = isExternal ? rawUrl : `${window.location.origin}${normalizedPath}`
+                                window.open(targetUrl, '_blank', 'noopener,noreferrer')
+                              } catch (error) {
+                                console.error('Failed to open linked document:', error)
+                              }
+                            }}
                             className="w-full text-left flex items-center justify-between group"
                           >
-                            <div className="flex items-center space-x-2 flex-1">
+                            <div className="flex items-center space-x-2 flex-1 min-w-0">
                               <FileText className="h-4 w-4 text-cyan-600 flex-shrink-0" />
-                              <span className="text-sm text-cyan-700 group-hover:text-cyan-900 font-medium truncate">
-                                {doc.document_title}
-                              </span>
+                              <div className="flex flex-col min-w-0 flex-1">
+                                <span
+                                  className="text-sm text-cyan-700 group-hover:text-cyan-900 font-medium truncate block cursor-help"
+                                  title={doc.document_title || doc.title || 'Untitled Document'}
+                                >
+                                  {doc.document_title || doc.title || 'Untitled Document'}
+                                </span>
+                              </div>
                             </div>
-                            <Badge className="ml-2 bg-cyan-100 text-cyan-800 border-cyan-200 text-xs flex-shrink-0">
-                              {doc.document_type === 'task_instruction' ? 'Task Instruction' : 'General Policy'}
-                            </Badge>
+                            {(doc.document_category || doc.category || doc.document_type || doc.documentType) && (
+                              <Badge className="ml-2 bg-cyan-100 text-cyan-800 border-cyan-200 text-xs flex-shrink-0">
+                                {(() => {
+                                  const categoryValue = doc.document_category || doc.category
+                                  if (categoryValue) {
+                                    return categoryValue
+                                      .replace(/_/g, ' ')
+                                      .replace(/-/g, ' ')
+                                      .replace(/\b\w/g, (c: string) => c.toUpperCase())
+                                  }
+                                  const typeValue = doc.document_type || doc.documentType
+                                  if (typeValue) {
+                                    return typeValue
+                                      .replace(/_/g, ' ')
+                                      .replace(/-/g, ' ')
+                                      .replace(/\b\w/g, (c: string) => c.toUpperCase())
+                                  }
+                                  return 'Document'
+                                })()}
+                              </Badge>
+                            )}
                           </button>
                         </div>
                       ))}

@@ -879,8 +879,10 @@ export default function ResourceHubPage() {
                             </span>
                           ) : null}
                         </TableCell>
-                        <TableCell className="font-medium">
-                          <span>{doc.title}</span>
+                        <TableCell className="font-medium max-w-0">
+                          <span className="truncate block cursor-help" title={doc.title}>
+                            {doc.title}
+                          </span>
                         </TableCell>
                         <TableCell className="py-4 text-center">
                           <Badge className={DOCUMENT_CATEGORY_CONFIG[doc.category]?.color || 'bg-gray-100'}>

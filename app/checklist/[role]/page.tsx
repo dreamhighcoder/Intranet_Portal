@@ -2826,7 +2826,7 @@ export default function RoleChecklistPage() {
                   <Button
                     asChild
                     variant="outline"
-                    className="bg-white text-blue-600 hover:bg-gray-100 w-full sm:w-auto"
+                    className="h-8 bg-white text-blue-600 hover:bg-gray-100 w-full sm:w-auto"
                   >
                     <Link href="/admin/master-tasks">
                       <Settings className="w-4 h-4 text-blue-600" />
@@ -3038,32 +3038,32 @@ export default function RoleChecklistPage() {
                   <Table className="table-fixed w-full">
                     <TableHeader>
                       <TableRow>
-                        <TableHead className="text-center w-[3%] py-3 bg-gray-50">New</TableHead>
-                        <TableHead className={isAdmin ? "w-[54] py-3 bg-gray-50" : "w-[58] py-3 bg-gray-50"}>
+                        <TableHead className="text-center w-[3%] py-4 bg-gray-50">New</TableHead>
+                        <TableHead className={isAdmin ? "w-[53] py-4 bg-gray-50" : "w-[57] py-4 bg-gray-50"}>
                           Title & Description
                         </TableHead>
-                        <TableHead className="text-center w-[3%] py-3 bg-gray-50">Policy</TableHead>
+                        <TableHead className="text-center w-[4%] py-4 bg-gray-50">Policy</TableHead>
                         {isAdmin && (
-                          <TableHead className="text-center w-[10%] py-3 bg-gray-50">
+                          <TableHead className="text-center w-[10%] py-4 bg-gray-50">
                             Responsibility
                           </TableHead>
                         )}
                         {!isAdmin && (
-                          <TableHead className="text-center w-[4%] py-3 bg-gray-50">
+                          <TableHead className="text-center w-[4%] py-4 bg-gray-50">
                             Shared
                           </TableHead>
                         )}
-                        <TableHead className="text-center w-[4%] py-3 bg-gray-50">
+                        <TableHead className="text-center w-[4%] py-4 bg-gray-50">
                           Category
                         </TableHead>
-                        <TableHead className="text-center w-[9%] py-3 bg-gray-50">
+                        <TableHead className="text-center w-[9%] py-4 bg-gray-50">
                           Frequencies
                         </TableHead>
-                        <TableHead className="text-center w-[5%] py-3 bg-gray-50">
+                        <TableHead className="text-center w-[5%] py-4 bg-gray-50">
                           Due Time
                         </TableHead>
-                        <TableHead className="text-center w-[7%] py-3 bg-gray-50">Status</TableHead>
-                        <TableHead className={isAdmin ? "text-center w-[5%] py-3 bg-gray-50" : "text-center w-[7%] py-3 bg-gray-50"}>Actions</TableHead>
+                        <TableHead className="text-center w-[7%] py-4 bg-gray-50">Status</TableHead>
+                        <TableHead className={isAdmin ? "text-center w-[5%] py-4 bg-gray-50" : "text-center w-[7%] py-4 bg-gray-50"}>Actions</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -3088,7 +3088,7 @@ export default function RoleChecklistPage() {
                             </div>
                           </TableCell>
 
-                          <TableCell className="py-3">
+                          <TableCell className="py-1">
                             <div className="max-w-full">
                               <div className="flex items-center gap-2">
                                 <div className="min-w-0">
@@ -3107,27 +3107,37 @@ export default function RoleChecklistPage() {
 
                           <TableCell className="text-center py-1">
                             <div className="text-center max-w-full">
-                              {taskLinkedDocuments[task.master_task_id]?.length > 0 && (
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  onClick={() => {
-                                    const docs = taskLinkedDocuments[task.master_task_id]
-                                    if (docs && docs.length > 0) {
-                                      window.open(docs[0].document_url, '_blank')
-                                    }
-                                  }}
-                                  title="View Instructions"
-                                  className="hover:bg-cyan-200 text-cyan-600 h-8 w-9 p-0"
-                                >
-                                  <BookOpen className="h-6 w-6" />
-                                </Button>
-                              )}
+                              {taskLinkedDocuments[task.master_task_id]?.length > 0 && (() => {
+                                const documents = taskLinkedDocuments[task.master_task_id]
+                                const docCount = documents.length
+                                const gridColsClass =
+                                  docCount === 1 ? 'grid-cols-1' : docCount === 2 ? 'grid-cols-2' : 'grid-cols-3'
+                                const buttonSizeClass =
+                                  docCount === 1 ? 'h-8 w-8' : docCount === 2 ? 'h-7 w-6' : docCount === 3 ? 'h-7 w-5' : 'h-5 w-5'
+                                const iconSizeClass =
+                                  docCount === 1 ? 'h-6 w-6' : docCount === 2 ? 'h-4 w-4' : 'h-3 w-3'
+                                return (
+                                  <div className={`grid ${gridColsClass} gap-1 justify-items-center mx-auto w-fit`}>
+                                    {documents.map((doc) => (
+                                      <Button
+                                        key={doc.id}
+                                        size="sm"
+                                        variant="outline"
+                                        onClick={() => window.open(doc.document_url, '_blank')}
+                                        title={docCount === 1 ? 'View Instructions' : `View Instructions - ${doc.title}`}
+                                        className={`hover:bg-cyan-200 text-cyan-600 ${buttonSizeClass} p-0`}
+                                      >
+                                        <BookOpen className={iconSizeClass} />
+                                      </Button>
+                                    ))}
+                                  </div>
+                                )
+                              })()}
                             </div>
                           </TableCell>
 
                           {isAdmin && (
-                            <TableCell className="py-3">
+                            <TableCell className="py-1">
                               <div className="max-w-full overflow-hidden">
                                 <div className="justify-center flex flex-wrap gap-1">
                                   {renderBadgesWithTruncation(task.master_task.responsibility, 2, 'responsibility')}
@@ -3143,14 +3153,14 @@ export default function RoleChecklistPage() {
                               </div>
                             </TableCell>
                           )}
-                          <TableCell className="text-center py-3">
+                          <TableCell className="text-center py-1">
                             <div className="justify-center max-w-full overflow-hidden">
                               <div className="justify-center flex flex-wrap gap-1">
                                 {renderBadgesWithTruncation(task.master_task.categories, 2, 'category')}
                               </div>
                             </div>
                           </TableCell>
-                          <TableCell className="py-3 text-center">
+                          <TableCell className="py-1 text-center">
                             {renderFrequencyWithDetails(task)}
                           </TableCell>
                           <TableCell className="text-center">

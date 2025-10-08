@@ -547,7 +547,7 @@ export default function AdminPublicHolidaysPage() {
                     setFormErrors({}) // Clear any existing errors
                     setIsDialogOpen(true)
                   }}
-                  className="bg-white text-blue-600 hover:bg-gray-100 w-full sm:w-auto"
+                  className="h-8 bg-white text-blue-600 hover:bg-gray-100 w-full sm:w-auto"
                 >
                   <Plus className="w-4 h-4 mr-2" />
                   Add Holiday
@@ -772,7 +772,7 @@ export default function AdminPublicHolidaysPage() {
                   <Table>
                     <TableHeader>
                       <TableRow>
-                        <TableHead className="w-[5%] py-3 bg-gray-50 text-center">
+                        <TableHead className="w-[5%] py-4 bg-gray-50 text-center">
                           <Checkbox
                             checked={selectedHolidays.size === paginatedHolidays.length && paginatedHolidays.length > 0}
                             onCheckedChange={handleSelectAll}
@@ -780,12 +780,12 @@ export default function AdminPublicHolidaysPage() {
                             className="data-[state=checked]:bg-blue-500 data-[state=checked]:text-white data-[state=checked]:border-blue-500"
                           />
                         </TableHead>
-                        <TableHead className="w-[15%] py-3 bg-gray-50 text-center">Date</TableHead>
-                        <TableHead className="w-[10%] py-3 bg-gray-50 text-center">Day</TableHead>
-                        <TableHead className="w-[25%] py-3 bg-gray-50 text-center">Holiday Name</TableHead>
-                        <TableHead className="w-[15%] py-3 bg-gray-50 text-center">Region</TableHead>
-                        <TableHead className="w-[15%] py-3 bg-gray-50 text-center">Source</TableHead>
-                        <TableHead className="w-[15%] py-3 bg-gray-50 text-center">Actions</TableHead>
+                        <TableHead className="w-[15%] py-4 bg-gray-50 text-center">Date</TableHead>
+                        <TableHead className="w-[10%] py-4 bg-gray-50 text-center">Day</TableHead>
+                        <TableHead className="w-[25%] py-4 bg-gray-50 text-center">Holiday Name</TableHead>
+                        <TableHead className="w-[15%] py-4 bg-gray-50 text-center">Region</TableHead>
+                        <TableHead className="w-[15%] py-4 bg-gray-50 text-center">Source</TableHead>
+                        <TableHead className="w-[15%] py-4 bg-gray-50 text-center">Actions</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
