@@ -29,7 +29,12 @@ export async function GET(request: NextRequest) {
       is_new: new Date(doc.created_at) >= twelveHoursAgo
     }))
 
-    return NextResponse.json({ success: true, data: documentsWithNewFlag })
+    // 🔥 CRITICAL: Disable caching to ensure real-time data updates for all users
+    const response = NextResponse.json({ success: true, data: documentsWithNewFlag })
+    response.headers.set('Cache-Control', 'no-cache, no-store, must-revalidate, max-age=0')
+    response.headers.set('Pragma', 'no-cache')
+    response.headers.set('Expires', '0')
+    return response
   } catch (error: any) {
     console.error('Error in GET /api/resource-hub:', error)
     return NextResponse.json(
@@ -61,12 +66,19 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Determine the correct document_type based on linked_tasks
-    // If linked_tasks is provided and has items, it should be 'task-instruction'
-    // Otherwise, use the provided document_type or default to 'general-policy'
-    const finalDocumentType = (linked_tasks && Array.isArray(linked_tasks) && linked_tasks.length > 0)
-      ? 'task-instruction'
-      : (document_type || 'general-policy')
+    // Log the incoming data for debugging
+    console.log('📝 Creating policy document:', {
+      title,
+      category,
+      document_type,
+      linked_tasks_count: linked_tasks?.length || 0
+    })
+
+    // Use the document_type provided by frontend, or default to 'general-policy'
+    // The frontend handles all auto-change logic and user intent
+    const finalDocumentType = document_type || 'general-policy'
+    
+    console.log('📝 Final document_type:', finalDocumentType, '(from frontend:' , document_type, ')')
 
     // Insert the document
     const { data: document, error: docError } = await supabaseServer
@@ -82,7 +94,20 @@ export async function POST(request: NextRequest) {
       .single()
 
     if (docError) {
-      console.error('Error creating policy document:', docError)
+      console.error('❌ Error creating policy document:', {
+        message: docError.message,
+        code: docError.code,
+        details: docError.details,
+        hint: docError.hint
+      })
+      
+      // Check if it's a constraint violation error
+      if (docError.message?.includes('violates check constraint')) {
+        console.error('⚠️ CHECK CONSTRAINT VIOLATION - The category or document_type value is not allowed by the database.')
+        console.error('⚠️ This usually means the constraint needs to be dropped.')
+        console.error('⚠️ Run this SQL in Supabase: ALTER TABLE policy_documents DROP CONSTRAINT IF EXISTS policy_documents_category_check;')
+      }
+      
       return NextResponse.json(
         { success: false, error: docError.message },
         { status: 500 }

@@ -23,10 +23,24 @@ import {
   Settings
 } from "lucide-react"
 import { TimezoneHealthCard } from "@/components/admin/timezone-health"
+import { ResourceHubConfigManager } from "@/components/admin/ResourceHubConfigManager"
 import { toastSuccess, toastError } from "@/hooks/use-toast"
 import { authenticatedGet, authenticatedPost, authenticatedPut } from "@/lib/api-client"
 import { getAustralianNow, AUSTRALIAN_TIMEZONE } from "@/lib/timezone-utils"
 import { formatInTimeZone } from "date-fns-tz"
+
+interface Category {
+  id: string
+  label: string
+  emoji: string
+  color: string
+}
+
+interface DocumentType {
+  id: string
+  label: string
+  color: string
+}
 
 interface SystemSettings {
   timezone: string
@@ -38,6 +52,8 @@ interface SystemSettings {
   task_generation_days_behind: number
   working_days: string[]
   public_holiday_push_forward: boolean
+  resource_hub_categories?: Category[]
+  resource_hub_document_types?: DocumentType[]
 }
 
 
@@ -100,8 +116,13 @@ export default function SettingsPage() {
     task_generation_days_ahead: 999999,
     task_generation_days_behind: 0,
     working_days: ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'],
-    public_holiday_push_forward: true
+    public_holiday_push_forward: true,
+    resource_hub_categories: [],
+    resource_hub_document_types: []
   })
+
+  const [resourceHubCategories, setResourceHubCategories] = useState<Category[]>([])
+  const [resourceHubDocumentTypes, setResourceHubDocumentTypes] = useState<DocumentType[]>([])
 
   const [systemInfo, setSystemInfo] = useState<SystemInfo | null>(null)
   const [isSaving, setIsSaving] = useState(false)
@@ -124,9 +145,33 @@ export default function SettingsPage() {
   const loadSettings = async () => {
     try {
       const response = await authenticatedGet('/api/admin/settings')
-      
+
       if (response && response.success) {
         setSettings(response.data)
+        // Load resource hub config separately with normalization
+        if (response.data.resource_hub_categories) {
+          const cats = Array.isArray(response.data.resource_hub_categories) 
+            ? response.data.resource_hub_categories 
+            : []
+          setResourceHubCategories(cats)
+        }
+        if (response.data.resource_hub_document_types) {
+          let types: DocumentType[] = []
+          const data = response.data.resource_hub_document_types
+          
+          if (Array.isArray(data)) {
+            types = data
+          } else if (typeof data === 'object' && data !== null) {
+            // Convert object format to array format if needed
+            types = Object.entries(data).map(([id, item]: [string, any]) => ({
+              id,
+              label: item.label || '',
+              color: item.color || ''
+            }))
+          }
+          
+          setResourceHubDocumentTypes(types)
+        }
       } else {
         throw new Error(response?.error || 'Failed to load settings')
       }
@@ -185,15 +230,56 @@ export default function SettingsPage() {
   const handleSaveSettings = async () => {
     setIsSaving(true)
     try {
-      const response = await authenticatedPut('/api/admin/settings', settings)
+      // Debug logging - Check all fields are present
+      console.log('🔍 handleSaveSettings - Current state:')
+      console.log('  resourceHubCategories:', JSON.stringify(resourceHubCategories, null, 2))
+      console.log('  resourceHubCategories type:', typeof resourceHubCategories)
+      console.log('  resourceHubCategories is array:', Array.isArray(resourceHubCategories))
+      console.log('  resourceHubCategories count:', Array.isArray(resourceHubCategories) ? resourceHubCategories.length : 0)
       
+      if (Array.isArray(resourceHubCategories)) {
+        resourceHubCategories.forEach((cat, idx) => {
+          console.log(`    Category ${idx}: id="${cat.id}", label="${cat.label}", emoji="${cat.emoji}", color="${cat.color}"`)
+          if (!cat.label) console.warn(`    ⚠️ Category ${idx} has empty label!`)
+        })
+      }
+      
+      console.log('  resourceHubDocumentTypes:', JSON.stringify(resourceHubDocumentTypes, null, 2))
+      console.log('  resourceHubDocumentTypes type:', typeof resourceHubDocumentTypes)
+      console.log('  resourceHubDocumentTypes is array:', Array.isArray(resourceHubDocumentTypes))
+      console.log('  resourceHubDocumentTypes count:', Array.isArray(resourceHubDocumentTypes) ? resourceHubDocumentTypes.length : 0)
+      
+      if (Array.isArray(resourceHubDocumentTypes)) {
+        resourceHubDocumentTypes.forEach((type, idx) => {
+          console.log(`    Type ${idx}: id="${type.id}", label="${type.label}", color="${type.color}"`)
+          if (!type.label) console.warn(`    ⚠️ Type ${idx} has empty label!`)
+        })
+      }
+      
+      // Create payload without resource hub fields from settings, then add them explicitly
+      const { resource_hub_categories, resource_hub_document_types, ...settingsWithoutResourceHub } = settings
+      
+      const payloadToSave = {
+        ...settingsWithoutResourceHub,
+        resource_hub_categories: resourceHubCategories || [],
+        resource_hub_document_types: resourceHubDocumentTypes || []
+      }
+
+      console.log('🔍 handleSaveSettings - Final payload to send to API:')
+      console.log('  resource_hub_categories:', JSON.stringify(payloadToSave.resource_hub_categories, null, 2))
+      console.log('  resource_hub_categories count:', Array.isArray(payloadToSave.resource_hub_categories) ? payloadToSave.resource_hub_categories.length : 0)
+      console.log('  resource_hub_document_types:', JSON.stringify(payloadToSave.resource_hub_document_types, null, 2))
+      console.log('  resource_hub_document_types count:', Array.isArray(payloadToSave.resource_hub_document_types) ? payloadToSave.resource_hub_document_types.length : 0)
+
+      const response = await authenticatedPut('/api/admin/settings', payloadToSave)
+
       if (response && response.success) {
         // Update last refresh time
         setLastRefresh(getAustralianNow())
-        
+
         // Dispatch event to notify other components that settings have changed
         window.dispatchEvent(new CustomEvent('systemSettingsChanged'))
-        
+
         toastSuccess("Settings Saved", response.message || "System settings have been updated successfully")
       } else {
         throw new Error(response?.error || 'Failed to save settings')
@@ -256,11 +342,11 @@ export default function SettingsPage() {
 
         <div className="mb-6 sm:mb-8">
           {/* Timezone Configuration */}
-          <Card className="card-surface gap-4 p-4 sm:p-6 mb-6">
+          <Card className="card-surface gap-3 sm:px-6 sm:py-4 mb-6">
             <CardHeader className="px-0 pt-2">
               <div className="flex items-center space-x-2">
                 <Globe className="w-5 h-5 text-[var(--color-primary)]" />
-                <CardTitle>Timezone & Regional Settings</CardTitle>
+                <CardTitle className="text-base sm:text-lg">Timezone & Regional Settings</CardTitle>
               </div>
             </CardHeader>
             <CardContent className="grid grid-cols-1 lg:grid-cols-2 gap-4 p-0">
@@ -309,11 +395,11 @@ export default function SettingsPage() {
           </Card>
 
           {/* Task Management Settings */}
-          <Card className="card-surface gap-4 p-4 sm:p-6 mb-6">
+          <Card className="card-surface gap-3 sm:px-6 sm:py-4 mb-6">
             <CardHeader className="px-0 pt-2">
               <div className="flex items-center space-x-2">
                 <Calendar className="w-5 h-5 text-[var(--color-primary)]" />
-                <CardTitle>Task Management</CardTitle>
+                <CardTitle className="text-base sm:text-lg">Task Management</CardTitle>
               </div>
             </CardHeader>
             <CardContent className="space-y-6 p-0">
@@ -402,11 +488,11 @@ export default function SettingsPage() {
           </Card>
 
           {/* Security & Session Settings */}
-          <Card className="card-surface gap-4 p-4 sm:p-6 mb-6">
+          <Card className="card-surface gap-3 sm:px-6 sm:py-4 mb-6">
             <CardHeader className="px-0 pt-2">
               <div className="flex items-center space-x-2">
                 <Shield className="w-5 h-5 text-[var(--color-primary)]" />
-                <CardTitle>Security & Sessions</CardTitle>
+                <CardTitle className="text-base sm:text-lg">Security & Sessions</CardTitle>
               </div>
             </CardHeader>
             <CardContent className="grid grid-cols-1 lg:grid-cols-2 gap-4 p-0">
@@ -442,15 +528,29 @@ export default function SettingsPage() {
             </CardContent>
           </Card>
 
+          {/* Resource Hub Configuration */}
+          <ResourceHubConfigManager
+            categories={resourceHubCategories}
+            documentTypes={resourceHubDocumentTypes}
+            onCategoriesChange={(cats) => {
+              console.log('📢 Settings page: onCategoriesChange called with:', JSON.stringify(cats, null, 2))
+              setResourceHubCategories(cats)
+            }}
+            onDocumentTypesChange={(types) => {
+              console.log('📢 Settings page: onDocumentTypesChange called with:', JSON.stringify(types, null, 2))
+              setResourceHubDocumentTypes(types)
+            }}
+          />
+
           {/* Timezone Health Check */}
           <TimezoneHealthCard />
 
           {/* System Information */}
-          <Card className="card-surface gap-4 p-4 sm:p-6 mb-6">
+          <Card className="card-surface gap-3 sm:px-6 sm:py-4 mb-6">
             <CardHeader className="px-0 pt-2">
               <div className="flex items-center space-x-2">
                 <Server className="w-5 h-5 text-[var(--color-primary)]" />
-                <CardTitle>System Information</CardTitle>
+                <CardTitle className="text-base sm:text-lg">System Information</CardTitle>
               </div>
             </CardHeader>
             <CardContent className="space-y-6 p-0">

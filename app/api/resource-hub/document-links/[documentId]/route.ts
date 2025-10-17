@@ -31,7 +31,12 @@ export async function GET(
     // Extract tasks from the links
     const tasks = links?.map((link: any) => link.master_tasks).filter(Boolean) || []
 
-    return NextResponse.json({ success: true, data: tasks })
+    // 🔥 CRITICAL: Disable caching to ensure real-time data updates for all users
+    const response = NextResponse.json({ success: true, data: tasks })
+    response.headers.set('Cache-Control', 'no-cache, no-store, must-revalidate, max-age=0')
+    response.headers.set('Pragma', 'no-cache')
+    response.headers.set('Expires', '0')
+    return response
   } catch (error: any) {
     console.error('Error in GET /api/resource-hub/document-links/[documentId]:', error)
     return NextResponse.json(

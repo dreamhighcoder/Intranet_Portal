@@ -39,8 +39,8 @@ import { PositionAuthService } from '@/lib/position-auth'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Checkbox } from '@/components/ui/checkbox'
 
-// Document Category configuration - ONLY for policy documents
-const DOCUMENT_CATEGORY_CONFIG: Record<string, { label: string; emoji: string; color: string }> = {
+// Default fallback configurations (used if API data is not available)
+const DEFAULT_DOCUMENT_CATEGORY_CONFIG: Record<string, { label: string; emoji: string; color: string }> = {
   'hr': { label: 'HR', emoji: '👥', color: 'bg-purple-100 text-purple-800 border-purple-200' },
   'stock-control': { label: 'Stock Control', emoji: '📦', color: 'bg-blue-100 text-blue-800 border-blue-200' },
   'policies': { label: 'Policies', emoji: '📋', color: 'bg-gray-100 text-gray-800 border-gray-200' }
@@ -58,7 +58,7 @@ const TASK_CATEGORY_CONFIG: Record<string, { label: string; emoji: string }> = {
   'business-management': { label: 'Business Management', emoji: '📊' }
 }
 
-const DOCUMENT_TYPE_CONFIG: Record<string, { label: string; color: string }> = {
+const DEFAULT_DOCUMENT_TYPE_CONFIG: Record<string, { label: string; color: string }> = {
   'general-policy': { label: 'General Policy', color: 'bg-blue-50 text-blue-700 border-blue-200' },
   'task-instruction': { label: 'Task Instruction', color: 'bg-green-50 text-green-700 border-green-200' }
 }
@@ -185,9 +185,13 @@ export default function ResourceHubPage() {
   const [searchQuery, setSearchQuery] = useState('')
   const [filterCategory, setFilterCategory] = useState<string>('all')
   const [filterType, setFilterType] = useState<string>('all')
-  const [sortBy, setSortBy] = useState<'title' | 'category' | 'date'>('title')
+  const [sortBy, setSortBy] = useState<'title' | 'category' | 'type' | 'date'>('title')
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc')
   const [taskSearchQuery, setTaskSearchQuery] = useState('')
+
+  // Configuration states
+  const [documentCategoryConfig, setDocumentCategoryConfig] = useState<Record<string, { label: string; emoji: string; color: string }>>(DEFAULT_DOCUMENT_CATEGORY_CONFIG)
+  const [documentTypeConfig, setDocumentTypeConfig] = useState<Record<string, { label: string; color: string }>>(DEFAULT_DOCUMENT_TYPE_CONFIG)
 
   // Modal states
   const [isAddModalOpen, setIsAddModalOpen] = useState(false)
@@ -216,10 +220,11 @@ export default function ResourceHubPage() {
     linked_tasks: [] as string[]
   })
 
-  // Load documents
+  // Load documents and configuration
   useEffect(() => {
     console.log('🔍 useEffect triggered - isAdmin:', isAdmin, 'isLoading:', isLoading)
     loadDocuments()
+    loadConfiguration()
     if (isAdmin) {
       console.log('✅ Calling loadMasterTasks because user is admin')
       loadMasterTasks()
@@ -228,18 +233,68 @@ export default function ResourceHubPage() {
     }
   }, [isAdmin])
 
-  // Auto-update document_type based on linked_tasks
+  // Listen for system settings changes (when admin updates config in settings page)
   useEffect(() => {
-    const newDocumentType = formData.linked_tasks.length > 0 ? 'task-instruction' : 'general-policy'
-    if (formData.document_type !== newDocumentType) {
-      setFormData(prev => ({ ...prev, document_type: newDocumentType }))
+    const handleSettingsChanged = () => {
+      console.log('📢 System settings changed event received - reloading configuration...')
+      loadConfiguration()
     }
-  }, [formData.linked_tasks])
+
+    window.addEventListener('systemSettingsChanged', handleSettingsChanged)
+    return () => {
+      window.removeEventListener('systemSettingsChanged', handleSettingsChanged)
+    }
+  }, [])
+
+  // Auto-update document_type to second type when tasks are linked
+  // ONLY if the current type is still the default (first type) - user hasn't manually selected a different type
+  useEffect(() => {
+    // Only auto-change if:
+    // 1. Tasks are selected
+    // 2. Current type is the default (user hasn't manually selected something else)
+    // 3. There is a second type different from the default
+    
+    if (formData.linked_tasks.length > 0) {
+      const typeKeys = Object.keys(documentTypeConfig)
+      const defaultType = typeKeys.length > 0 ? typeKeys[0] : 'general-policy'
+      const secondType = typeKeys.length > 1 ? typeKeys[1] : typeKeys[0]
+      
+      // CRITICAL: Only auto-change if type is STILL the default
+      // If user has manually selected a different type, do NOT override it
+      if (formData.document_type === defaultType && defaultType !== secondType) {
+        // Double-check that we're not already at the second type
+        if (formData.document_type !== secondType) {
+          console.log('📝 Auto-changing document_type to second type because tasks were selected:', { 
+            from: defaultType, 
+            to: secondType,
+            defaultType,
+            secondType,
+            currentType: formData.document_type
+          })
+          setFormData(prev => ({ ...prev, document_type: secondType }))
+        }
+      } else if (formData.document_type !== defaultType) {
+        // User has manually selected a non-default type - respect their choice
+        console.log('✅ NOT auto-changing type because user manually selected:', {
+          userSelected: formData.document_type,
+          defaultType,
+          secondType
+        })
+      }
+    }
+  }, [formData.linked_tasks, documentTypeConfig, formData.document_type])
 
   const loadDocuments = async () => {
     try {
       setLoading(true)
-      const response = await fetch('/api/resource-hub')
+      // 🔥 CRITICAL: Add cache-busting headers and query params to force fresh data
+      const response = await fetch('/api/resource-hub', {
+        cache: 'no-store',
+        headers: {
+          'Cache-Control': 'no-cache, no-store, must-revalidate',
+          'Pragma': 'no-cache'
+        }
+      })
       const result = await response.json()
 
       if (result.success) {
@@ -247,7 +302,14 @@ export default function ResourceHubPage() {
         const docsWithLinks = await Promise.all(
           result.data.map(async (doc: PolicyDocument) => {
             try {
-              const linksResponse = await fetch(`/api/resource-hub/document-links/${doc.id}`)
+              // 🔥 CRITICAL: Add cache-busting headers here too
+              const linksResponse = await fetch(`/api/resource-hub/document-links/${doc.id}`, {
+                cache: 'no-store',
+                headers: {
+                  'Cache-Control': 'no-cache, no-store, must-revalidate',
+                  'Pragma': 'no-cache'
+                }
+              })
               const linksResult = await linksResponse.json()
               return {
                 ...doc,
@@ -267,6 +329,75 @@ export default function ResourceHubPage() {
       toastError('Failed to load documents')
     } finally {
       setLoading(false)
+    }
+  }
+
+  const loadConfiguration = async () => {
+    try {
+      console.log('🔄 Loading Resource Hub configuration...')
+      // 🔥 CRITICAL: Use plain fetch with cache-busting for public config endpoint
+      // This ensures non-admin users can load the configuration
+      const response = await fetch('/api/admin/resource-hub-config', {
+        cache: 'no-store',
+        headers: {
+          'Cache-Control': 'no-cache, no-store, must-revalidate',
+          'Pragma': 'no-cache'
+        }
+      })
+      console.log('📡 Response status:', response.status)
+      const result = await response.json()
+
+      console.log('📥 API Response:', JSON.stringify(result, null, 2))
+
+      if (result && result.success && result.data) {
+        // Convert categories array to object format
+        const categoriesObj: Record<string, { label: string; emoji: string; color: string }> = {}
+        if (Array.isArray(result.data.categories)) {
+          console.log('✅ Categories array received:', result.data.categories.length, 'items')
+          console.log('   Full categories data:', JSON.stringify(result.data.categories, null, 2))
+          result.data.categories.forEach((cat: any) => {
+            console.log(`🏷️ Processing category: id="${cat.id}", label="${cat.label}", emoji="${cat.emoji}", color="${cat.color}"`)
+            categoriesObj[cat.id] = {
+              label: cat.label,
+              emoji: cat.emoji,
+              color: cat.color
+            }
+          })
+        } else {
+          console.warn('⚠️ Categories is not an array:', typeof result.data.categories, result.data.categories)
+        }
+        const finalCategoriesConfig = Object.keys(categoriesObj).length > 0 ? categoriesObj : DEFAULT_DOCUMENT_CATEGORY_CONFIG
+        console.log('📊 Final categories config object:', JSON.stringify(finalCategoriesConfig, null, 2))
+        console.log('📊 Final categories config keys:', Object.keys(finalCategoriesConfig))
+        setDocumentCategoryConfig(finalCategoriesConfig)
+
+        // Convert document types array to object format
+        const typesObj: Record<string, { label: string; color: string }> = {}
+        if (Array.isArray(result.data.documentTypes)) {
+          console.log('✅ Document types array received:', result.data.documentTypes.length, 'items')
+          console.log('   Types data:', result.data.documentTypes)
+          result.data.documentTypes.forEach((type: any) => {
+            typesObj[type.id] = {
+              label: type.label,
+              color: type.color
+            }
+          })
+        } else {
+          console.warn('⚠️ Document types is not an array:', typeof result.data.documentTypes, result.data.documentTypes)
+        }
+        const finalTypesConfig = Object.keys(typesObj).length > 0 ? typesObj : DEFAULT_DOCUMENT_TYPE_CONFIG
+        console.log('📊 Final types config:', Object.keys(finalTypesConfig).length, 'items', Object.keys(finalTypesConfig))
+        setDocumentTypeConfig(finalTypesConfig)
+      } else {
+        console.warn('⚠️ API response was not successful or missing data:', result)
+        setDocumentCategoryConfig(DEFAULT_DOCUMENT_CATEGORY_CONFIG)
+        setDocumentTypeConfig(DEFAULT_DOCUMENT_TYPE_CONFIG)
+      }
+    } catch (error) {
+      console.error('❌ Error loading configuration:', error)
+      // Use defaults if API fails
+      setDocumentCategoryConfig(DEFAULT_DOCUMENT_CATEGORY_CONFIG)
+      setDocumentTypeConfig(DEFAULT_DOCUMENT_TYPE_CONFIG)
     }
   }
 
@@ -309,6 +440,8 @@ export default function ResourceHubPage() {
         comparison = a.title.localeCompare(b.title)
       } else if (sortBy === 'category') {
         comparison = a.category.localeCompare(b.category)
+      } else if (sortBy === 'type') {
+        comparison = a.document_type.localeCompare(b.document_type)
       } else if (sortBy === 'date') {
         comparison = new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
       }
@@ -348,7 +481,24 @@ export default function ResourceHubPage() {
         return
       }
 
-      const result = await authenticatedPost('/api/resource-hub', formData)
+      // Prepare data for saving
+      const dataToSave = { ...formData }
+      
+      // Revert type to default if no tasks are selected and type is not the default
+      if (formData.linked_tasks.length === 0) {
+        const typeKeys = Object.keys(documentTypeConfig)
+        const defaultType = typeKeys.length > 0 ? typeKeys[0] : 'general-policy'
+        
+        if (formData.document_type !== defaultType) {
+          console.log('📝 Reverting document_type to default because no tasks are selected:', {
+            current: formData.document_type,
+            reverting_to: defaultType
+          })
+          dataToSave.document_type = defaultType
+        }
+      }
+
+      const result = await authenticatedPost('/api/resource-hub', dataToSave)
 
       if (result && result.success) {
         toastSuccess('Document added successfully')
@@ -371,7 +521,24 @@ export default function ResourceHubPage() {
         return
       }
 
-      const result = await authenticatedPut(`/api/resource-hub/${editingDocument.id}`, formData)
+      // Prepare data for saving
+      const dataToSave = { ...formData }
+      
+      // Revert type to default if no tasks are selected and type is not the default
+      if (formData.linked_tasks.length === 0) {
+        const typeKeys = Object.keys(documentTypeConfig)
+        const defaultType = typeKeys.length > 0 ? typeKeys[0] : 'general-policy'
+        
+        if (formData.document_type !== defaultType) {
+          console.log('📝 Reverting document_type to default because no tasks are selected:', {
+            current: formData.document_type,
+            reverting_to: defaultType
+          })
+          dataToSave.document_type = defaultType
+        }
+      }
+
+      const result = await authenticatedPut(`/api/resource-hub/${editingDocument.id}`, dataToSave)
 
       if (result && result.success) {
         toastSuccess('Document updated successfully')
@@ -555,17 +722,24 @@ export default function ResourceHubPage() {
   }
 
   const resetForm = () => {
+    // Use the first available category and type from config, or fallback to hardcoded defaults
+    const categoryKeys = Object.keys(documentCategoryConfig)
+    const typeKeys = Object.keys(documentTypeConfig)
+    
+    const firstCategory = categoryKeys.length > 0 ? categoryKeys[0] : 'hr'
+    const firstType = typeKeys.length > 0 ? typeKeys[0] : 'general-policy'
+    
     setFormData({
       title: '',
       document_url: '',
-      category: 'hr',
-      document_type: 'general-policy',
+      category: firstCategory,
+      document_type: firstType,
       linked_tasks: []
     })
     setTaskSearchQuery('')
   }
 
-  const toggleSort = (field: 'title' | 'category' | 'date') => {
+  const toggleSort = (field: 'title' | 'category' | 'type' | 'date') => {
     if (sortBy === field) {
       setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')
     } else {
@@ -637,7 +811,7 @@ export default function ResourceHubPage() {
 
   return (
     <div className="min-h-screen bg-[var(--color-bg)]">
-      {isAdmin ? <Navigation /> : <PublicNavigation onLoginClick={() => setIsLoginModalOpen(true)} />}
+      {user ? <Navigation /> : <PublicNavigation onLoginClick={() => setIsLoginModalOpen(true)} />}
 
       <main className="max-w-content-lg mx-auto px-4 sm:px-6 lg:px-18 py-6 sm:py-8">
         {/* Header */}
@@ -655,14 +829,16 @@ export default function ResourceHubPage() {
                 </p>
               </div>
               <div className="flex gap-2">
-                {isAdmin ? (
-                  <Button
-                    onClick={openAddModal}
-                    className="bg-white text-[var(--color-primary)] hover:bg-white/90"
-                  >
-                    <Plus className="w-4 h-4 mr-2" />
-                    Add Document
-                  </Button>
+                {user ? (
+                  isAdmin && (
+                    <Button
+                      onClick={openAddModal}
+                      className="bg-white text-[var(--color-primary)] hover:bg-white/90"
+                    >
+                      <Plus className="w-4 h-4 mr-2" />
+                      Add Document
+                    </Button>
+                  )
                 ) : (
                   <Button
                     onClick={() => router.push('/')}
@@ -705,7 +881,7 @@ export default function ResourceHubPage() {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">All Categories</SelectItem>
-                    {Object.entries(DOCUMENT_CATEGORY_CONFIG).map(([value, config]) => (
+                    {Object.entries(documentCategoryConfig).map(([value, config]) => (
                       <SelectItem key={value} value={value}>
                         {config.emoji} {config.label}
                       </SelectItem>
@@ -722,7 +898,7 @@ export default function ResourceHubPage() {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">All Types</SelectItem>
-                    {Object.entries(DOCUMENT_TYPE_CONFIG).map(([value, config]) => (
+                    {Object.entries(documentTypeConfig).map(([value, config]) => (
                       <SelectItem key={value} value={value}>
                         {config.label}
                       </SelectItem>
@@ -854,7 +1030,15 @@ export default function ResourceHubPage() {
                           <ArrowUpDown className="w-4 h-4" />
                         </button>
                       </TableHead>
-                      <TableHead className="text-center w-[7%] py-4">Type</TableHead>
+                      <TableHead className="text-center w-[7%] py-4">
+                        <button
+                          onClick={() => toggleSort('type')}
+                          className="flex items-center gap-1 hover:text-[var(--color-primary)] mx-auto"
+                        >
+                          Type
+                          <ArrowUpDown className="w-4 h-4" />
+                        </button>
+                      </TableHead>
                       <TableHead className={isAdmin ? "text-center w-[37%] py-4" : "text-center w-[40%] py-4"}>Linked Tasks</TableHead>
                       <TableHead className={isAdmin ? "text-center w-[7%] py-4" : "text-center w-[5%] py-4"}>Actions</TableHead>
                     </TableRow>
@@ -885,14 +1069,60 @@ export default function ResourceHubPage() {
                           </span>
                         </TableCell>
                         <TableCell className="py-4 text-center">
-                          <Badge className={DOCUMENT_CATEGORY_CONFIG[doc.category]?.color || 'bg-gray-100'}>
-                            {DOCUMENT_CATEGORY_CONFIG[doc.category]?.emoji} {DOCUMENT_CATEGORY_CONFIG[doc.category]?.label}
-                          </Badge>
+                          {(() => {
+                            const catConfig = documentCategoryConfig[doc.category]
+                            console.log(`🎯 Rendering category badge for doc "${doc.title}": 
+                              category="${doc.category}", 
+                              config exists=${!!catConfig}, 
+                              config=`, catConfig,
+                              'available config keys=', Object.keys(documentCategoryConfig))
+                            
+                            if (!catConfig) {
+                              console.warn(`⚠️ Category "${doc.category}" not found in config!`, {
+                                configKeys: Object.keys(documentCategoryConfig),
+                                documentCategory: doc.category
+                              })
+                              return (
+                                <Badge className="bg-yellow-100 text-yellow-800 border-yellow-200">
+                                  ? {doc.category}
+                                </Badge>
+                              )
+                            }
+                            
+                            return (
+                              <Badge className={catConfig.color || 'bg-gray-100'}>
+                                {catConfig.emoji} {catConfig.label}
+                              </Badge>
+                            )
+                          })()}
                         </TableCell>
                         <TableCell className="py-4 text-center">
-                          <Badge className={DOCUMENT_TYPE_CONFIG[doc.document_type]?.color || 'bg-gray-100'}>
-                            {DOCUMENT_TYPE_CONFIG[doc.document_type]?.label}
-                          </Badge>
+                          {(() => {
+                            const typeConfig = documentTypeConfig[doc.document_type]
+                            console.log(`🎯 Rendering type badge for doc "${doc.title}": 
+                              type="${doc.document_type}", 
+                              config exists=${!!typeConfig}, 
+                              config=`, typeConfig,
+                              'available config keys=', Object.keys(documentTypeConfig))
+                            
+                            if (!typeConfig) {
+                              console.warn(`⚠️ Document type "${doc.document_type}" not found in config!`, {
+                                configKeys: Object.keys(documentTypeConfig),
+                                documentType: doc.document_type
+                              })
+                              return (
+                                <Badge className="bg-yellow-100 text-yellow-800 border-yellow-200">
+                                  ? {doc.document_type}
+                                </Badge>
+                              )
+                            }
+                            
+                            return (
+                              <Badge className={typeConfig.color || 'bg-gray-100'}>
+                                {typeConfig.label}
+                              </Badge>
+                            )
+                          })()}
                         </TableCell>
                         <TableCell className="py-1 text-left max-w-0">
                           {doc.linked_tasks && doc.linked_tasks.length > 0 ? (
@@ -1012,7 +1242,7 @@ export default function ResourceHubPage() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {Object.entries(DOCUMENT_CATEGORY_CONFIG).map(([value, config]) => (
+                    {Object.entries(documentCategoryConfig).map(([value, config]) => (
                       <SelectItem key={value} value={value}>
                         {config.emoji} {config.label}
                       </SelectItem>
@@ -1023,11 +1253,21 @@ export default function ResourceHubPage() {
 
               <div className="space-y-2">
                 <Label htmlFor="document_type">Type *</Label>
-                <div className="flex items-center h-9 px-3 py-2 border border-gray-200 rounded-md bg-gray-50">
-                  <span className="text-sm text-gray-700">
-                    {formData.linked_tasks.length > 0 ? 'Task Instruction' : 'General Policy'}
-                  </span>
-                </div>
+                <Select
+                  value={formData.document_type}
+                  onValueChange={(value) => setFormData({ ...formData, document_type: value })}
+                >
+                  <SelectTrigger className="w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {Object.entries(documentTypeConfig).map(([value, config]) => (
+                      <SelectItem key={value} value={value}>
+                        {config.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
             </div>
 

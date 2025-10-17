@@ -33,7 +33,12 @@ export async function GET(
     // Extract documents from the links
     const documents = links?.map((link: any) => link.policy_documents).filter(Boolean) || []
 
-    return NextResponse.json({ success: true, data: documents })
+    // 🔥 CRITICAL: Disable caching to ensure real-time data updates for all users
+    const response = NextResponse.json({ success: true, data: documents })
+    response.headers.set('Cache-Control', 'no-cache, no-store, must-revalidate, max-age=0')
+    response.headers.set('Pragma', 'no-cache')
+    response.headers.set('Expires', '0')
+    return response
   } catch (error: any) {
     console.error('Error in GET /api/resource-hub/task-links/[taskId]:', error)
     return NextResponse.json(

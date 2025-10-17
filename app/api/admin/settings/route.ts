@@ -16,6 +16,55 @@ export async function GET(request: NextRequest) {
 
     const settings = await getSystemSettingsServer()
     
+    // Fetch resource hub config
+    try {
+      const { supabaseServer } = await import('@/lib/supabase-server')
+      
+      const { data: resourceHubData, error: resourceHubError } = await supabaseServer
+        .from('system_settings')
+        .select('key, value')
+        .in('key', ['resource_hub_categories', 'resource_hub_document_types'])
+
+      if (!resourceHubError && resourceHubData) {
+        for (const item of resourceHubData) {
+          if (item.key === 'resource_hub_categories') {
+            try {
+              const parsed = JSON.parse(item.value)
+              // Normalize to array format
+              settings.resource_hub_categories = Array.isArray(parsed) ? parsed : []
+            } catch (e) {
+              console.warn('Error parsing resource_hub_categories:', e)
+              settings.resource_hub_categories = []
+            }
+          } else if (item.key === 'resource_hub_document_types') {
+            try {
+              const parsed = JSON.parse(item.value)
+              // Normalize object format to array format if needed
+              if (Array.isArray(parsed)) {
+                settings.resource_hub_document_types = parsed
+              } else if (typeof parsed === 'object' && parsed !== null) {
+                // Convert {id: {label, color}, ...} to [{id, label, color}, ...]
+                settings.resource_hub_document_types = Object.entries(parsed).map(([id, data]: [string, any]) => ({
+                  id,
+                  label: data.label || '',
+                  color: data.color || ''
+                }))
+              } else {
+                settings.resource_hub_document_types = []
+              }
+            } catch (e) {
+              console.warn('Error parsing resource_hub_document_types:', e)
+              settings.resource_hub_document_types = []
+            }
+          }
+        }
+      }
+    } catch (resourceHubError) {
+      console.warn('Failed to fetch resource hub config:', resourceHubError)
+      settings.resource_hub_categories = []
+      settings.resource_hub_document_types = []
+    }
+    
     return NextResponse.json({
       success: true,
       data: settings
@@ -50,7 +99,7 @@ export async function PUT(request: NextRequest) {
     const body = await request.json()
     console.log('📥 Request body received:', JSON.stringify(body, null, 2))
     
-    // Validate required fields
+    // Validate required fields (excluding optional resource hub fields)
     const requiredFields = [
       'timezone',
       'new_since_hour',
@@ -69,6 +118,58 @@ export async function PUT(request: NextRequest) {
           success: false,
           error: `Missing required field: ${field}`
         }, { status: 400 })
+      }
+    }
+
+    // Extract resource hub config if provided
+    const resourceHubCategories = body.resource_hub_categories
+    const resourceHubDocumentTypes = body.resource_hub_document_types
+
+    // Validate resource hub categories if provided
+    if (resourceHubCategories !== undefined) {
+      console.log('🔍 Validating resource hub categories...')
+      if (!Array.isArray(resourceHubCategories)) {
+        console.error('❌ Categories is not an array:', typeof resourceHubCategories)
+        return NextResponse.json({
+          success: false,
+          error: 'resource_hub_categories must be an array'
+        }, { status: 400 })
+      }
+      console.log('✅ Categories is an array with', resourceHubCategories.length, 'items')
+      for (let i = 0; i < resourceHubCategories.length; i++) {
+        const cat = resourceHubCategories[i]
+        console.log(`  Category ${i}: id="${cat.id}", label="${cat.label}", emoji="${cat.emoji}", color="${cat.color}"`)
+        if (!cat.id || !cat.label) {
+          console.error(`❌ Category ${i} is missing id or label:`, cat)
+          return NextResponse.json({
+            success: false,
+            error: `Category at index ${i} must have id and label`
+          }, { status: 400 })
+        }
+      }
+    }
+
+    // Validate resource hub document types if provided
+    if (resourceHubDocumentTypes !== undefined) {
+      console.log('🔍 Validating resource hub document types...')
+      if (!Array.isArray(resourceHubDocumentTypes)) {
+        console.error('❌ Types is not an array:', typeof resourceHubDocumentTypes)
+        return NextResponse.json({
+          success: false,
+          error: 'resource_hub_document_types must be an array'
+        }, { status: 400 })
+      }
+      console.log('✅ Types is an array with', resourceHubDocumentTypes.length, 'items')
+      for (let i = 0; i < resourceHubDocumentTypes.length; i++) {
+        const type = resourceHubDocumentTypes[i]
+        console.log(`  Type ${i}: id="${type.id}", label="${type.label}", color="${type.color}"`)
+        if (!type.id || !type.label) {
+          console.error(`❌ Type ${i} is missing id or label:`, type)
+          return NextResponse.json({
+            success: false,
+            error: `Document type at index ${i} must have id and label`
+          }, { status: 400 })
+        }
       }
     }
 
@@ -145,8 +246,74 @@ export async function PUT(request: NextRequest) {
     // Update settings using the server-side function
     console.log('💾 Updating system settings...')
     try {
-      await updateSystemSettingsServer(body)
+      // Create a copy of body without resource hub config for updateSystemSettingsServer
+      const settingsToUpdate = { ...body }
+      delete settingsToUpdate.resource_hub_categories
+      delete settingsToUpdate.resource_hub_document_types
+      
+      await updateSystemSettingsServer(settingsToUpdate)
       console.log('✅ Settings updated successfully')
+
+      // Update resource hub config if provided
+      if (resourceHubCategories !== undefined || resourceHubDocumentTypes !== undefined) {
+        console.log('💾 Updating resource hub configuration...')
+        console.log('📊 Resource hub categories to save:', JSON.stringify(resourceHubCategories, null, 2))
+        console.log('📊 Resource hub document types to save:', JSON.stringify(resourceHubDocumentTypes, null, 2))
+        
+        const { supabaseServer } = await import('@/lib/supabase-server')
+        
+        if (resourceHubCategories !== undefined) {
+          const stringifiedCategories = JSON.stringify(resourceHubCategories)
+          console.log('🔤 Stringified categories value:', stringifiedCategories)
+          console.log('🔤 Stringified categories length:', stringifiedCategories.length)
+          
+          const { error: catError } = await supabaseServer
+            .from('system_settings')
+            .upsert(
+              {
+                key: 'resource_hub_categories',
+                value: stringifiedCategories,
+                description: 'Resource Hub document categories',
+                data_type: 'json',
+                is_public: false
+              },
+              { onConflict: 'key' }
+            )
+
+          if (catError) {
+            console.error('❌ Error updating categories:', catError)
+            throw new Error('Failed to update resource hub categories')
+          }
+          console.log('✅ Categories saved successfully')
+        }
+
+        if (resourceHubDocumentTypes !== undefined) {
+          const stringifiedTypes = JSON.stringify(resourceHubDocumentTypes)
+          console.log('🔤 Stringified types value:', stringifiedTypes)
+          console.log('🔤 Stringified types length:', stringifiedTypes.length)
+          
+          const { error: typeError } = await supabaseServer
+            .from('system_settings')
+            .upsert(
+              {
+                key: 'resource_hub_document_types',
+                value: stringifiedTypes,
+                description: 'Resource Hub document types',
+                data_type: 'json',
+                is_public: false
+              },
+              { onConflict: 'key' }
+            )
+
+          if (typeError) {
+            console.error('❌ Error updating document types:', typeError)
+            throw new Error('Failed to update resource hub document types')
+          }
+          console.log('✅ Document types saved successfully')
+        }
+
+        console.log('✅ Resource hub configuration updated successfully')
+      }
     } catch (updateError) {
       console.error('❌ Failed to update settings:', updateError)
       throw updateError

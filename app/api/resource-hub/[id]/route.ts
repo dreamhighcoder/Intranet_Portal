@@ -49,15 +49,9 @@ export async function PUT(
     const body = await request.json()
     const { title, document_url, category, document_type, description, linked_tasks } = body
 
-    // Determine the correct document_type based on linked_tasks
-    // If linked_tasks is provided and has items, it should be 'task-instruction'
-    // Otherwise, it should be 'general-policy'
-    let finalDocumentType = document_type
-    if (linked_tasks !== undefined) {
-      finalDocumentType = (Array.isArray(linked_tasks) && linked_tasks.length > 0) 
-        ? 'task-instruction' 
-        : 'general-policy'
-    }
+    // Use the document_type provided by frontend
+    // The frontend handles all auto-change logic and user intent
+    const finalDocumentType = document_type
 
     // Update the document
     const { data: document, error: docError } = await supabaseServer

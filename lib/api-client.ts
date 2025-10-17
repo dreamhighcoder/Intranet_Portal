@@ -9,7 +9,17 @@ import { PositionAuthService } from './position-auth'
 export async function authenticatedFetch(url: string, options: RequestInit = {}): Promise<Response> {
   const headers: HeadersInit = {
     'Content-Type': 'application/json',
+    // 🔥 CRITICAL: Add cache-busting headers by default for all requests
+    'Cache-Control': 'no-cache, no-store, must-revalidate',
+    'Pragma': 'no-cache',
     ...options.headers,
+  }
+  
+  // 🔥 CRITICAL: Set cache option to no-store by default if not specified
+  const fetchOptions: RequestInit = {
+    cache: 'no-store',
+    ...options,
+    headers,
   }
   
   // Get both Supabase session and position-based auth
@@ -50,10 +60,7 @@ export async function authenticatedFetch(url: string, options: RequestInit = {})
   
   console.log('API Client - Final headers for', url, ':', Object.fromEntries(Object.entries(headers)))
 
-  return fetch(url, {
-    ...options,
-    headers,
-  })
+  return fetch(url, fetchOptions)
 }
 
 /**

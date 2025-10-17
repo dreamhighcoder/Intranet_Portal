@@ -76,11 +76,14 @@ export function Navigation() {
       { href: "/admin/master-tasks", label: "Master Tasks" },
       { href: `/checklist/${toKebabCase(user?.position?.displayName || user?.position?.name || 'admin')}`, label: "Checklists" },
       { href: "/calendar", label: "Calendar" },
+      { href: "/resource-hub", label: "Resource Hub" },
       { href: "/admin/reports", label: "Reports" },
     ]
     : [
       { href: `/checklist/${toKebabCase(user?.position?.displayName || user?.position?.name || 'user')}`, label: "Checklist" },
       { href: "/calendar", label: "Calendar" },
+      { href: "/resource-hub", label: "Resource Hub" },
+
     ]
 
   const handleLogout = async () => {

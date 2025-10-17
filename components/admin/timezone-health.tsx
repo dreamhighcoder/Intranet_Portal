@@ -51,7 +51,7 @@ export function TimezoneHealthCard() {
   }, [])
 
   return (
-    <Card className="card-surface gap-4 p-4 sm:p-6 mb-6">
+    <Card className="card-surface gap-3 sm:px-6 sm:py-4 mb-6">
       <CardHeader className="px-0 pt-2">
         <div className="flex items-center space-x-2">
           <Clock className="w-5 h-5 text-[var(--color-primary)]" />
