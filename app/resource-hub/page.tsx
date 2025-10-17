@@ -21,6 +21,7 @@ import {
   Upload,
   BookOpen,
   Edit,
+  Settings,
   Trash2,
   FileText,
   ExternalLink,
@@ -253,19 +254,19 @@ export default function ResourceHubPage() {
     // 1. Tasks are selected
     // 2. Current type is the default (user hasn't manually selected something else)
     // 3. There is a second type different from the default
-    
+
     if (formData.linked_tasks.length > 0) {
       const typeKeys = Object.keys(documentTypeConfig)
       const defaultType = typeKeys.length > 0 ? typeKeys[0] : 'general-policy'
       const secondType = typeKeys.length > 1 ? typeKeys[1] : typeKeys[0]
-      
+
       // CRITICAL: Only auto-change if type is STILL the default
       // If user has manually selected a different type, do NOT override it
       if (formData.document_type === defaultType && defaultType !== secondType) {
         // Double-check that we're not already at the second type
         if (formData.document_type !== secondType) {
-          console.log('📝 Auto-changing document_type to second type because tasks were selected:', { 
-            from: defaultType, 
+          console.log('📝 Auto-changing document_type to second type because tasks were selected:', {
+            from: defaultType,
             to: secondType,
             defaultType,
             secondType,
@@ -483,12 +484,12 @@ export default function ResourceHubPage() {
 
       // Prepare data for saving
       const dataToSave = { ...formData }
-      
+
       // Revert type to default if no tasks are selected and type is not the default
       if (formData.linked_tasks.length === 0) {
         const typeKeys = Object.keys(documentTypeConfig)
         const defaultType = typeKeys.length > 0 ? typeKeys[0] : 'general-policy'
-        
+
         if (formData.document_type !== defaultType) {
           console.log('📝 Reverting document_type to default because no tasks are selected:', {
             current: formData.document_type,
@@ -523,12 +524,12 @@ export default function ResourceHubPage() {
 
       // Prepare data for saving
       const dataToSave = { ...formData }
-      
+
       // Revert type to default if no tasks are selected and type is not the default
       if (formData.linked_tasks.length === 0) {
         const typeKeys = Object.keys(documentTypeConfig)
         const defaultType = typeKeys.length > 0 ? typeKeys[0] : 'general-policy'
-        
+
         if (formData.document_type !== defaultType) {
           console.log('📝 Reverting document_type to default because no tasks are selected:', {
             current: formData.document_type,
@@ -725,10 +726,10 @@ export default function ResourceHubPage() {
     // Use the first available category and type from config, or fallback to hardcoded defaults
     const categoryKeys = Object.keys(documentCategoryConfig)
     const typeKeys = Object.keys(documentTypeConfig)
-    
+
     const firstCategory = categoryKeys.length > 0 ? categoryKeys[0] : 'hr'
     const firstType = typeKeys.length > 0 ? typeKeys[0] : 'general-policy'
-    
+
     setFormData({
       title: '',
       document_url: '',
@@ -832,11 +833,11 @@ export default function ResourceHubPage() {
                 {user ? (
                   isAdmin && (
                     <Button
-                      onClick={openAddModal}
-                      className="bg-white text-[var(--color-primary)] hover:bg-white/90"
+                      onClick={() => router.push('/admin/settings')}
+                      className="h-8 bg-white text-[var(--color-primary)] hover:bg-white/90"
                     >
-                      <Plus className="w-4 h-4 mr-2" />
-                      Add Document
+                      <Settings className="w-4 h-4 text-blue-600" />
+                      Configuration Management
                     </Button>
                   )
                 ) : (
@@ -907,7 +908,14 @@ export default function ResourceHubPage() {
                 </Select>
               </div>
               {isAdmin && (
-                <div className="flex justify-start w-full">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <Button
+                    variant="outline"
+                    onClick={openAddModal}
+                  >
+                    <Plus className="w-4 h-4 mr-2" />
+                    Add Doc
+                  </Button>
                   <input
                     id="import-file"
                     ref={fileInputRef}
@@ -921,7 +929,7 @@ export default function ResourceHubPage() {
                     onClick={() => fileInputRef.current?.click()}
                   >
                     <Upload className="w-4 h-4 mr-2" />
-                    Import Excel
+                    Import
                   </Button>
                 </div>
               )}
@@ -1076,7 +1084,7 @@ export default function ResourceHubPage() {
                               config exists=${!!catConfig}, 
                               config=`, catConfig,
                               'available config keys=', Object.keys(documentCategoryConfig))
-                            
+
                             if (!catConfig) {
                               console.warn(`⚠️ Category "${doc.category}" not found in config!`, {
                                 configKeys: Object.keys(documentCategoryConfig),
@@ -1088,7 +1096,7 @@ export default function ResourceHubPage() {
                                 </Badge>
                               )
                             }
-                            
+
                             return (
                               <Badge className={catConfig.color || 'bg-gray-100'}>
                                 {catConfig.emoji} {catConfig.label}
@@ -1104,7 +1112,7 @@ export default function ResourceHubPage() {
                               config exists=${!!typeConfig}, 
                               config=`, typeConfig,
                               'available config keys=', Object.keys(documentTypeConfig))
-                            
+
                             if (!typeConfig) {
                               console.warn(`⚠️ Document type "${doc.document_type}" not found in config!`, {
                                 configKeys: Object.keys(documentTypeConfig),
@@ -1116,7 +1124,7 @@ export default function ResourceHubPage() {
                                 </Badge>
                               )
                             }
-                            
+
                             return (
                               <Badge className={typeConfig.color || 'bg-gray-100'}>
                                 {typeConfig.label}
