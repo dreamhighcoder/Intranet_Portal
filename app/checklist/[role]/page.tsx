@@ -3039,7 +3039,7 @@ export default function RoleChecklistPage() {
                     <TableHeader>
                       <TableRow>
                         <TableHead className="text-center w-[3%] py-4 bg-gray-50">New</TableHead>
-                        <TableHead className={isAdmin ? "w-[53] py-4 bg-gray-50" : "w-[57] py-4 bg-gray-50"}>
+                        <TableHead className={isAdmin ? "w-[52] py-4 bg-gray-50" : "w-[56] py-4 bg-gray-50"}>
                           Title & Description
                         </TableHead>
                         <TableHead className="text-center w-[4%] py-4 bg-gray-50">Policy</TableHead>
